@@ -37,6 +37,7 @@ set(QwertycoinFramework_INCLUDE_DIRS ${QwertycoinFramework_INCLUDE_DIRS} PARENT_
 # QwertycoinFramework
 
 set(QwertycoinFramework_LIBS
+    QwertycoinFramework_BlockchainDB
     QwertycoinFramework_BlockchainExplorer
     QwertycoinFramework_Common
     QwertycoinFramework_Crypto
@@ -59,6 +60,19 @@ set(QwertycoinFramework_LIBS
 
 add_custom_target(QwertycoinFramework)
 add_dependencies(QwertycoinFramework ${QwertycoinFramework_LIBS})
+
+# QwertycoinFramework::BlockchainDB
+set(QwertycoinFramework_BlockchainDB_SOURCES
+   "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/BlockchainDB.cpp"
+   "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/BlockchainDB.h"
+   "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/DBTypes.h"
+   "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/Lmdb/db_lmdb.cpp"
+   "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/Lmdb/db_lmdb.h"
+)
+
+add_library(QwertycoinFramework_BlockchainDB STATIC ${QwertycoinFramework_BlockchainDB_SOURCES})
+add_library(QwertycoinFramework::BlockchainDB ALIAS QwertycoinFramework_BlockchainDB)
+target_include_directories(QwertycoinFramework_BlockchainDB PRIVATE ${QwertycoinFramework_INCLUDE_DIRS})
 
 # QwertycoinFramework::BlockchainExplorer
 
