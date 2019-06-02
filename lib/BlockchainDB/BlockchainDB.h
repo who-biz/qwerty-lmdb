@@ -34,6 +34,9 @@
 #include <string>
 #include <exception>
 #include <boost/program_options.hpp>
+#include <boost/thread.hpp>
+#include <boost/chrono.hpp>
+#include <iostream>
 #include "Common/CommandLine.h"
 #include "crypto/hash.h"
 #include <Serialization/BinaryInputStreamSerializer.h>
@@ -43,7 +46,7 @@
 #include "CryptoNoteCore/Blockchain.cpp"
 
 /** \file
- * Cryptonote Blockchain Database Interface
+ * CryptoNote Blockchain Database Interface
  *
  * The DB interface is a store for the canonical block chain.
  * It serves as a persistent storage for the blockchain.
@@ -98,7 +101,7 @@
  *   KEY_IMAGE_EXISTS
  */
 
-namespace cryptonote
+namespace CryptoNote
 {
 
 /** a pair of <transaction hash, output index>, typedef for convenience */
@@ -118,7 +121,6 @@ struct output_data_t
   Crypto::PublicKey pubkey;       //!< the output's public key (for spend verification)
   uint64_t           unlock_time;  //!< the output's unlock time (or height)
   uint64_t           height;       //!< the height of the block which created the output
-  rct::key           commitment;   //!< the output's amount commitment (for spend verification)
 };
 #pragma pack(pop)
 
@@ -363,7 +365,7 @@ private:
    * @param coins_generated the number of coins generated total after this block
    * @param blk_hash the hash of the block
    */
-  virtual void add_block( const block& blk
+  virtual void add_block( const Block& blk
                 , const size_t& block_size
                 , const difficulty_type& cumulative_difficulty
                 , const uint64_t& coins_generated
@@ -375,7 +377,7 @@ private:
    *
    * The subclass implementing this will remove the block data from the top
    * block in the chain.  The data to be removed is that which was added in
-   * BlockchainDB::add_block(const block& blk, const size_t& block_size, const difficulty_type& cumulative_difficulty, const uint64_t& coins_generated, const Crypto::Hash& blk_hash)
+   * BlockchainDB::add_block(const Block& blk, const size_t& block_size, const difficulty_type& cumulative_difficulty, const uint64_t& coins_generated, const Crypto::Hash& blk_hash)
    *
    * If any of this cannot be done, the subclass should throw the corresponding
    * subclass of DB_EXCEPTION
@@ -401,7 +403,7 @@ private:
    * @param tx_hash the hash of the transaction
    * @return the transaction ID
    */
-  virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const transaction& tx, const Crypto::Hash& tx_hash) = 0;
+  virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash& tx_hash) = 0;
 
   /**
    * @brief remove data about a transaction
@@ -419,7 +421,7 @@ private:
    * @param tx_hash the hash of the transaction to be removed
    * @param tx the transaction
    */
-  virtual void remove_transaction_data(const Crypto::Hash& tx_hash, const transaction& tx) = 0;
+  virtual void remove_transaction_data(const Crypto::Hash& tx_hash, const Transaction& tx) = 0;
 
   /**
    * @brief store an output
@@ -444,10 +446,9 @@ private:
    * @param tx_output the output
    * @param local_index index of the output in its transaction
    * @param unlock_time unlock time/height of the output
-   * @param commitment the rct commitment to the output amount
    * @return amount output index
    */
-  virtual uint64_t add_output(const Crypto::Hash& tx_hash, const tx_out& tx_output, const uint64_t& local_index, const uint64_t unlock_time, const rct::key *commitment) = 0;
+  virtual uint64_t add_output(const Crypto::Hash& tx_hash, const TransactionOutput& tx_output, const uint64_t& local_index, const uint64_t unlock_time) = 0;
 
   /**
    * @brief store amount output indices for a tx's outputs
@@ -474,7 +475,7 @@ private:
    *
    * @param k_image the spent key image to store
    */
-  virtual void add_spent_key(const crypto::key_image& k_image) = 0;
+  virtual void add_spent_key(const Crypto::KeyImage& k_image) = 0;
 
   /**
    * @brief remove a spent key
@@ -486,7 +487,7 @@ private:
    *
    * @param k_image the spent key image to remove
    */
-  virtual void remove_spent_key(const crypto::key_image& k_image) = 0;
+  virtual void remove_spent_key(const Crypto::KeyImage& k_image) = 0;
 
 
   /*********************************************************************
@@ -495,7 +496,7 @@ private:
   /**
    * @brief private version of pop_block, for undoing if an add_block fails
    *
-   * This function simply calls pop_block(block& blk, std::vector<transaction>& txs)
+   * This function simply calls pop_block(Block& blk, std::vector<Transaction>& txs)
    * with dummy parameters, as the returns-by-reference can be discarded.
    */
   void pop_block();
@@ -522,7 +523,7 @@ protected:
    * @param tx the transaction to add
    * @param tx_hash_ptr the hash of the transaction, if already calculated
    */
-  void add_transaction(const Crypto::Hash& blk_hash, const transaction& tx, const Crypto::Hash* tx_hash_ptr = NULL);
+  void add_transaction(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash* tx_hash_ptr = NULL);
 
   mutable uint64_t time_tx_exists = 0;  //!< a performance metric
   uint64_t time_commit1 = 0;  //!< a performance metric
@@ -773,11 +774,11 @@ public:
    *
    * @return the height of the chain post-addition
    */
-  virtual uint64_t add_block( const block& blk
+  virtual uint64_t add_block( const Block& blk
                             , const size_t& block_size
                             , const difficulty_type& cumulative_difficulty
                             , const uint64_t& coins_generated
-                            , const std::vector<transaction>& txs
+                            , const std::vector<Transaction>& txs
                             );
 
   /**
@@ -814,7 +815,7 @@ public:
    *
    * @return the block requested
    */
-  virtual block get_block(const Crypto::Hash& h) const;
+  virtual Block get_block(const Crypto::Hash& h) const;
 
   /**
    * @brief gets the height of the block with a given hash
@@ -841,7 +842,7 @@ public:
    *
    * @return the block header
    */
-  virtual block_header get_block_header(const Crypto::Hash& h) const = 0;
+  virtual BlockHeader get_BlockHeader(const Crypto::Hash& h) const = 0;
 
   /**
    * @brief fetch a block blob by height
@@ -855,7 +856,7 @@ public:
    *
    * @return the block blob
    */
-  virtual cryptonote::BinaryArray get_block_blob_from_height(const uint64_t& height) const = 0;
+  virtual CryptoNote::BinaryArray get_block_blob_from_height(const uint64_t& height) const = 0;
 
   /**
    * @brief fetch a block by height
@@ -867,7 +868,7 @@ public:
    *
    * @return the block
    */
-  virtual block get_block_from_height(const uint64_t& height) const;
+  virtual Block get_block_from_height(const uint64_t& height) const;
 
   /**
    * @brief fetch a block's timestamp
@@ -977,7 +978,7 @@ public:
    *
    * @return a vector of blocks
    */
-  virtual std::vector<block> get_blocks_range(const uint64_t& h1, const uint64_t& h2) const = 0;
+  virtual std::vector<Block> get_blocks_range(const uint64_t& h1, const uint64_t& h2) const = 0;
 
   /**
    * @brief fetch a list of block hashes
@@ -1012,7 +1013,7 @@ public:
    *
    * @return the top block
    */
-  virtual block get_top_block() const = 0;
+  virtual Block get_top_block() const = 0;
 
   /**
    * @brief fetch the current blockchain height
@@ -1044,7 +1045,7 @@ public:
    * @param blk return-by-reference the block which was popped
    * @param txs return-by-reference the transactions from the popped block
    */
-  virtual void pop_block(block& blk, std::vector<transaction>& txs);
+  virtual void pop_block(Block& blk, std::vector<Transaction>& txs);
 
 
   /**
@@ -1087,7 +1088,7 @@ public:
    *
    * @return the transaction with the given hash
    */
-  virtual transaction get_tx(const Crypto::Hash& h) const;
+  virtual Transaction get_tx(const Crypto::Hash& h) const;
 
   /**
    * @brief fetches the transaction with the given hash
@@ -1112,7 +1113,7 @@ public:
    *
    * @return true iff the transaction was found
    */
-  virtual bool get_tx_blob(const Crypto::Hash& h, cryptonote::blobdata &tx) const = 0;
+  virtual bool get_tx_blob(const Crypto::Hash& h, CryptoNote::BinaryArray &tx) const = 0;
 
   /**
    * @brief fetches the total number of transactions ever
@@ -1139,7 +1140,7 @@ public:
    *
    * @return the list of transactions
    */
-  virtual std::vector<transaction> get_tx_list(const std::vector<Crypto::Hash>& hlist) const = 0;
+  virtual std::vector<Transaction> get_tx_list(const std::vector<Crypto::Hash>& hlist) const = 0;
 
   // returns height of block that contains transaction with hash <h>
   /**
@@ -1224,7 +1225,7 @@ public:
    *
    * @return the tx hash and output index
    */
-  virtual tx_out_index get_output_tx_and_index_from_global(const uint64_t& index) const = 0;
+  virtual TransactionOutputDetails get_output_tx_and_index_from_global(const uint64_t& index) const = 0;
 
   /**
    * @brief gets an output's tx hash and index
@@ -1238,7 +1239,7 @@ public:
    *
    * @return the tx hash and output index
    */
-  virtual tx_out_index get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const = 0;
+  virtual TransactionOutputDetails get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const = 0;
 
   /**
    * @brief gets some outputs' tx hashes and indices
@@ -1295,14 +1296,14 @@ public:
    *
    * @return true if the image is present, otherwise false
    */
-  virtual bool has_key_image(const crypto::key_image& img) const = 0;
+  virtual bool has_key_image(const Crypto::KeyImage& img) const = 0;
 
   /**
    * @brief add a txpool transaction
    *
    * @param details the details of the transaction to add
    */
-  virtual void add_txpool_tx(const transaction &tx, const txpool_tx_meta_t& details) = 0;
+  virtual void add_txpool_tx(const Transaction &tx, const txpool_tx_meta_t& details) = 0;
 
   /**
    * @brief update a txpool transaction's metadata
@@ -1347,7 +1348,7 @@ public:
    *
    * @return true if the txid was in the txpool, false otherwise
    */
-  virtual bool get_txpool_tx_blob(const Crypto::Hash& txid, cryptonote::BinaryArray &bd) const = 0;
+  virtual bool get_txpool_tx_blob(const Crypto::Hash& txid, CryptoNote::BinaryArray &bd) const = 0;
 
   /**
    * @brief get a txpool transaction's blob
@@ -1356,7 +1357,7 @@ public:
    *
    * @return the blob for that transaction
    */
-  virtual cryptonote::BinaryArray get_txpool_tx_blob(const Crypto::Hash& txid) const = 0;
+  virtual CryptoNote::BinaryArray get_txpool_tx_blob(const Crypto::Hash& txid) const = 0;
 
   /**
    * @brief runs a function over all txpool transactions
@@ -1386,7 +1387,7 @@ public:
    *
    * @return false if the function returns false for any key image, otherwise true
    */
-  virtual bool for_all_key_images(std::function<bool(const Crypto::key_image&)>) const = 0;
+  virtual bool for_all_key_images(std::function<bool(const Crypto::KeyImage&)>) const = 0;
 
   /**
    * @brief runs a function over a range of blocks
@@ -1406,7 +1407,7 @@ public:
    *
    * @return false if the function returns false for any block, otherwise true
    */
-  virtual bool for_blocks_range(const uint64_t& h1, const uint64_t& h2, std::function<bool(uint64_t, const Crypto::Hash&, const cryptonote::block&)>) const = 0;
+  virtual bool for_blocks_range(const uint64_t& h1, const uint64_t& h2, std::function<bool(uint64_t, const Crypto::Hash&, const CryptoNote::Block&)>) const = 0;
 
   /**
    * @brief runs a function over all transactions stored
@@ -1515,12 +1516,12 @@ public:
   void set_auto_remove_logs(bool auto_remove) { m_auto_remove_logs = auto_remove; }
 
   bool m_open;  //!< Whether or not the BlockchainDB is open/ready for use
-  mutable epee::critical_section m_synchronization_lock;  //!< A lock, currently for when BlockchainLMDB needs to resize the backing db file
+  mutable boost::unique_lock<boost::recursive_mutex> m_synchronization_lock;  //!< A lock, currently for when BlockchainLMDB needs to resize the backing db file
 
 };  // class BlockchainDB
 
 BlockchainDB *new_db(const std::string& db_type);
 
-}  // namespace cryptonote
+}  // namespace CryptoNote
 
 #endif  // BLOCKCHAIN_DB_H
