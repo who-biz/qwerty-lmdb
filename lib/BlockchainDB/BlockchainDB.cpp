@@ -117,7 +117,7 @@ void BlockchainDB::pop_block()
   pop_block(blk, txs);
 }
 
-void BlockchainDB::add_Transaction(const Crypto::Hash& blk_hash, const std::pair<Transaction, BinaryArray>& txp, const Crypto::Hash* tx_hash_ptr, const Crypto::Hash* tx_prunable_hash_ptr)
+void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const std::pair<Transaction, BinaryArray>& txp, const Crypto::Hash* tx_hash_ptr, const Crypto::Hash* tx_prunable_hash_ptr)
 {
   bool miner_tx = false;
   Crypto::Hash tx_hash;
@@ -235,7 +235,7 @@ bool BlockchainDB::is_open() const
 
 void BlockchainDB::remove_transaction(const Crypto::Hash& tx_hash)
 {
-  transaction tx = get_tx(tx_hash);
+  Transaction tx = get_tx(tx_hash);
 
   for (const txin_v& tx_input : tx.vin)
   {
@@ -249,20 +249,20 @@ void BlockchainDB::remove_transaction(const Crypto::Hash& tx_hash)
   remove_transaction_data(tx_hash, tx);
 }
 
-block BlockchainDB::get_block_from_height(const uint64_t& height) const
+Block BlockchainDB::get_block_from_height(const uint64_t& height) const
 {
   BinaryArray bd = get_block_blob_from_height(height);
-  block b;
+  Block b;
   if (!parse_and_validate_block_from_blob(bd, b))
     throw DB_ERROR("Failed to parse block from blob retrieved from the db";
 
   return b;
 }
 
-block BlockchainDB::get_block(const Crypto::Hash& h) const
+Block BlockchainDB::get_block(const Crypto::Hash& h) const
 {
   BinaryArray bd = get_block_blob(h);
-  block b;
+  Block b;
   if (!parse_and_validate_block_from_blob(bd, b))
     throw DB_ERROR("Failed to parse block from blob retrieved from the db";
 
@@ -282,9 +282,9 @@ bool BlockchainDB::get_tx(const Crypto::Hash& h, CryptoNote::Transaction &tx) co
 
 Transaction BlockchainDB::get_tx(const Crypto::Hash& h) const
 {
-  transaction tx;
+  Transaction tx;
   if (!get_tx(h, tx))
-    throw TX_DNE(std::string("tx with hash ").append(epee::string_tools::pod_to_hex(h)).append(" not found in db").c_str());
+    throw TX_DNE(std::string("tx with hash ").append(Common::StringTools::podToHex(h)).append(" not found in db").c_str());
   return tx;
 }
 

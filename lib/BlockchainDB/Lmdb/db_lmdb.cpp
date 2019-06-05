@@ -455,7 +455,7 @@ void BlockchainLMDB::do_resize(uint64_t increase_size)
   catch(...)
   {
     // print something but proceed.
-    MWARNING("Unable to query free disk space.";
+    Logger(INFO,BRIGHT_RED) << "Unable to query free disk space.";
   }
 
   MDB_envinfo mei;
@@ -826,7 +826,7 @@ void BlockchainLMDB::remove_transaction_data(const Crypto::Hash& tx_hash, const 
 
   result = mdb_cursor_get(m_cur_tx_outputs, &val_tx_id, NULL, MDB_SET);
   if (result == MDB_NOTFOUND)
-    LOG_PRINT_L1("tx has no outputs to remove: " << tx_hash);
+    Logger(INFO, WHITE) << "tx has no outputs to remove: " << tx_hash);
   else if (result)
     throw0(DB_ERROR(lmdb_error("Failed to locate tx outputs for removal: ", result).c_str()));
   if (!result)
@@ -912,7 +912,7 @@ void BlockchainLMDB::add_tx_amount_output_indices(const uint64_t tx_id,
   MDB_val v;
   v.mv_data = (void *)amount_output_indices.data();
   v.mv_size = sizeof(uint64_t) * num_outputs;
-  // LOG_PRINT_L1("tx_outputs[tx_hash] size: " << v.mv_size);
+  // Logger(INFO, WHITE) << "tx_outputs[tx_hash] size: " << v.mv_size);
 
   result = mdb_cursor_put(m_cur_tx_outputs, &k_tx_id, &v, MDB_APPEND);
   if (result)
@@ -1083,19 +1083,12 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
 
   // check for existing LMDB files in base directory
   boost::filesystem::path old_files = direc.parent_path();
-  if (boost::filesystem::exists(old_files / CryptoNote_BLOCKCHAINDATA_FILENAME)
-      || boost::filesystem::exists(old_files / CryptoNote_BLOCKCHAINDATA_LOCK_FILENAME))
+  if (boost::filesystem::exists(old_files / CRYPTONOTE_BLOCKCHAINDATA_FILENAME)
+      || boost::filesystem::exists(old_files / CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME))
   {
     Logger(INFO, WHITE) <<"Found existing LMDB files in " << old_files.string());
     Logger(INFO, WHITE) <<"Move " << CryptoNote_BLOCKCHAINDATA_FILENAME << " and/or " << CryptoNote_BLOCKCHAINDATA_LOCK_FILENAME << " to " << filename << ", or delete them, and then restart";
     throw DB_ERROR("Database could not be opened";
-  }
-
-  boost::optional<bool> is_hdd_result = tools::is_hdd(filename.c_str());
-  if (is_hdd_result)
-  {
-    if (is_hdd_result.value())
-        MCLOG_RED(el::Level::Warning, "global", "The blockchain is on a rotating drive: this will be very slow, use an SSD if possible";
   }
 
   m_folder = filename;
@@ -1141,12 +1134,12 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
       throw0(DB_ERROR(lmdb_error("Failed to set max memory map size: ", result).c_str()));
     mdb_env_info(m_env, &mei);
     cur_mapsize = (uint64_t)mei.me_mapsize;
-    LOG_PRINT_L1("LMDB memory map size: " << cur_mapsize);
+    Logger(INFO,WHITE) << "LMDB memory map size: " << cur_mapsize);
   }
 
   if (need_resize())
   {
-    Logger(INFO, WHITE) <<"LMDB memory map needs to be resized, doing that now.";
+    Logger(INFO, WHITE) << "LMDB memory map needs to be resized, doing that now.";
     do_resize();
   }
 
@@ -1209,12 +1202,12 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   MDB_stat db_stats;
   if ((result = mdb_stat(txn, m_blocks, &db_stats)))
     throw0(DB_ERROR(lmdb_error("Failed to query m_blocks: ", result).c_str()));
-  LOG_PRINT_L2("Setting m_height to: " << db_stats.ms_entries);
+  Logger(INFO, WHITE) << "Setting m_height to: " << db_stats.ms_entries);
   uint64_t m_height = db_stats.ms_entries;
 
   bool compatible = true;
 
-  MDB_val_str(k, "version";
+  MDB_val_str(k, "version");
   MDB_val v;
   auto get_result = mdb_get(txn, m_properties, &k, &v);
   if(get_result == MDB_SUCCESS)
@@ -1271,7 +1264,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
     // only write version on an empty DB
     if (m_height == 0)
     {
-      MDB_val_str(k, "version";
+      MDB_val_str(k, "version");
       MDB_val_copy<uint32_t> v(VERSION);
       auto put_result = mdb_put(txn, m_properties, &k, &v, 0);
       if (put_result != MDB_SUCCESS)
@@ -1362,7 +1355,7 @@ void BlockchainLMDB::reset()
     throw0(DB_ERROR(lmdb_error("Failed to drop m_properties: ", result).c_str()));
 
   // init with current version
-  MDB_val_str(k, "version";
+  MDB_val_str(k, "version");
   MDB_val_copy<uint32_t> v(VERSION);
   if (auto result = mdb_put(txn, m_properties, &k, &v, 0))
     throw0(DB_ERROR(lmdb_error("Failed to write version to database: ", result).c_str()));
@@ -1378,9 +1371,9 @@ std::vector<std::string> BlockchainLMDB::get_filenames() const
   std::vector<std::string> filenames;
 
   boost::filesystem::path datafile(m_folder);
-  datafile /= CryptoNote_BLOCKCHAINDATA_FILENAME;
+  datafile /= CRYPTONOTE_BLOCKCHAINDATA_FILENAME;
   boost::filesystem::path lockfile(m_folder);
-  lockfile /= CryptoNote_BLOCKCHAINDATA_LOCK_FILENAME;
+  lockfile /= CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME;
 
   filenames.push_back(datafile.string());
   filenames.push_back(lockfile.string());
@@ -2224,7 +2217,7 @@ bool BlockchainLMDB::tx_exists(const Crypto::Hash& h) const
 
   if (! tx_found)
   {
-    LOG_PRINT_L1("transaction with hash " << Common::podToHex(h) << " not found in db";
+    Logger(INFO,WHITE) << "transaction with hash " << Common::podToHex(h) << " not found in db";
     return false;
   }
 
@@ -2255,7 +2248,7 @@ bool BlockchainLMDB::tx_exists(const Crypto::Hash& h, uint64_t& tx_id) const
   bool ret = false;
   if (get_result == MDB_NOTFOUND)
   {
-    LOG_PRINT_L1("transaction with hash " << Common::podToHex(h) << " not found in db";
+    Logger(INFO,WHITE) << "transaction with hash " << Common::podToHex(h) << " not found in db";
   }
   else if (get_result)
     throw0(DB_ERROR(lmdb_error("DB error attempting to fetch transaction from hash", get_result).c_str()));
@@ -3369,7 +3362,7 @@ uint64_t BlockchainLMDB::get_database_size() const
 {
   uint64_t size = 0;
   boost::filesystem::path datafile(m_folder);
-  datafile /= CryptoNote_BLOCKCHAINDATA_FILENAME;
+  datafile /= CRYPTONOTE_BLOCKCHAINDATA_FILENAME;
   if (!epee::file_io_utils::get_file_size(datafile.string(), size))
     size = 0;
   return size;
@@ -3440,7 +3433,7 @@ void BlockchainLMDB::migrate_0_1()
     /* if the flags are what we expect, this table has already been migrated */
     if ((flags & (MDB_INTEGERKEY|MDB_DUPSORT|MDB_DUPFIXED)) == (MDB_INTEGERKEY|MDB_DUPSORT|MDB_DUPFIXED)) {
       txn.abort();
-      LOG_PRINT_L1("  block_heights already migrated";
+      Logger(INFO, WHITE) << "  block_heights already migrated";
       break;
     }
 
@@ -3531,7 +3524,7 @@ void BlockchainLMDB::migrate_0_1()
    * new table is DUPFIXED, k(zeroval), v{height, values...}.
    */
   do {
-    LOG_PRINT_L1("migrating block info:";
+    Logger(INFO,WHITE) << "migrating block info:";
 
     MDB_dbi coins;
     result = mdb_txn_begin(m_env, NULL, 0, txn);
@@ -3540,7 +3533,7 @@ void BlockchainLMDB::migrate_0_1()
     result = mdb_dbi_open(txn, "block_coins", 0, &coins);
     if (result == MDB_NOTFOUND) {
       txn.abort();
-      LOG_PRINT_L1("  block_info already migrated";
+      Logger(INFO, WHITE) << "  block_info already migrated";
       break;
     }
     MDB_dbi diffs, hashes, sizes, timestamps;
@@ -3662,7 +3655,7 @@ void BlockchainLMDB::migrate_0_1()
   } while(0);
 
   do {
-    LOG_PRINT_L1("migrating hf_versions:";
+    Logger(INFO, WHITE) << "migrating hf_versions:";
     MDB_dbi o_hfv;
 
     unsigned int flags;
@@ -3675,7 +3668,7 @@ void BlockchainLMDB::migrate_0_1()
     /* if the flags are what we expect, this table has already been migrated */
     if (flags & MDB_INTEGERKEY) {
       txn.abort();
-      LOG_PRINT_L1("  hf_versions already migrated";
+      Logger(INFO, WHITE) << "  hf_versions already migrated";
       break;
     }
 
@@ -3745,7 +3738,7 @@ void BlockchainLMDB::migrate_0_1()
   } while(0);
 
   do {
-    LOG_PRINT_L1("deleting old indices:";
+    Logger(INFO, WHITE) << "deleting old indices:";
 
     /* Delete all other tables, we're just going to recreate them */
     MDB_dbi dbi;
@@ -3756,13 +3749,13 @@ void BlockchainLMDB::migrate_0_1()
     result = mdb_dbi_open(txn, "tx_unlocks", 0, &dbi);
     if (result == MDB_NOTFOUND) {
         txn.abort();
-        LOG_PRINT_L1("  old indices already deleted";
+        Logger(INFO, WHITE) << "  old indices already deleted";
         break;
     }
     txn.abort();
 
 #define DELETE_DB(x) do {   \
-    LOG_PRINT_L1("  " x ":"; \
+    Logger(INFO, WHITE) << "  " x ":"; \
     result = mdb_txn_begin(m_env, NULL, 0, txn); \
     if (result) \
       throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str())); \
@@ -3798,7 +3791,7 @@ void BlockchainLMDB::migrate_0_1()
   } while(0);
 
   do {
-    LOG_PRINT_L1("migrating txs and outputs:";
+    Logger(INFO, WHITE) << "migrating txs and outputs:";
 
     unsigned int flags;
     result = mdb_txn_begin(m_env, NULL, 0, txn);
@@ -3810,7 +3803,7 @@ void BlockchainLMDB::migrate_0_1()
     /* if the flags are what we expect, this table has already been migrated */
     if (flags & MDB_INTEGERKEY) {
       txn.abort();
-      LOG_PRINT_L1("  txs already migrated";
+      Logger(INFO, WHITE) << "  txs already migrated";
       break;
     }
 
@@ -3938,7 +3931,7 @@ void BlockchainLMDB::migrate_0_1()
   uint32_t version = 1;
   v.mv_data = (void *)&version;
   v.mv_size = sizeof(version);
-  MDB_val_str(vk, "version";
+  MDB_val_str(vk, "version");
   result = mdb_txn_begin(m_env, NULL, 0, txn);
   if (result)
     throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
