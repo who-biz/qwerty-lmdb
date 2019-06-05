@@ -1425,7 +1425,7 @@ public:
    *
    * @return false if the function returns false for any transaction, otherwise true
    */
-  virtual bool for_all_transactions(std::function<bool(const Crypto::Hash&, const CryptoNote::Transaction&)>, bool pruned) const = 0;
+  virtual bool for_all_transactions(std::function<bool(const Crypto::Hash&, const CryptoNote::Transaction&)>) const = 0;
 
   /**
    * @brief runs a function over all outputs stored
