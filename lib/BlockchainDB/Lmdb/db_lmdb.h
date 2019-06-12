@@ -28,7 +28,9 @@
 
 #include <atomic>
 
-#include "BlockchainDB/BlockchainDB.h"
+#include "CryptoNoteCore/Currency.h"
+#include "CryptoNoteCore/Hardfork.h"
+#include "BlockchainDB/BlockchainDB.cpp"
 #include <boost/thread.hpp>
 #include <boost/chrono.hpp>
 #include <iostream>
@@ -37,10 +39,10 @@
 namespace CryptoNote
 {
 
-typedef struct txindex {
+typedef struct tx_index {
     Crypto::Hash key;
     tx_data_t data;
-} txindex;
+} tx_index;
 
 typedef struct mdb_txn_cursors
 {
@@ -229,9 +231,9 @@ public:
 
   virtual uint64_t get_num_outputs(const uint64_t& amount) const;
 
-  virtual output_data_t get_output_key(const uint64_t& amount, const uint64_t& index);
-  virtual output_data_t get_output_key(const uint64_t& global_index) const;
-  virtual void get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<output_data_t> &outputs, bool allow_partial = false);
+  virtual KeyOutput get_output_key(const uint64_t& amount, const uint64_t& index);
+  virtual KeyOutput get_output_key(const uint64_t& global_index) const;
+  virtual void get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<KeyOutput> &outputs, bool allow_partial = false);
 
   virtual TransactionOutputDetails get_output_tx_and_index_from_global(const uint64_t& index) const;
   virtual void get_output_tx_and_index_from_global(const std::vector<uint64_t> &global_indices,
@@ -279,7 +281,7 @@ public:
   virtual bool block_rtxn_start(MDB_txn **mtxn, mdb_txn_cursors **mcur) const;
   virtual void block_rtxn_stop() const;
 
-  virtual void pop_block(block& blk, std::vector<Transaction>& txs);
+  virtual void pop_block(CryptoNote::Block& blk, std::vector<Transaction>& txs);
 
   virtual bool can_thread_bulk_indices() const { return true; }
 
@@ -312,7 +314,7 @@ private:
 
   virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const std::pair<Transaction, BinaryArray>& tx, const Crypto::Hash& tx_hash);
 
-  virtual void remove_Transaction_data(const Crypto::Hash& tx_hash, const Transaction& tx);
+  virtual void remove_transaction_data(const Crypto::Hash& tx_hash, const Transaction& tx);
 
   virtual uint64_t add_output(const Crypto::Hash& tx_hash,
       const TransactionOutput& tx_output,
@@ -347,7 +349,7 @@ private:
    *
    * @return the resultant blob
    */
-  blobdata output_to_blob(const TransactionOutput& output) const;
+  CryptoNote::BinaryArray output_to_blob(const TransactionOutput& output) const;
 
   /**
    * @brief convert a tx output blob to a tx output
@@ -356,7 +358,7 @@ private:
    *
    * @return the resultant tx output
    */
-  tx_out output_from_blob(const BinaryArray& blob) const;
+  KeyOutput output_from_blob(const BinaryArray& blob) const;
 
   void check_open() const;
 
