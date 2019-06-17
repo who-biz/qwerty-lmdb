@@ -29,12 +29,13 @@
 #include <boost/range/adaptor/reversed.hpp>
 
 #include "Common/StringTools.h"
-#include "BlockchainDB/BlockchainDB.h"
+#include "BlockchainDB.h"
 #include "../external/db_drivers/liblmdb/lmdb.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/Blockchain.h"
 #include "CryptoNoteCore/Currency.h"
 #include "CryptoNoteCore/Hardfork.h"
+#include "CryptoNoteCore/CryptoNoteTools.h"
 #include <iostream>
 
 #include "BlockchainDB/Lmdb/db_lmdb.h"
@@ -62,10 +63,7 @@ const command_line::arg_descriptor<bool> arg_db_salvage  = {
 
 BlockchainLMDB *new_db(const std::string& db_type)
 {
-    if (db_type == "lmdb")
       return new BlockchainLMDB();
-    else
-      return NULL;
       // TODO: add error handling for case of NULL return value.
 }
 
@@ -97,7 +95,7 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const Transacti
     tx_hash = *tx_hash_ptr;
   }
 
-  for (const TransactionInput& tx_input : tx.vin)
+  for (const TransactionInput& tx_input : tx.inputs)
   {
     if (tx_input.type() == typeid(KeyInput))
     {
@@ -111,7 +109,7 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const Transacti
     else
     {
       //Logger(INFO, WHITE) << "Unsupported input type, removing key images and aborting transaction addition";
-      for (const TransactionInput& tx_input : tx.vin)
+      for (const TransactionInput& tx_input : tx.inputs)
       {
         if (tx_input.type() == typeid(KeyInput))
         {
@@ -125,15 +123,15 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const Transacti
 
 }
 
-uint64_t BlockchainLMDB::add_block( const Block& blk
+uint64_t BlockchainDB::add_block( const Block& blk
                                 , const size_t& block_size
                                 , const difficulty_type& cumulative_difficulty
                                 , const uint64_t& coins_generated
-                                , const std::vector<Transaction>& tx
+                                , const std::vector<Transaction>& txs
                                 )
 {
   // sanity
-  if (blk.txHashes.size() != txs.size())
+  if (blk.transactionHashes.size() != txs.size())
     throw std::runtime_error("Inconsistent tx/hashes sizes");
 
   Crypto::Hash blk_hash = get_block_hash(blk);
@@ -142,57 +140,57 @@ uint64_t BlockchainLMDB::add_block( const Block& blk
 
   // call out to add the transactions
 
-  add_transaction(blk_hash, blk.minerTx);
+  add_transaction(blk_hash, blk.baseTransaction);
   int tx_i = 0;
-  Crypto::Hash tx_hash = Crypto::null_hash;
-  for (const Transaction& tx : txs)
+  Crypto::Hash *tx_hash = NULL_HASH;
+  for (const auto& tx : txs)
   {
-    tx_hash = blk.txHashes[tx_i];
-    add_transaction(blk_hash, tx, &tx_hash);
+    tx_hash = blk.transactionHashes[tx_i];
+    add_transaction(blk_hash, tx, tx_hash);
     ++tx_i;
   }
 
   // call out to subclass implementation to add the block & metadata
   add_block(blk, block_size, cumulative_difficulty, coins_generated, blk_hash);
 
-  m_hardfork->add(blk, prev_height);
+  //m_hardfork->add(blk, prev_height);
 
   block_txn_stop();
 
-  ++num_calls;
+ // ++num_calls;
 
   return prev_height;
 }
 
-void BlockchainLMDB::set_hard_fork(HardFork* hf)
+void BlockchainDB::set_hard_fork(HardFork* hf)
 {
   m_hardfork = hf;
 }
 
-void BlockchainLMDB::pop_block(Block& blk, std::vector<Transaction>& txs)
+void BlockchainDB::pop_block(Block& blk, std::vector<Transaction>& txs)
 {
   blk = get_top_block();
 
   remove_block();
 
-  for (const auto& h : boost::adaptors::reverse(blk.txHashes))
+  for (const auto& h : boost::adaptors::reverse(blk.transactionHashes))
   {
     txs.push_back(get_tx(h));
     remove_transaction(h);
   }
-  remove_transaction(getObjectHash(blk.minerTx));
+  remove_transaction(getObjectHash(blk.baseTransaction));
 }
 
-bool BlockchainLMDB::is_open() const
+bool BlockchainDB::is_open() const
 {
   return m_open;
 }
 
-void BlockchainLMDB::remove_transaction(const Crypto::Hash& tx_hash)
+void BlockchainDB::remove_transaction(const Crypto::Hash& tx_hash)
 {
   Transaction tx = get_tx(tx_hash);
 
-  for (const TransactionInput& tx_input : tx.vin)
+  for (const TransactionInput& tx_input : tx.inputs)
   {
     if (tx_input.type() == typeid(KeyInput))
     {
@@ -204,7 +202,7 @@ void BlockchainLMDB::remove_transaction(const Crypto::Hash& tx_hash)
   remove_transaction_data(tx_hash, tx);
 }
 
-Block BlockchainLMDB::get_block_from_height(const uint64_t& height) const
+Block BlockchainDB::get_block_from_height(const uint64_t& height) const
 {
   BinaryArray bd = get_block_blob_from_height(height);
   Block b;
@@ -214,7 +212,7 @@ Block BlockchainLMDB::get_block_from_height(const uint64_t& height) const
   return b;
 }
 
-Block BlockchainLMDB::get_block(const Crypto::Hash& h) const
+Block BlockchainDB::get_block(const Crypto::Hash& h) const
 {
   BinaryArray bd = get_block_blob(h);
   Block b;
@@ -224,7 +222,7 @@ Block BlockchainLMDB::get_block(const Crypto::Hash& h) const
   return b;
 }
 
-bool BlockchainLMDB::get_tx(const Crypto::Hash& h, CryptoNote::Transaction &tx) const
+bool BlockchainDB::get_tx(const Crypto::Hash& h, CryptoNote::Transaction &tx) const
 {
   BinaryArray bd;
   if (!get_tx_blob(h, bd))
@@ -235,7 +233,7 @@ bool BlockchainLMDB::get_tx(const Crypto::Hash& h, CryptoNote::Transaction &tx) 
   return true;
 }
 
-Transaction BlockchainLMDB::get_tx(const Crypto::Hash& h) const
+Transaction BlockchainDB::get_tx(const Crypto::Hash& h) const
 {
   Transaction tx;
   //if (!get_tx(h, tx))
@@ -243,7 +241,7 @@ Transaction BlockchainLMDB::get_tx(const Crypto::Hash& h) const
   return tx;
 }
 
-void BlockchainLMDB::fixup()
+void BlockchainDB::fixup()
 {
   if (is_read_only()) {
     //Logger(INFO, WHITE) << "Database is opened read only - skipping fixup check";
