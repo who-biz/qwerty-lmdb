@@ -117,6 +117,8 @@ const char     CRYPTONOTE_BLOCKSCACHE_FILENAME[]             = "blockscache.bin"
 const char     CRYPTONOTE_POOLDATA_FILENAME[]                = "poolstate.dat";
 const char     P2P_NET_DATA_FILENAME[]                       = "p2pstate.dat";
 const char     CRYPTONOTE_BLOCKCHAIN_INDICES_FILENAME[]      = "blockchainindices.bin";
+const char     CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME[]     = "mdb.lock";
+const char     CRYPTONOTE_BLOCKCHAINDATA_FILENAME[]          = "mdb";
 const char     MINER_CONFIG_FILE_NAME[]                      = "miner_conf.json";
 } // parameters
 

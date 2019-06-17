@@ -142,10 +142,11 @@ uint64_t BlockchainDB::add_block( const Block& blk
 
   add_transaction(blk_hash, blk.baseTransaction);
   int tx_i = 0;
-  Crypto::Hash *tx_hash = NULL_HASH;
+  Crypto::Hash m_hash = NULL_HASH;
   for (const auto& tx : txs)
   {
-    tx_hash = blk.transactionHashes[tx_i];
+    m_hash = blk.transactionHashes[tx_i];
+    const Crypto::Hash tx_hash = m_hash;
     add_transaction(blk_hash, tx, tx_hash);
     ++tx_i;
   }

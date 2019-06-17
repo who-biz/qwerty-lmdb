@@ -38,6 +38,10 @@
 #include "Common/StringTools.h"
 #include "Common/Util.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
+#include <Logging/LoggerRef.h>
+#include <Serialization/BinaryOutputStreamSerializer.h>
+#include <Serialization/BinaryInputStreamSerializer.h>
+#include <CryptoNoteCore/CryptoNoteSerialization.h>
 #include "crypto/crypto.h"
 
 
@@ -47,6 +51,7 @@
 
 using namespace Common;
 using namespace Crypto;
+using namespace Logging;
 // Increase when the DB structure changes
 #define VERSION 1
 
@@ -672,7 +677,8 @@ void BlockchainLMDB::add_block(const Block& blk, const size_t& block_size, const
   CURSOR(block_info)
 
   // this call to mdb_cursor_put will change height()
-  MDB_val_copy<CryptoNote::BinaryArray> blob(block_to_blob(blk));
+  CryptoNote::BinaryArray blob;
+  MDB_val_copy<CryptoNote::BinaryArray> toBinaryArray(blk, blob);
   result = mdb_cursor_put(m_cur_blocks, &key, &blob, MDB_APPEND);
   //if (result)
     //throw0(DB_ERROR(lmdb_error("Failed to add block blob to db transaction: ", result).c_str()));
@@ -870,7 +876,7 @@ uint64_t BlockchainLMDB::add_output(const Crypto::Hash& tx_hash,
   else
     ok.amount_index = 0;
   ok.output_id = m_num_outputs;
-  ok.data.pubkey = boost::get < txout_to_key > (tx_output.target).key;
+  ok.data.pubkey = boost::get < KeyOutput > (tx_output.target).key;
   ok.data.unlock_time = unlock_time;
   ok.data.height = m_height;
   data.mv_size = sizeof(outkey);
@@ -1038,9 +1044,9 @@ BlockchainLMDB::~BlockchainLMDB()
     close();
 }
 
-BlockchainLMDB::BlockchainLMDB(bool batch_transactions): BlockchainDB()
+/*BlockchainLMDB::BlockchainDB(bool batch_transactions): BlockchainDB()
 {
-  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
+  //Logger(INFO , BRIGHT_GREEN) <<"BlockchainLMDB::" << __func__;
   // initialize folder to something "safe" just in case
   // someone accidentally misuses this class...
   m_folder = "thishsouldnotexistbecauseitisgibberish";
@@ -1055,7 +1061,7 @@ BlockchainLMDB::BlockchainLMDB(bool batch_transactions): BlockchainDB()
   // reset may also need changing when initialize things here
 
   m_hardfork = nullptr;
-}
+}*/
 
 void BlockchainLMDB::open(const std::string& filename, const int db_flags)
 {
@@ -1086,7 +1092,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   {
     //Logger(INFO) <<"Found existing LMDB files in " << old_files.string());
     //Logger(INFO) <<"Move " << CryptoNote_BLOCKCHAINDATA_FILENAME << " and/or " << CryptoNote_BLOCKCHAINDATA_LOCK_FILENAME << " to " << filename << ", or delete them, and then restart";
-    throw DB_ERROR("Database could not be opened";
+    throw DB_ERROR("Database could not be opened");
   }
 
   m_folder = filename;
@@ -1097,7 +1103,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   //if ((result = mdb_env_set_maxdbs(m_env, 20)))
     //throw0(DB_ERROR(lmdb_error("Failed to set max number of dbs: ", result).c_str()));
 
-  int threads = tools::get_max_concurrency();
+  int threads = boost::thread::hardware_concurrency();
   if (threads > 110 &&	/* maxreaders default is 126, leave some slots for other read processes */
     (result = mdb_env_set_maxreaders(m_env, threads+16)))
     //throw0(DB_ERROR(lmdb_error("Failed to set max number of readers: ", result).c_str()));
@@ -2066,7 +2072,7 @@ bool BlockchainLMDB::tx_exists(const Crypto::Hash& h, uint64_t& tx_id) const
   //TIME_MEASURE_FINISH(time1);
   //TIME_tx_exists += time1;
   if (!get_result) {
-    txindex *tip = (txindex *)v.mv_data;
+    tx_index *tip = (tx_index *)v.mv_data;
     tx_id = tip->data.tx_id;
   }
 
@@ -2100,7 +2106,7 @@ uint64_t BlockchainLMDB::get_tx_unlock_time(const Crypto::Hash& h) const
   else if (get_result)
     //throw0(DB_ERROR(lmdb_error("DB error attempting to fetch tx data from hash: ", get_result).c_str()));
 
-  txindex *tip = (txindex *)v.mv_data;
+  tx_index *tip = (tx_index *)v.mv_data;
   uint64_t ret = tip->data.unlock_time;
   TXN_POSTFIX_RDONLY();
   return ret;
@@ -2120,7 +2126,7 @@ bool BlockchainLMDB::get_tx_blob(const Crypto::Hash& h, CryptoNote::BinaryArray 
   auto get_result = mdb_cursor_get(m_cur_tx_indices, (MDB_val *)&zerokval, &v, MDB_GET_BOTH);
   if (get_result == 0)
   {
-    txindex *tip = (txindex *)v.mv_data;
+    tx_index *tip = (tx_index *)v.mv_data;
     MDB_val_set(val_tx_id, tip->data.tx_id);
     get_result = mdb_cursor_get(m_cur_txs, &val_tx_id, &result, MDB_SET);
   }
@@ -2184,7 +2190,7 @@ uint64_t BlockchainLMDB::get_tx_block_height(const Crypto::Hash& h) const
   else if (get_result)
     //throw0(DB_ERROR(lmdb_error("DB error attempting to fetch tx height from hash", get_result).c_str()));
 
-  txindex *tip = (txindex *)v.mv_data;
+  tx_index *tip = (tx_index *)v.mv_data;
   uint64_t ret = tip->data.block_id;
   TXN_POSTFIX_RDONLY();
   return ret;
@@ -2239,7 +2245,7 @@ output_data_t BlockchainLMDB::get_output_key(const uint64_t &global_index) const
   //if (get_result)
     //throw0(DB_ERROR(lmdb_error(std::string("DB error attempting to fetch transaction index from hash ") + epee::string_tools::pod_to_hex(ot->tx_hash) + ": ", get_result).c_str()));
 
-  txindex *tip = (txindex *)val_h.mv_data;
+  tx_index *tip = (tx_index *)val_h.mv_data;
   MDB_val_set(val_tx_id, tip->data.tx_id);
   MDB_val result;
   get_result = mdb_cursor_get(m_cur_txs, &val_tx_id, &result, MDB_SET);
@@ -2258,7 +2264,7 @@ output_data_t BlockchainLMDB::get_output_key(const uint64_t &global_index) const
   const tx_out tx_output = tx.vout[ot->local_index];
   od.unlock_time = tip->data.unlock_time;
   od.height = tip->data.block_id;
-  od.pubkey = boost::get<txout_to_key>(tx_output.target).key;
+  od.pubkey = boost::get<KeyOutput>(tx_output.target).key;
 
   TXN_POSTFIX_RDONLY();
   return od;
@@ -2487,7 +2493,7 @@ bool BlockchainLMDB::for_all_transactions(std::function<bool(const Crypto::Hash&
     if (ret)
       //throw0(DB_ERROR(lmdb_error("Failed to enumerate transactions: ", ret).c_str()));
 
-    txindex *ti = (txindex *)v.mv_data;
+    tx_index *ti = (tx_index *)v.mv_data;
     const Crypto::Hash hash = ti->key;
     k.mv_data = (void *)&ti->data.tx_id;
     k.mv_size = sizeof(ti->data.tx_id);
@@ -3705,7 +3711,7 @@ void BlockchainLMDB::migrate_0_1()
       if (!parse_and_validate_block_from_blob(bd, b))
         //throw0(DB_ERROR("Failed to parse block from blob retrieved from the db"));
 
-      add_transaction(null_hash, b.miner_tx);
+      add_transaction(null_hash, b.baseTransaction);
       for (unsigned int j = 0; j<b.tx_hashes.size(); j++) {
         transaction tx;
         hk.mv_data = &b.tx_hashes[j];
