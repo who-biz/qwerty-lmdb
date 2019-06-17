@@ -33,6 +33,7 @@
 #include <boost/current_function.hpp>
 #include <memory>  // std::unique_ptr
 #include <cstring>  // memcpy
+#include <random>
 
 #include "Common/StringTools.h"
 #include "Common/Util.h"
@@ -49,6 +50,17 @@ using namespace Crypto;
 // Increase when the DB structure changes
 #define VERSION 1
 
+
+#pragma pack(push, 1)
+// This MUST be identical to output_data_t, without the extra rct data at the end
+struct output_data_t
+{
+  Crypto::PublicKey pubkey;       //!< the output's public key (for spend verification)
+  uint64_t           unlock_time;  //!< the output's unlock time (or height)
+  uint64_t           height;       //!< the height of the block which created the output
+};
+#pragma pack(pop)
+
 /*template <typename T>
 inline void throw0(const T &e)
 {
@@ -56,8 +68,6 @@ inline void throw0(const T &e)
   throw e;
 }
 */
-#define MDB_val_sized(var, val) MDB_val var = {val.size(), (void *)val.data()}
-
 #define MDB_val_set(var, val)   MDB_val var = {sizeof(val), (void *)&val}
 
 template<typename T>
@@ -195,25 +205,19 @@ const std::string lmdb_error(const std::string& error_string, int mdb_res)
 }*/
 
 
-
 #define CURSOR(name) \
 	if (!m_cur_ ) { \
 	  int result = mdb_cursor_open(*m_write_txn, m_ , &m_cur_ ); \
 	  if (result) \
-        /*throw0(DB_ERROR(lmdb_error("Failed to open cursor: ", result).c_str())); */
 	}
 
 #define RCURSOR(name) \
 	if (!m_cur_ ) { \
 	  int result = mdb_cursor_open(m_txn, m_ , (MDB_cursor **)&m_cur_ ); \
-/*	  if (result) \
-        throw0(DB_ERROR(lmdb_error("Failed to open cursor: ", result).c_str())); \*/
 	  if (m_cursors != &m_wcursors) \
 	    m_tinfo->m_ti_rflags.m_rf_  = true; \
 	} else if (m_cursors != &m_wcursors && !m_tinfo->m_ti_rflags.m_rf_ ) { \
 	  int result = mdb_cursor_renew(m_txn, m_cur_ ); \
-      if (result) \
-        /*throw0(DB_ERROR(lmdb_error("Failed to renew cursor: ", result).c_str())); */
 	  m_tinfo->m_ti_rflags.m_rf_  = true; \
 	}
 
@@ -729,7 +733,7 @@ void BlockchainLMDB::remove_block()
       //throw0(DB_ERROR(lmdb_error("Failed to add removal of block info to db transaction: ", result).c_str()));
 }
 
-uint64_t BlockchainLMDB::add_transaction_data(const Crypto::Hash& blk_hash, const std::pair<Transaction, CryptoNote::BinaryArray>& txp, const Crypto::Hash& tx_hash)
+uint64_t BlockchainLMDB::add_transaction_data(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash& tx_hash)
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
@@ -822,7 +826,7 @@ void BlockchainLMDB::remove_transaction_data(const Crypto::Hash& tx_hash, const 
 uint64_t BlockchainLMDB::add_output(const Crypto::Hash& tx_hash,
     const TransactionOutput& tx_output,
     const uint64_t& local_index,
-    const uint64_t unlock_time,
+    const uint64_t unlock_time)
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
@@ -909,8 +913,6 @@ void BlockchainLMDB::remove_tx_outputs(const uint64_t tx_id, const transaction& 
       //LOG_PRINT_L2("tx has no outputs, so no output indices";
    // else
       //throw0(DB_ERROR("tx has outputs, but no output indices found"));
-  }
-
 }
 
 void BlockchainLMDB::remove_output(const uint64_t amount, const uint64_t& out_index)
@@ -1032,7 +1034,7 @@ BlockchainLMDB::~BlockchainLMDB()
     close();
 }
 
-BlockchainLMDB::BlockchainLMDB(bool batch_transactions): BlockchainLMDB()
+BlockchainLMDB::BlockchainLMDB(bool batch_transactions): BlockchainDB()
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   // initialize folder to something "safe" just in case
@@ -1384,8 +1386,9 @@ void BlockchainLMDB::unlock()
   else \
   { \
     if (auto mdb_res = lmdb_txn_begin(m_env, NULL, flags, auto_txn)) \
+  }
       //throw0(DB_ERROR(lmdb_error(std::string("Failed to create a transaction for the db in ")+__FUNCTION__+": ", mdb_res).c_str())); \
-  } \
+  //} \
 
 #define TXN_PREFIX_RDONLY() \
   MDB_txn *m_txn; \
@@ -1394,6 +1397,7 @@ void BlockchainLMDB::unlock()
   bool my_rtxn = block_rtxn_start(&m_txn, &m_cursors); \
   if (my_rtxn) auto_txn.m_tinfo = m_tinfo.get(); \
   else auto_txn.uncheck()
+  
 #define TXN_POSTFIX_RDONLY()
 
 #define TXN_POSTFIX_SUCCESS() \

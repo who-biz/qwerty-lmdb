@@ -29,8 +29,8 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 #pragma once
 
-namespace cryptonote
+namespace CryptoNote
 {
   bool blockchain_valid_db_type(const std::string& db_type);
   std::string blockchain_db_types(const std::string& sep);
-} // namespace cryptonote
+} // namespace CryptoNote

@@ -29,52 +29,26 @@
 #include <boost/range/adaptor/reversed.hpp>
 
 #include "Common/StringTools.h"
-#include "BlockchainDB.h"
+#include "BlockchainDB/BlockchainDB.h"
 #include "../external/db_drivers/liblmdb/lmdb.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
+#include "CryptoNoteCore/Blockchain.h"
+#include "CryptoNoteCore/Currency.h"
 #include "CryptoNoteCore/Hardfork.h"
 #include <iostream>
 
-#include "Lmdb/db_lmdb.h"
-
-static const char *db_types[] = {
-  "lmdb"
-};
+#include "BlockchainDB/Lmdb/db_lmdb.h"
 
 using namespace Common;
-namespace CryptoNote
-{
+using namespace Crypto;
 
-bool blockchain_valid_db_type(const std::string& db_type)
-{
-  int i;
-  for (i=0; db_types[i]; i++)
-  {
-    if (db_types[i] == db_type)
-      return true;
-  }
-  return false;
-}
+namespace CryptoNote {
 
-std::string blockchain_db_types(const std::string& sep)
-{
-  int i;
-  std::string ret = "";
-  for (i=0; db_types[i]; i++)
-  {
-    if (i)
-      ret += sep;
-    ret += db_types[i];
-  }
-  return ret;
-}
-
-std::string arg_db_type_description = "Specify database type, available: " + CryptoNote::blockchain_db_types(", ");
-const command_line::arg_descriptor<std::string> arg_db_type = {
-  "db-type"
-, arg_db_type_description.c_str()
-, "lmdb"
+static const char *db_types[] = {
+  "lmdb", NULL
 };
+
+
 const command_line::arg_descriptor<std::string> arg_db_sync_mode = {
   "db-sync-mode"
 , "Specify sync option, using format [safe|fast|fastest]:[sync|async]:[nblocks_per_sync]." 
@@ -88,25 +62,27 @@ const command_line::arg_descriptor<bool> arg_db_salvage  = {
 
 BlockchainLMDB *new_db(const std::string& db_type)
 {
-    return new BlockchainLMDB();
+    if (db_type == "lmdb")
+      return new BlockchainLMDB();
+    else
+      return NULL;
+      // TODO: add error handling for case of NULL return value.
 }
 
-
-void BlockchainLMDB::init_options(boost::program_options::options_description& desc)
+void BlockchainDB::init_options(boost::program_options::options_description& desc)
 {
-  command_line::add_arg(desc, arg_db_type);
   command_line::add_arg(desc, arg_db_sync_mode);
   command_line::add_arg(desc, arg_db_salvage);
 }
 
-void BlockchainLMDB::pop_block()
+void BlockchainDB::pop_block()
 {
   Block blk;
   std::vector<Transaction> txs;
   pop_block(blk, txs);
 }
 
-void BlockchainLMDB::add_transaction(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash* tx_hash_ptr)
+void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash* tx_hash_ptr)
 {
   bool miner_tx = false;
   Crypto::Hash tx_hash;
@@ -127,7 +103,7 @@ void BlockchainLMDB::add_transaction(const Crypto::Hash& blk_hash, const Transac
     {
       add_spent_key(boost::get<KeyInput>(tx_input).keyImage);
     }
-    else if (tx_input.type() == typeid(txin_gen))
+    else if (tx_input.type() == typeid(BaseInput))
     {
       /* nothing to do here */
       miner_tx = true;
@@ -153,7 +129,7 @@ uint64_t BlockchainLMDB::add_block( const Block& blk
                                 , const size_t& block_size
                                 , const difficulty_type& cumulative_difficulty
                                 , const uint64_t& coins_generated
-                                , const std::vector<std::pair<Transaction, BinaryArray>>& txs
+                                , const std::vector<Transaction>& tx
                                 )
 {
   // sanity

@@ -31,11 +31,13 @@
 #include "INode.h"
 #include "CryptoNoteCore/Currency.h"
 #include "BlockchainDB/BlockchainDB.h"
+#include "BlockchainDB/Lmdb/db_lmdb.h"
+
 
 namespace CryptoNote
 {
 
-  virtual BlockchainLMDB db;
+  class BlockchainLMDB;
 
   class HardFork
   {

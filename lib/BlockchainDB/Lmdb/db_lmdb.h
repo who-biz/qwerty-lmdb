@@ -28,21 +28,16 @@
 
 #include <atomic>
 
-#include "CryptoNoteCore/Currency.h"
+#include "BlockchainDB/BlockchainDB.h"
+#include <boost/thread/tss.hpp>
+#include "../external/db_drivers/liblmdb/lmdb.h"
 #include "CryptoNoteCore/Hardfork.h"
-#include "BlockchainDB/BlockchainDB.cpp"
-#include <boost/thread.hpp>
-#include <boost/chrono.hpp>
-#include <iostream>
-#include <../external/db_drivers/liblmdb/lmdb.h>
+
+#define ENABLE_AUTO_RESIZE
+
 
 namespace CryptoNote
 {
-
-typedef struct tx_index {
-    Crypto::Hash key;
-    tx_data_t data;
-} tx_index;
 
 typedef struct mdb_txn_cursors
 {
@@ -144,7 +139,6 @@ struct mdb_txn_safe
   static std::atomic_flag creation_gate;
 };
 
-
 // If m_batch_active is set, a batch transaction exists beyond this class, such
 // as a batch import with verification enabled, or possibly (later) a batch
 // network sync.
@@ -158,7 +152,7 @@ struct mdb_txn_safe
 // A regular network sync without batch writes is expected to open a new read
 // transaction, as those lookups are part of the validation done prior to the
 // write for block and tx data, so no write transaction is open at the time.
-class BlockchainLMDB : public BlockchainDB
+class BlockchainLMDB
 {
 public:
   BlockchainLMDB(bool batch_transactions=false);
@@ -233,13 +227,13 @@ public:
 
   virtual KeyOutput get_output_key(const uint64_t& amount, const uint64_t& index);
   virtual KeyOutput get_output_key(const uint64_t& global_index) const;
-  virtual void get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<KeyOutput> &outputs, bool allow_partial = false);
+  virtual void get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<TransactionOutput> &outputs, bool allow_partial = false);
 
-  virtual TransactionOutputDetails get_output_tx_and_index_from_global(const uint64_t& index) const;
+  virtual tx_out_index get_output_tx_and_index_from_global(const uint64_t& index) const;
   virtual void get_output_tx_and_index_from_global(const std::vector<uint64_t> &global_indices,
       std::vector<TransactionOutputDetails> &tx_out_indices) const;
 
-  virtual TransactionOutputDetails get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const;
+  virtual tx_out_index get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const;
   virtual void get_output_tx_and_index(const uint64_t& amount, const std::vector<uint64_t> &offsets, std::vector<TransactionOutputDetails> &indices) const;
 
   virtual std::vector<uint64_t> get_tx_amount_output_indices(const uint64_t tx_id) const;
@@ -312,7 +306,7 @@ private:
 
   virtual void remove_block();
 
-  virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const std::pair<Transaction, BinaryArray>& tx, const Crypto::Hash& tx_hash);
+  virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash& tx_hash);
 
   virtual void remove_transaction_data(const Crypto::Hash& tx_hash, const Transaction& tx);
 
@@ -358,7 +352,7 @@ private:
    *
    * @return the resultant tx output
    */
-  KeyOutput output_from_blob(const BinaryArray& blob) const;
+  TransactionOutput output_from_blob(const BinaryArray& blob) const;
 
   void check_open() const;
 
@@ -424,6 +418,6 @@ private:
 #endif
 
   constexpr static float RESIZE_PERCENT = 0.8f;
-};
+}; // class BlockchainLMDB
 
-}  // namespace cryptonote
+} // namespace CryptoNote

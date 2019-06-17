@@ -42,10 +42,7 @@
 #include <Serialization/BinaryInputStreamSerializer.h>
 #include <Serialization/BinaryOutputStreamSerializer.h>
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
-#include "CryptoNoteCore/CryptoNoteTools.h"
 #include "CryptoNoteCore/Currency.h"
-#include "CryptoNoteCore/Blockchain.h"
-#include "BlockchainDB/Lmdb/db_lmdb.h"
 #include "CryptoNoteCore/Hardfork.h"
 
 /** \file
@@ -106,22 +103,16 @@
 namespace CryptoNote
 {
 
-class BlockchainLMDB;
 /** a pair of <transaction hash, output index>, typedef for convenience */
 typedef std::pair<Crypto::Hash, uint64_t> tx_out_index;
 
-extern const command_line::arg_descriptor<std::string> arg_db_type;
 extern const command_line::arg_descriptor<std::string> arg_db_sync_mode;
 extern const command_line::arg_descriptor<bool, false> arg_db_salvage;
 
 #pragma pack(push, 1)
-
-/**
- * @brief a struct containing output metadata
- */
 struct output_data_t
 {
-  KeyOutput pubkey;
+  Crypto::PublicKey  pubkey;
   uint64_t           unlock_time;
   uint64_t           height;
 };
@@ -130,9 +121,9 @@ struct output_data_t
 #pragma pack(push, 1)
 struct tx_data_t
 {
-  Crypto::Hash tx_id;
+  uint64_t tx_id;
   uint64_t unlock_time;
-  Crypto::Hash block_id;
+  uint64_t block_id;
 };
 #pragma pack(pop)
 
@@ -345,7 +336,7 @@ class KEY_IMAGE_EXISTS : public DB_EXCEPTION
  * A subclass which encounters an issue should report that issue by throwing
  * a DB_EXCEPTION which adequately conveys the issue.
  */
-class BlockchainLMDB
+class BlockchainDB
 {
 private:
   /*********************************************************************
@@ -513,6 +504,11 @@ private:
    * @param tx_hash the hash of the transaction to be removed
    */
   void remove_transaction(const Crypto::Hash& tx_hash);
+  
+  uint64_t num_calls = 0;  //!< a performance metric
+  uint64_t time_blk_hash = 0;  //!< a performance metric
+  uint64_t time_add_block1 = 0;  //!< a performance metric
+  uint64_t time_add_transaction = 0;  //!< a performance metric
 
 protected:
 
@@ -532,19 +528,19 @@ protected:
   uint64_t time_commit1 = 0;  //!< a performance metric
   bool m_auto_remove_logs = true;  //!< whether or not to automatically remove old logs
 
-  CryptoNote::HardFork* m_hardfork;
+  HardFork* m_hardfork;
 
 public:
 
   /**
    * @brief An empty constructor.
    */
-  BlockchainLMDB(): m_open(false) { }
+  BlockchainDB(): m_open(false) { }
 
   /**
    * @brief An empty destructor.
    */
-  virtual ~BlockchainLMDB() { };
+  virtual ~BlockchainDB() { };
 
   /**
    * @brief init command line options
@@ -754,7 +750,7 @@ public:
   virtual void block_txn_stop() = 0;
   virtual void block_txn_abort() = 0;
 
-  virtual void set_hard_fork(CryptoNote::HardFork* hf);
+  virtual void set_hard_fork(HardFork* hf);
 
   // adds a block with the given metadata to the top of the blockchain, returns the new height
   /**
@@ -845,7 +841,7 @@ public:
    *
    * @return the block header
    */
-  virtual BlockHeader get_BlockHeader(const Crypto::Hash& h) const = 0;
+  virtual BlockHeader get_block_header(const Crypto::Hash& h) const = 0;
 
   /**
    * @brief fetch a block blob by height
@@ -1228,7 +1224,7 @@ public:
    *
    * @return the tx hash and output index
    */
-  virtual TransactionOutputDetails get_output_tx_and_index_from_global(const uint64_t& index) const = 0;
+  virtual tx_out_index get_output_tx_and_index_from_global(const uint64_t& index) const = 0;
 
   /**
    * @brief gets an output's tx hash and index
@@ -1242,7 +1238,7 @@ public:
    *
    * @return the tx hash and output index
    */
-  virtual TransactionOutputDetails get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const = 0;
+  virtual tx_out_index get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const = 0;
 
   /**
    * @brief gets some outputs' tx hashes and indices
@@ -1521,7 +1517,9 @@ public:
   bool m_open;  //!< Whether or not the BlockchainDB is open/ready for use
   mutable boost::unique_lock<boost::recursive_mutex> m_synchronization_lock;  //!< A lock, currently for when BlockchainLMDB needs to resize the backing db file
 
-};  // class BlockchainLMDB
+};  // class BlockchainDB
+
+BlockchainLMDB *new_db(const std::string& db_type);
 
 }  // namespace CryptoNote
 
