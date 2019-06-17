@@ -206,21 +206,25 @@ const std::string lmdb_error(const std::string& error_string, int mdb_res)
 
 
 #define CURSOR(name) \
-	if (!m_cur_ ) { \
-	  int result = mdb_cursor_open(*m_write_txn, m_ , &m_cur_ ); \
-	  if (result) \
-	}
+  if (!m_cur_ ## name) { \
+    int result = mdb_cursor_open(*m_write_txn, m_ ## name, &m_cur_ ## name); \
+    if (result) \
+        throw(DB_ERROR(lmdb_error("Failed to open cursor: ", result).c_str())); \
+  }
 
 #define RCURSOR(name) \
-	if (!m_cur_ ) { \
-	  int result = mdb_cursor_open(m_txn, m_ , (MDB_cursor **)&m_cur_ ); \
-	  if (m_cursors != &m_wcursors) \
-	    m_tinfo->m_ti_rflags.m_rf_  = true; \
-	} else if (m_cursors != &m_wcursors && !m_tinfo->m_ti_rflags.m_rf_ ) { \
-	  int result = mdb_cursor_renew(m_txn, m_cur_ ); \
-	  m_tinfo->m_ti_rflags.m_rf_  = true; \
-	}
-
+  if (!m_cur_ ## name) { \
+    int result = mdb_cursor_open(m_txn, m_ ## name, (MDB_cursor **)&m_cur_ ## name); \
+    if (result) \
+        throw(DB_ERROR(lmdb_error("Failed to open cursor: ", result).c_str())); \
+    if (m_cursors != &m_wcursors) \
+      m_tinfo->m_ti_rflags.m_rf_ ## name = true; \
+  } else if (m_cursors != &m_wcursors && !m_tinfo->m_ti_rflags.m_rf_ ## name) { \
+    int result = mdb_cursor_renew(m_txn, m_cur_ ## name); \
+      if (result) \
+        throw(DB_ERROR(lmdb_error("Failed to renew cursor: ", result).c_str())); \
+    m_tinfo->m_ti_rflags.m_rf_ ## name = true; \
+  }
 
 namespace CryptoNote
 {
@@ -647,12 +651,12 @@ void BlockchainLMDB::add_block(const Block& blk, const size_t& block_size, const
 
   if (m_height > 0)
   {
-    MDB_val_set(parent_key, blk.prev_id);
+    MDB_val_set(parent_key, blk.previousBlockHash);
     int result = mdb_cursor_get(m_cur_block_heights, (MDB_val *)&zerokval, &parent_key, MDB_GET_BOTH);
     if (result)
     {
       //Logger(INFO /*, BRIGHT_GREEN*/) <<"m_height: " << m_height);
-      //Logger(INFO /*, BRIGHT_GREEN*/) <<"parent_key: " << blk.prev_id);
+      //Logger(INFO /*, BRIGHT_GREEN*/) <<"parent_key: " << blk.previousBlockHash);
       //throw0(DB_ERROR(lmdb_error("Failed to get top block hash to check for new block's parent: ", result).c_str()));
     }
     blk_height *prev = (blk_height *)parent_key.mv_data;
@@ -750,16 +754,16 @@ uint64_t BlockchainLMDB::add_transaction_data(const Crypto::Hash& blk_hash, cons
   MDB_val_set(val_h, tx_hash);
   result = mdb_cursor_get(m_cur_tx_indices, (MDB_val *)&zerokval, &val_h, MDB_GET_BOTH);
   if (result == 0) {
-    txindex *tip = (txindex *)val_h.mv_data;
+    tx_index *tip = (tx_index *)val_h.mv_data;
     //throw0(TX_EXISTS(std::string("Attempting to add transaction that's already in the db (tx id ").append(boost::lexical_cast<std::string>(tip->data.tx_id)).append(")").c_str()));
   } //else if (result != MDB_NOTFOUND) {
     //throw0(DB_ERROR(lmdb_error(std::string("Error checking if tx index exists for tx hash ") + Common::podToHex(tx_hash) + ": ", result).c_str()));
   //}
 
-  txindex ti;
+  tx_index ti;
   ti.key = tx_hash;
   ti.data.tx_id = tx_id;
-  ti.data.unlock_time = tx.unlock_time;
+  ti.data.unlock_time = tx.unlockTime;
   ti.data.block_id = m_height;  // we don't need blk_hash since we know m_height
 
   val_h.mv_size = sizeof(ti);
@@ -779,7 +783,7 @@ uint64_t BlockchainLMDB::add_transaction_data(const Crypto::Hash& blk_hash, cons
 
 // TODO: compare pros and cons of looking up the tx hash's tx index once and
 // passing it in to functions like this
-void BlockchainLMDB::remove_transaction_data(const Crypto::Hash& tx_hash, const transaction& tx)
+void BlockchainLMDB::remove_transaction_data(const Crypto::Hash& tx_hash, const Transaction& tx)
 {
   int result;
 
@@ -795,7 +799,7 @@ void BlockchainLMDB::remove_transaction_data(const Crypto::Hash& tx_hash, const 
 
   //if (mdb_cursor_get(m_cur_tx_indices, (MDB_val *)&zerokval, &val_h, MDB_GET_BOTH))
       //throw0(TX_DNE("Attempting to remove transaction that isn't in the db"));
-  txindex *tip = (txindex *)val_h.mv_data;
+  tx_index *tip = (tx_index *)val_h.mv_data;
   MDB_val_set(val_tx_id, tip->data.tx_id);
 
   //if ((result = mdb_cursor_get(m_cur_txs, &val_tx_id, NULL, MDB_SET)))
@@ -901,7 +905,7 @@ void BlockchainLMDB::add_tx_amount_output_indices(const uint64_t tx_id,
     //throw0(DB_ERROR(std::string("Failed to add <tx hash, amount output index array> to db transaction: ").append(mdb_strerror(result)).c_str()));
 }
 
-void BlockchainLMDB::remove_tx_outputs(const uint64_t tx_id, const transaction& tx)
+void BlockchainLMDB::remove_tx_outputs(const uint64_t tx_id, const Transaction& tx)
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainDB::" << __func__;
 
@@ -953,7 +957,7 @@ void BlockchainLMDB::remove_output(const uint64_t amount, const uint64_t& out_in
     //throw0(DB_ERROR(lmdb_error(std::string("Error deleting amount for output index ").append(boost::lexical_cast<std::string>(out_index).append(": ")).c_str(), result).c_str()));
 }
 
-void BlockchainLMDB::add_spent_key(const crypto::key_image& k_image)
+void BlockchainLMDB::add_spent_key(const Crypto::KeyImage& k_image)
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
@@ -970,7 +974,7 @@ void BlockchainLMDB::add_spent_key(const crypto::key_image& k_image)
   //}
 }
 
-void BlockchainLMDB::remove_spent_key(const Crypto::key_image& k_image)
+void BlockchainLMDB::remove_spent_key(const Crypto::KeyImage& k_image)
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
