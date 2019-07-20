@@ -1431,7 +1431,4 @@ public:
 
 };  // class BlockchainDB
 
-BlockchainLMDB *new_db();
-class BlockchainLMDB;
-
 #endif  // BLOCKCHAIN_DB_H
