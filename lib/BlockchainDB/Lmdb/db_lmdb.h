@@ -28,16 +28,11 @@
 
 #include <atomic>
 
-#include "BlockchainDB/BlockchainDB.h"
 #include <boost/thread/tss.hpp>
 #include "../external/db_drivers/liblmdb/lmdb.h"
-#include "CryptoNoteCore/Hardfork.h"
-
-#define ENABLE_AUTO_RESIZE
-
-
-namespace CryptoNote
-{
+#include "BlockchainDB/BlockchainDB.h"
+#include "BlockchainDB/Structures.h"
+#include "BlockchainDB/BlobDataType.h"
 
 typedef struct mdb_txn_cursors
 {
@@ -139,6 +134,7 @@ struct mdb_txn_safe
   static std::atomic_flag creation_gate;
 };
 
+
 // If m_batch_active is set, a batch transaction exists beyond this class, such
 // as a batch import with verification enabled, or possibly (later) a batch
 // network sync.
@@ -152,6 +148,7 @@ struct mdb_txn_safe
 // A regular network sync without batch writes is expected to open a new read
 // transaction, as those lookups are part of the validation done prior to the
 // write for block and tx data, so no write transaction is open at the time.
+
 class BlockchainLMDB
 {
 public:
@@ -178,13 +175,15 @@ public:
 
   virtual bool block_exists(const Crypto::Hash& h, uint64_t *height = nullptr) const;
 
+  virtual CryptoNote::Block get_block(const Crypto::Hash&) const;
+
   virtual uint64_t get_block_height(const Crypto::Hash& h) const;
 
-  virtual BlockHeader get_block_header(const Crypto::Hash& h) const;
+  virtual CryptoNote::BlockHeader get_block_header(const Crypto::Hash& h) const;
 
-  virtual BinaryArray get_block_blob(const Crypto::Hash& h) const;
+  virtual CryptoNote::blobdata get_block_blob(const Crypto::Hash& h) const;
 
-  virtual BinaryArray get_block_blob_from_height(const uint64_t& height) const;
+  virtual CryptoNote::blobdata get_block_blob_from_height(const uint64_t& height) const;
 
   virtual uint64_t get_block_timestamp(const uint64_t& height) const;
 
@@ -192,21 +191,21 @@ public:
 
   virtual size_t get_block_size(const uint64_t& height) const;
 
-  virtual difficulty_type get_block_cumulative_difficulty(const uint64_t& height) const;
+  virtual CryptoNote::difficulty_type get_block_cumulative_difficulty(const uint64_t& height) const;
 
-  virtual difficulty_type get_block_difficulty(const uint64_t& height) const;
+  virtual CryptoNote::difficulty_type get_block_difficulty(const uint64_t& height) const;
 
   virtual uint64_t get_block_already_generated_coins(const uint64_t& height) const;
 
   virtual Crypto::Hash get_block_hash_from_height(const uint64_t& height) const;
 
-  virtual std::vector<Block> get_blocks_range(const uint64_t& h1, const uint64_t& h2) const;
+  virtual std::vector<CryptoNote::Block> get_blocks_range(const uint64_t& h1, const uint64_t& h2) const;
 
   virtual std::vector<Crypto::Hash> get_hashes_range(const uint64_t& h1, const uint64_t& h2) const;
 
   virtual Crypto::Hash top_block_hash() const;
 
-  virtual Block get_top_block() const;
+  virtual CryptoNote::Block get_top_block() const;
 
   virtual uint64_t height() const;
 
@@ -215,52 +214,55 @@ public:
 
   virtual uint64_t get_tx_unlock_time(const Crypto::Hash& h) const;
 
-  virtual bool get_tx_blob(const Crypto::Hash& h, BinaryArray &tx) const;
+  virtual bool get_tx_blob(const Crypto::Hash& h, CryptoNote::blobdata &tx) const;
 
   virtual uint64_t get_tx_count() const;
 
-  virtual std::vector<Transaction> get_tx_list(const std::vector<Crypto::Hash>& hlist) const;
+  virtual std::vector<CryptoNote::Transaction> get_tx_list(const std::vector<Crypto::Hash>& hlist) const;
 
   virtual uint64_t get_tx_block_height(const Crypto::Hash& h) const;
 
   virtual uint64_t get_num_outputs(const uint64_t& amount) const;
 
-  virtual KeyOutput get_output_key(const uint64_t& amount, const uint64_t& index);
-  virtual KeyOutput get_output_key(const uint64_t& global_index) const;
-  virtual void get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<TransactionOutput> &outputs, bool allow_partial = false);
+  virtual output_data_t get_output_key(const uint64_t& amount, const uint64_t& index);
+  virtual output_data_t get_output_key(const uint64_t& global_index) const;
+  virtual void get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<output_data_t> &outputs, bool allow_partial = false);
 
   virtual tx_out_index get_output_tx_and_index_from_global(const uint64_t& index) const;
   virtual void get_output_tx_and_index_from_global(const std::vector<uint64_t> &global_indices,
-      std::vector<TransactionOutputDetails> &tx_out_indices) const;
+      std::vector<tx_out_index> &tx_out_indices) const;
 
   virtual tx_out_index get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const;
-  virtual void get_output_tx_and_index(const uint64_t& amount, const std::vector<uint64_t> &offsets, std::vector<TransactionOutputDetails> &indices) const;
+  virtual void get_output_tx_and_index(const uint64_t& amount, const std::vector<uint64_t> &offsets, std::vector<tx_out_index> &indices) const;
 
   virtual std::vector<uint64_t> get_tx_amount_output_indices(const uint64_t tx_id) const;
 
   virtual bool has_key_image(const Crypto::KeyImage& img) const;
 
-  virtual void add_txpool_tx(const Crypto::Hash &tx, const txpool_tx_meta_t& meta);
+  virtual void add_txpool_tx(const CryptoNote::Transaction &tx, const txpool_tx_meta_t& meta);
   virtual void update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t& meta);
   virtual uint64_t get_txpool_tx_count(bool include_unrelayed_txes = true) const;
+  virtual uint64_t get_txpool_tx_count() const;
+
   virtual bool txpool_has_tx(const Crypto::Hash &txid) const;
   virtual void remove_txpool_tx(const Crypto::Hash& txid);
   virtual bool get_txpool_tx_meta(const Crypto::Hash& txid, txpool_tx_meta_t &meta) const;
-  virtual bool get_txpool_tx_blob(const Crypto::Hash& txid, BinaryArray &bd) const;
-  virtual BinaryArray get_txpool_tx_blob(const Crypto::Hash& txid) const;
-  virtual bool for_all_txpool_txes(std::function<bool(const Crypto::Hash&, const txpool_tx_meta_t&, const BinaryArray*)> f, bool include_blob = false, bool include_unrelayed_txes = true) const;
+  virtual bool get_txpool_tx_blob(const Crypto::Hash& txid, CryptoNote::blobdata &bd) const;
+  virtual CryptoNote::blobdata get_txpool_tx_blob(const Crypto::Hash& txid) const;
+  virtual bool for_all_txpool_txes(std::function<bool(const Crypto::Hash&, const txpool_tx_meta_t&, const CryptoNote::blobdata*)> f, bool include_blob = false, bool include_unrelayed_txes = true) const;
 
   virtual bool for_all_key_images(std::function<bool(const Crypto::KeyImage&)>) const;
   virtual bool for_blocks_range(const uint64_t& h1, const uint64_t& h2, std::function<bool(uint64_t, const Crypto::Hash&, const CryptoNote::Block&)>) const;
-  virtual bool for_all_Transactions(std::function<bool(const Crypto::Hash&, const CryptoNote::Transaction&)>) const;
+  virtual bool for_all_transactions(std::function<bool(const Crypto::Hash&, const CryptoNote::Transaction&)>) const;
   virtual bool for_all_outputs(std::function<bool(uint64_t amount, const Crypto::Hash &tx_hash, uint64_t height, size_t tx_idx)> f) const;
   virtual bool for_all_outputs(uint64_t amount, const std::function<bool(uint64_t height)> &f) const;
 
-  virtual uint64_t add_block( const Block& blk
+
+  virtual uint64_t add_block( const CryptoNote::Block& blk
                             , const size_t& block_size
-                            , const difficulty_type& cumulative_difficulty
+                            , const CryptoNote::difficulty_type& cumulative_difficulty
                             , const uint64_t& coins_generated
-                            , const std::vector<Transaction>& txs
+                            , const std::vector<CryptoNote::Transaction>& txs
                             );
 
   virtual void set_batch_transactions(bool batch_transactions);
@@ -269,13 +271,14 @@ public:
   virtual void batch_stop();
   virtual void batch_abort();
 
-  virtual void block_txn_start(bool readonly);
+  virtual void block_wtxn_start();
   virtual void block_txn_stop();
   virtual void block_txn_abort();
+  virtual void block_rxtn_start(bool readonly);
   virtual bool block_rtxn_start(MDB_txn **mtxn, mdb_txn_cursors **mcur) const;
   virtual void block_rtxn_stop() const;
 
-  virtual void pop_block(CryptoNote::Block& blk, std::vector<Transaction>& txs);
+  virtual void pop_block(CryptoNote::Block& blk, std::vector<CryptoNote::Transaction>& txs);
 
   virtual bool can_thread_bulk_indices() const { return true; }
 
@@ -291,27 +294,22 @@ public:
   std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> get_output_histogram(const std::vector<uint64_t> &amounts, bool unlocked, uint64_t recent_cutoff) const;
 
 private:
-  void do_resize(uint64_t size_increase=0);
 
-  bool need_resize(uint64_t threshold_size=0) const;
-  void check_and_resize_for_batch(uint64_t batch_num_blocks, uint64_t batch_bytes);
-  uint64_t get_estimated_batch_size(uint64_t batch_num_blocks, uint64_t batch_bytes) const;
-
-  virtual void add_block( const Block& blk
+  virtual void add_block( const CryptoNote::Block& blk
                 , const size_t& block_size
-                , const difficulty_type& cumulative_difficulty
+                , const CryptoNote::difficulty_type& cumulative_difficulty
                 , const uint64_t& coins_generated
                 , const Crypto::Hash& block_hash
                 );
 
   virtual void remove_block();
 
-  virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash& tx_hash);
+  virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const CryptoNote::Transaction& tx, const Crypto::Hash& tx_hash);
 
-  virtual void remove_transaction_data(const Crypto::Hash& tx_hash, const Transaction& tx);
+  virtual void remove_transaction_data(const Crypto::Hash& tx_hash, const CryptoNote::Transaction& tx);
 
   virtual uint64_t add_output(const Crypto::Hash& tx_hash,
-      const TransactionOutput& tx_output,
+      const CryptoNote::TransactionOutput& tx_output,
       const uint64_t& local_index,
       const uint64_t unlock_time
       );
@@ -320,7 +318,7 @@ private:
       const std::vector<uint64_t>& amount_output_indices
       );
 
-  void remove_tx_outputs(const uint64_t tx_id, const Transaction& tx);
+  void remove_tx_outputs(const uint64_t tx_id, const CryptoNote::Transaction& tx);
 
   void remove_output(const uint64_t amount, const uint64_t& out_index);
 
@@ -330,12 +328,6 @@ private:
 
   uint64_t num_outputs() const;
 
-  // Hard fork
-  virtual void set_hard_fork_version(uint64_t height, uint8_t version);
-  virtual uint8_t get_hard_fork_version(uint64_t height) const;
-  virtual void check_hard_fork_info();
-  virtual void drop_hard_fork_info();
-
   /**
    * @brief convert a tx output to a blob for storage
    *
@@ -343,7 +335,7 @@ private:
    *
    * @return the resultant blob
    */
-  CryptoNote::BinaryArray output_to_blob(const TransactionOutput& output) const;
+  CryptoNote::blobdata output_to_blob(const CryptoNote::TransactionOutput& output) const;
 
   /**
    * @brief convert a tx output blob to a tx output
@@ -352,7 +344,7 @@ private:
    *
    * @return the resultant tx output
    */
-  TransactionOutput output_from_blob(const BinaryArray& blob) const;
+  CryptoNote::TransactionOutput output_from_blob(const CryptoNote::blobdata& blob) const;
 
   void check_open() const;
 
@@ -370,6 +362,8 @@ private:
   void cleanup_batch();
 
 private:
+  bool m_open;
+
   MDB_env* m_env;
 
   MDB_dbi m_blocks;
@@ -398,7 +392,6 @@ private:
   std::string m_folder;
   mdb_txn_safe* m_write_txn; // may point to either a short-lived txn or a batch txn
   mdb_txn_safe* m_write_batch_txn; // persist batch txn outside of BlockchainLMDB
-  boost::thread::id m_writer;
 
   bool m_batch_transactions; // support for batch Transactions
   bool m_batch_active; // whether batch Transaction is in progress
@@ -406,18 +399,5 @@ private:
   mdb_txn_cursors m_wcursors;
   mutable boost::thread_specific_ptr<mdb_threadinfo> m_tinfo;
 
-#if defined(__arm__)
-  // force a value so it can compile with 32-bit ARM
-  constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 31;
-#else
-#if defined(ENABLE_AUTO_RESIZE)
-  constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 30;
-#else
-  constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 33;
-#endif
-#endif
-
-  constexpr static float RESIZE_PERCENT = 0.8f;
 }; // class BlockchainLMDB
 
-} // namespace CryptoNote

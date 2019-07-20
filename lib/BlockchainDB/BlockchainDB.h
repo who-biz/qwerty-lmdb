@@ -43,7 +43,9 @@
 #include <Serialization/BinaryOutputStreamSerializer.h>
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/Currency.h"
-#include "CryptoNoteCore/Hardfork.h"
+#include "BlockchainDB/BlobDataType.h"
+#include "BlockchainDB/Lmdb/db_lmdb.h"
+#include "Structures.h"
 
 /** \file
  * CryptoNote Blockchain Database Interface
@@ -100,54 +102,9 @@
  *   OUTPUT_EXISTS
  *   KEY_IMAGE_EXISTS
  */
-namespace CryptoNote
-{
-
-/** a pair of <transaction hash, output index>, typedef for convenience */
-typedef std::pair<Crypto::Hash, uint64_t> tx_out_index;
 
 extern const command_line::arg_descriptor<std::string> arg_db_sync_mode;
 extern const command_line::arg_descriptor<bool, false> arg_db_salvage;
-
-#pragma pack(push, 1)
-struct output_data_t
-{
-  Crypto::PublicKey  pubkey;
-  uint64_t           unlock_time;
-  uint64_t           height;
-};
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-struct tx_data_t
-{
-  uint64_t tx_id;
-  uint64_t unlock_time;
-  uint64_t block_id;
-};
-#pragma pack(pop)
-
-/**
- * @brief a struct containing txpool per transaction metadata
- */
-struct txpool_tx_meta_t
-{
-  Crypto::Hash max_used_block_id;
-  Crypto::Hash last_failed_id;
-  uint64_t blob_size;
-  uint64_t fee;
-  uint64_t max_used_block_height;
-  uint64_t last_failed_height;
-  uint64_t receive_time;
-  uint64_t last_relayed_time;
-  // 112 bytes
-  uint8_t kept_by_block;
-  uint8_t relayed;
-  uint8_t do_not_relay;
-  uint8_t double_spend_seen;
-
-  uint8_t padding[76]; // till 192 bytes
-};
 
 #define DBF_SAFE       1
 #define DBF_FAST       2
@@ -322,8 +279,6 @@ class KEY_IMAGE_EXISTS : public DB_EXCEPTION
 /***********************************
  * End of Exception Definitions
  ***********************************/
-
-
 /**
  * @brief The BlockchainDB backing store interface declaration/contract
  *
@@ -338,6 +293,7 @@ class KEY_IMAGE_EXISTS : public DB_EXCEPTION
  */
 class BlockchainDB
 {
+friend class BlockchainLMDB;
 private:
   /*********************************************************************
    * private virtual members
@@ -359,9 +315,9 @@ private:
    * @param coins_generated the number of coins generated total after this block
    * @param blk_hash the hash of the block
    */
-  virtual void add_block( const Block& blk
+  virtual void add_block( const CryptoNote::Block& blk
                 , const size_t& block_size
-                , const difficulty_type& cumulative_difficulty
+                , const CryptoNote::difficulty_type& cumulative_difficulty
                 , const uint64_t& coins_generated
                 , const Crypto::Hash& blk_hash
                 ) = 0;
@@ -371,7 +327,7 @@ private:
    *
    * The subclass implementing this will remove the block data from the top
    * block in the chain.  The data to be removed is that which was added in
-   * BlockchainDB::add_block(const Block& blk, const size_t& block_size, const difficulty_type& cumulative_difficulty, const uint64_t& coins_generated, const Crypto::Hash& blk_hash)
+   * BlockchainDB::add_block(CryptoNote::const Block& blk, const size_t& block_size, const CryptoNote::difficulty_type& cumulative_difficulty, const uint64_t& coins_generated, const Crypto::Hash& blk_hash)
    *
    * If any of this cannot be done, the subclass should throw the corresponding
    * subclass of DB_EXCEPTION
@@ -397,7 +353,7 @@ private:
    * @param tx_hash the hash of the transaction
    * @return the transaction ID
    */
-  virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash& tx_hash) = 0;
+  virtual uint64_t add_transaction_data(const Crypto::Hash& blk_hash, const CryptoNote::Transaction& tx, const Crypto::Hash& tx_hash) = 0;
 
   /**
    * @brief remove data about a transaction
@@ -415,7 +371,7 @@ private:
    * @param tx_hash the hash of the transaction to be removed
    * @param tx the transaction
    */
-  virtual void remove_transaction_data(const Crypto::Hash& tx_hash, const Transaction& tx) = 0;
+  virtual void remove_transaction_data(const Crypto::Hash& tx_hash, const CryptoNote::Transaction& tx) = 0;
 
   /**
    * @brief store an output
@@ -442,7 +398,7 @@ private:
    * @param unlock_time unlock time/height of the output
    * @return amount output index
    */
-  virtual uint64_t add_output(const Crypto::Hash& tx_hash, const TransactionOutput& tx_output, const uint64_t& local_index, const uint64_t unlock_time) = 0;
+  virtual uint64_t add_output(const Crypto::Hash& tx_hash, const CryptoNote::TransactionOutput& tx_output, const uint64_t& local_index, const uint64_t unlock_time) = 0;
 
   /**
    * @brief store amount output indices for a tx's outputs
@@ -490,7 +446,7 @@ private:
   /**
    * @brief private version of pop_block, for undoing if an add_block fails
    *
-   * This function simply calls pop_block(Block& blk, std::vector<Transaction>& txs)
+   * This function simply calls pop_block(Block& blk, std::vector<CryptoNote::Transaction>& txs)
    * with dummy parameters, as the returns-by-reference can be discarded.
    */
   void pop_block();
@@ -522,15 +478,16 @@ protected:
    * @param tx the transaction to add
    * @param tx_hash_ptr the hash of the transaction, if already calculated
    */
-  void add_transaction(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash* tx_hash_ptr = NULL);
+  void add_transaction(const Crypto::Hash& blk_hash, const CryptoNote::Transaction& tx, const Crypto::Hash* tx_hash_ptr = NULL);
 
   mutable uint64_t time_tx_exists = 0;  //!< a performance metric
   uint64_t time_commit1 = 0;  //!< a performance metric
   bool m_auto_remove_logs = true;  //!< whether or not to automatically remove old logs
 
-  HardFork* m_hardfork;
-
 public:
+
+  friend class BlockchainLMDB;
+  class BlockchainLMDB *BlockchainLMDB; 
 
   /**
    * @brief An empty constructor.
@@ -750,8 +707,6 @@ public:
   virtual void block_txn_stop() = 0;
   virtual void block_txn_abort() = 0;
 
-  virtual void set_hard_fork(HardFork* hf);
-
   // adds a block with the given metadata to the top of the blockchain, returns the new height
   /**
    * @brief handles the addition of a new block to BlockchainDB
@@ -773,11 +728,11 @@ public:
    *
    * @return the height of the chain post-addition
    */
-  virtual uint64_t add_block( const Block& blk
+  virtual uint64_t add_block( const CryptoNote::Block& blk
                             , const size_t& block_size
-                            , const difficulty_type& cumulative_difficulty
+                            , const CryptoNote::difficulty_type& cumulative_difficulty
                             , const uint64_t& coins_generated
-                            , const std::vector<Transaction>& txs
+                            , const std::vector<CryptoNote::Transaction>& txs
                             );
 
   /**
@@ -801,7 +756,7 @@ public:
    *
    * @return the block requested
    */
-  virtual CryptoNote::BinaryArray get_block_blob(const Crypto::Hash& h) const = 0;
+  virtual CryptoNote::blobdata get_block_blob(const Crypto::Hash& h) const = 0;
 
   /**
    * @brief fetches the block with the given hash
@@ -814,7 +769,7 @@ public:
    *
    * @return the block requested
    */
-  virtual Block get_block(const Crypto::Hash& h) const;
+  virtual CryptoNote::Block get_block(const Crypto::Hash& h) const;
 
   /**
    * @brief gets the height of the block with a given hash
@@ -841,7 +796,7 @@ public:
    *
    * @return the block header
    */
-  virtual BlockHeader get_block_header(const Crypto::Hash& h) const = 0;
+  virtual CryptoNote::BlockHeader get_block_header(const Crypto::Hash& h) const = 0;
 
   /**
    * @brief fetch a block blob by height
@@ -855,7 +810,7 @@ public:
    *
    * @return the block blob
    */
-  virtual CryptoNote::BinaryArray get_block_blob_from_height(const uint64_t& height) const = 0;
+  virtual CryptoNote::blobdata get_block_blob_from_height(const uint64_t& height) const = 0;
 
   /**
    * @brief fetch a block by height
@@ -867,7 +822,7 @@ public:
    *
    * @return the block
    */
-  virtual Block get_block_from_height(const uint64_t& height) const;
+  virtual CryptoNote::Block get_block_from_height(const uint64_t& height) const;
 
   /**
    * @brief fetch a block's timestamp
@@ -918,7 +873,7 @@ public:
    *
    * @return the cumulative difficulty
    */
-  virtual difficulty_type get_block_cumulative_difficulty(const uint64_t& height) const = 0;
+  virtual CryptoNote::difficulty_type get_block_cumulative_difficulty(const uint64_t& height) const = 0;
 
   /**
    * @brief fetch a block's difficulty
@@ -932,7 +887,7 @@ public:
    *
    * @return the difficulty
    */
-  virtual difficulty_type get_block_difficulty(const uint64_t& height) const = 0;
+  virtual CryptoNote::difficulty_type get_block_difficulty(const uint64_t& height) const = 0;
 
   /**
    * @brief fetch a block's already generated coins
@@ -977,7 +932,7 @@ public:
    *
    * @return a vector of blocks
    */
-  virtual std::vector<Block> get_blocks_range(const uint64_t& h1, const uint64_t& h2) const = 0;
+  virtual std::vector<CryptoNote::Block> get_blocks_range(const uint64_t& h1, const uint64_t& h2) const = 0;
 
   /**
    * @brief fetch a list of block hashes
@@ -1012,7 +967,7 @@ public:
    *
    * @return the top block
    */
-  virtual Block get_top_block() const = 0;
+  virtual CryptoNote::Block get_top_block() const = 0;
 
   /**
    * @brief fetch the current blockchain height
@@ -1044,7 +999,7 @@ public:
    * @param blk return-by-reference the block which was popped
    * @param txs return-by-reference the transactions from the popped block
    */
-  virtual void pop_block(Block& blk, std::vector<Transaction>& txs);
+  virtual void pop_block(CryptoNote::Block& blk, std::vector<CryptoNote::Transaction>& txs);
 
 
   /**
@@ -1087,7 +1042,7 @@ public:
    *
    * @return the transaction with the given hash
    */
-  virtual Transaction get_tx(const Crypto::Hash& h) const;
+  virtual CryptoNote::Transaction get_tx(const Crypto::Hash& h) const;
 
   /**
    * @brief fetches the transaction with the given hash
@@ -1098,7 +1053,7 @@ public:
    *
    * @return true iff the transaction was found
    */
-  virtual bool get_tx(const Crypto::Hash& h, Transaction &tx) const;
+  virtual bool get_tx(const Crypto::Hash& h, CryptoNote::Transaction &tx) const;
 
   /**
    * @brief fetches the transaction blob with the given hash
@@ -1112,7 +1067,7 @@ public:
    *
    * @return true iff the transaction was found
    */
-  virtual bool get_tx_blob(const Crypto::Hash& h, CryptoNote::BinaryArray &tx) const = 0;
+  virtual bool get_tx_blob(const Crypto::Hash& h, CryptoNote::blobdata &tx) const = 0;
 
   /**
    * @brief fetches the total number of transactions ever
@@ -1139,7 +1094,7 @@ public:
    *
    * @return the list of transactions
    */
-  virtual std::vector<Transaction> get_tx_list(const std::vector<Crypto::Hash>& hlist) const = 0;
+  virtual std::vector<CryptoNote::Transaction> get_tx_list(const std::vector<Crypto::Hash>& hlist) const = 0;
 
   // returns height of block that contains transaction with hash <h>
   /**
@@ -1224,7 +1179,7 @@ public:
    *
    * @return the tx hash and output index
    */
-  virtual tx_out_index get_output_tx_and_index_from_global(const uint64_t& index) const = 0;
+  virtual output_data_t get_output_tx_and_index_from_global(const uint64_t& index) const = 0;
 
   /**
    * @brief gets an output's tx hash and index
@@ -1302,7 +1257,7 @@ public:
    *
    * @param details the details of the transaction to add
    */
-  virtual void add_txpool_tx(const Transaction &tx, const txpool_tx_meta_t& details) = 0;
+  virtual void add_txpool_tx(const CryptoNote::Transaction &tx, const txpool_tx_meta_t& details) = 0;
 
   /**
    * @brief update a txpool transaction's metadata
@@ -1347,7 +1302,7 @@ public:
    *
    * @return true if the txid was in the txpool, false otherwise
    */
-  virtual bool get_txpool_tx_blob(const Crypto::Hash& txid, CryptoNote::BinaryArray &bd) const = 0;
+  virtual bool get_txpool_tx_blob(const Crypto::Hash& txid, CryptoNote::blobdata &bd) const = 0;
 
   /**
    * @brief get a txpool transaction's blob
@@ -1356,7 +1311,7 @@ public:
    *
    * @return the blob for that transaction
    */
-  virtual CryptoNote::BinaryArray get_txpool_tx_blob(const Crypto::Hash& txid) const = 0;
+  virtual CryptoNote::blobdata get_txpool_tx_blob(const Crypto::Hash& txid) const = 0;
 
   /**
    * @brief runs a function over all txpool transactions
@@ -1371,7 +1326,7 @@ public:
    *
    * @return false if the function returns false for any transaction, otherwise true
    */
-  virtual bool for_all_txpool_txes(std::function<bool(const Crypto::Hash&, const txpool_tx_meta_t&, const CryptoNote::BinaryArray*)>, bool include_blob = false, bool include_unrelayed_txes = true) const = 0;
+  virtual bool for_all_txpool_txes(std::function<bool(const Crypto::Hash&, const txpool_tx_meta_t&, const CryptoNote::blobdata*)>, bool include_blob = false, bool include_unrelayed_txes = true) const = 0;
 
   /**
    * @brief runs a function over all key images stored
@@ -1447,49 +1402,6 @@ public:
   virtual bool for_all_outputs(uint64_t amount, const std::function<bool(uint64_t height)> &f) const = 0;
 
 
-
-  //
-  // Hard fork related storage
-  //
-
-  /**
-   * @brief sets which hardfork version a height is on
-   *
-   * @param height the height
-   * @param version the version
-   */
-  virtual void set_hard_fork_version(uint64_t height, uint8_t version) = 0;
-
-  /**
-   * @brief checks which hardfork version a height is on
-   *
-   * @param height the height
-   *
-   * @return the version
-   */
-  virtual uint8_t get_hard_fork_version(uint64_t height) const = 0;
-
-  /**
-   * @brief verify hard fork info in database
-   */
-  virtual void check_hard_fork_info() = 0;
-
-  /**
-   * @brief delete hard fork info from database
-   */
-  virtual void drop_hard_fork_info() = 0;
-
-  /**
-   * @brief return a histogram of outputs on the blockchain
-   *
-   * @param amounts optional set of amounts to lookup
-   * @param unlocked whether to restrict count to unlocked outputs
-   * @param recent_cutoff timestamp to determine whether an output is recent
-   *
-   * @return a set of amount/instances
-   */
-  virtual std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> get_output_histogram(const std::vector<uint64_t> &amounts, bool unlocked, uint64_t recent_cutoff) const = 0;
-
   /**
    * @brief is BlockchainDB in read-only mode?
    *
@@ -1519,8 +1431,7 @@ public:
 
 };  // class BlockchainDB
 
-BlockchainLMDB *new_db(const std::string& db_type);
-
-}  // namespace CryptoNote
+BlockchainLMDB *new_db();
+class BlockchainLMDB;
 
 #endif  // BLOCKCHAIN_DB_H

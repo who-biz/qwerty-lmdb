@@ -30,11 +30,11 @@
 
 #include "Common/StringTools.h"
 #include "BlockchainDB.h"
-#include "../external/db_drivers/liblmdb/lmdb.h"
+#include "Lmdb/db_lmdb.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/Blockchain.h"
+#include "BlockchainDB/BlobDataType.h"
 #include "CryptoNoteCore/Currency.h"
-#include "CryptoNoteCore/Hardfork.h"
 #include "CryptoNoteCore/CryptoNoteTools.h"
 #include <iostream>
 
@@ -42,8 +42,6 @@
 
 using namespace Common;
 using namespace Crypto;
-
-namespace CryptoNote {
 
 static const char *db_types[] = {
   "lmdb", NULL
@@ -61,10 +59,11 @@ const command_line::arg_descriptor<bool> arg_db_salvage  = {
 , false
 };
 
-BlockchainLMDB *new_db(const std::string& db_type)
+
+BlockchainLMDB *new_db()
 {
-      return new BlockchainLMDB();
-      // TODO: add error handling for case of NULL return value.
+  BlockchainLMDB *m_db = new BlockchainLMDB();
+  return m_db;
 }
 
 void BlockchainDB::init_options(boost::program_options::options_description& desc)
@@ -75,12 +74,12 @@ void BlockchainDB::init_options(boost::program_options::options_description& des
 
 void BlockchainDB::pop_block()
 {
-  Block blk;
-  std::vector<Transaction> txs;
+  CryptoNote::Block blk;
+  std::vector<CryptoNote::Transaction> txs;
   pop_block(blk, txs);
 }
 
-void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const Transaction& tx, const Crypto::Hash* tx_hash_ptr)
+void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const CryptoNote::Transaction& tx, const Crypto::Hash* tx_hash_ptr)
 {
   bool miner_tx = false;
   Crypto::Hash tx_hash;
@@ -95,13 +94,13 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const Transacti
     tx_hash = *tx_hash_ptr;
   }
 
-  for (const TransactionInput& tx_input : tx.inputs)
+  for (const CryptoNote::TransactionInput& tx_input : tx.inputs)
   {
-    if (tx_input.type() == typeid(KeyInput))
+    if (tx_input.type() == typeid(CryptoNote::KeyInput))
     {
-      add_spent_key(boost::get<KeyInput>(tx_input).keyImage);
+      add_spent_key(boost::get<CryptoNote::KeyInput>(tx_input).keyImage);
     }
-    else if (tx_input.type() == typeid(BaseInput))
+    else if (tx_input.type() == typeid(CryptoNote::BaseInput))
     {
       /* nothing to do here */
       miner_tx = true;
@@ -109,11 +108,11 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const Transacti
     else
     {
       //Logger(INFO, WHITE) << "Unsupported input type, removing key images and aborting transaction addition";
-      for (const TransactionInput& tx_input : tx.inputs)
+      for (const CryptoNote::TransactionInput& tx_input : tx.inputs)
       {
-        if (tx_input.type() == typeid(KeyInput))
+        if (tx_input.type() == typeid(CryptoNote::KeyInput))
         {
-          remove_spent_key(boost::get<KeyInput>(tx_input).keyImage);
+          remove_spent_key(boost::get<CryptoNote::KeyInput>(tx_input).keyImage);
         }
       }
       return;
@@ -123,11 +122,11 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const Transacti
 
 }
 
-uint64_t BlockchainDB::add_block( const Block& blk
+uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk
                                 , const size_t& block_size
-                                , const difficulty_type& cumulative_difficulty
+                                , const CryptoNote::difficulty_type& cumulative_difficulty
                                 , const uint64_t& coins_generated
-                                , const std::vector<Transaction>& txs
+                                , const std::vector<CryptoNote::Transaction>& txs
                                 )
 {
   // sanity
@@ -142,19 +141,17 @@ uint64_t BlockchainDB::add_block( const Block& blk
 
   add_transaction(blk_hash, blk.baseTransaction);
   int tx_i = 0;
-  Crypto::Hash m_hash = NULL_HASH;
+  Crypto::Hash m_hash = CryptoNote::NULL_HASH;
   for (const auto& tx : txs)
   {
     m_hash = blk.transactionHashes[tx_i];
     const Crypto::Hash tx_hash = m_hash;
-    add_transaction(blk_hash, tx, tx_hash);
+    add_transaction(blk_hash, tx, &tx_hash);
     ++tx_i;
   }
 
   // call out to subclass implementation to add the block & metadata
   add_block(blk, block_size, cumulative_difficulty, coins_generated, blk_hash);
-
-  //m_hardfork->add(blk, prev_height);
 
   block_txn_stop();
 
@@ -163,12 +160,8 @@ uint64_t BlockchainDB::add_block( const Block& blk
   return prev_height;
 }
 
-void BlockchainDB::set_hard_fork(HardFork* hf)
-{
-  m_hardfork = hf;
-}
 
-void BlockchainDB::pop_block(Block& blk, std::vector<Transaction>& txs)
+void BlockchainDB::pop_block(CryptoNote::Block& blk, std::vector<CryptoNote::Transaction>& txs)
 {
   blk = get_top_block();
 
@@ -189,13 +182,13 @@ bool BlockchainDB::is_open() const
 
 void BlockchainDB::remove_transaction(const Crypto::Hash& tx_hash)
 {
-  Transaction tx = get_tx(tx_hash);
+  CryptoNote::Transaction tx = get_tx(tx_hash);
 
-  for (const TransactionInput& tx_input : tx.inputs)
+  for (const CryptoNote::TransactionInput& tx_input : tx.inputs)
   {
-    if (tx_input.type() == typeid(KeyInput))
+    if (tx_input.type() == typeid(CryptoNote::KeyInput))
     {
-      remove_spent_key(boost::get<KeyInput>(tx_input).keyImage);
+      remove_spent_key(boost::get<CryptoNote::KeyInput>(tx_input).keyImage);
     }
   }
 
@@ -203,42 +196,42 @@ void BlockchainDB::remove_transaction(const Crypto::Hash& tx_hash)
   remove_transaction_data(tx_hash, tx);
 }
 
-Block BlockchainDB::get_block_from_height(const uint64_t& height) const
+CryptoNote::Block BlockchainDB::get_block_from_height(const uint64_t& height) const
 {
-  BinaryArray bd = get_block_blob_from_height(height);
-  Block b;
-  //if (!parse_and_validate_block_from_blob(bd, b))
-    //throw DB_ERROR("Failed to parse block from blob retrieved from the db");
+  CryptoNote::blobdata bd = get_block_blob_from_height(height);
+  CryptoNote::Block b;
+//  if (!parse_and_validate_block_from_blob(bd, b))
+//    throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
 
   return b;
 }
 
-Block BlockchainDB::get_block(const Crypto::Hash& h) const
+CryptoNote::Block BlockchainDB::get_block(const Crypto::Hash& h) const
 {
-  BinaryArray bd = get_block_blob(h);
-  Block b;
-  //if (!parse_and_validate_block_from_blob(bd, b))
-    //throw DB_ERROR("Failed to parse block from blob retrieved from the db");
+  CryptoNote::blobdata bd = get_block_blob(h);
+  CryptoNote::Block b;
+//  if (!parse_and_validate_block_from_blob(bd, b))
+//    throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
 
   return b;
 }
 
 bool BlockchainDB::get_tx(const Crypto::Hash& h, CryptoNote::Transaction &tx) const
 {
-  BinaryArray bd;
+  CryptoNote::blobdata bd;
   if (!get_tx_blob(h, bd))
     return false;
-  //if (!parse_and_validate_tx_from_blob(bd, tx))
-    //throw DB_ERROR("Failed to parse transaction from blob retrieved from the db");
+//  if (!parse_and_validate_tx_from_blob(bd, tx))
+//    throw(DB_ERROR("Failed to parse transaction from blob retrieved from the db"));
 
   return true;
 }
 
-Transaction BlockchainDB::get_tx(const Crypto::Hash& h) const
+CryptoNote::Transaction BlockchainDB::get_tx(const Crypto::Hash& h) const
 {
-  Transaction tx;
-  //if (!get_tx(h, tx))
-    //throw TX_DNE(std::string("tx with hash ").append(Common::podToHex(h)).append(" not found in db").c_str());
+  CryptoNote::Transaction tx;
+  if (!get_tx(h, tx))
+    throw(TX_DNE(std::string("tx with hash ").append(Common::podToHex(h)).append(" not found in db").c_str()));
   return tx;
 }
 
@@ -254,4 +247,3 @@ void BlockchainDB::fixup()
   batch_stop();
 }
 
-}  // namespace cryptonote
