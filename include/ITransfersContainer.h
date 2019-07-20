@@ -22,7 +22,7 @@
 #include <limits>
 #include <vector>
 #include "crypto/hash.h"
-#include "ITransaction.h"
+#include "CryptoNoteCore/ITransaction.h"
 #include "IObservable.h"
 #include "IStreamSerializable.h"
 

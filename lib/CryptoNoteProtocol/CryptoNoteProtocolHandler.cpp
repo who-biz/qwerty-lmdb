@@ -408,6 +408,27 @@ int CryptoNoteProtocolHandler::handle_request_get_objects(
     CryptoNoteConnectionContext &context)
 {
     logger(Logging::TRACE) << context << "NOTIFY_REQUEST_GET_OBJECTS";
+
+    // Essentially, one can send such a large amount of IDs that core exhausts
+    // all free memory. This issue can theoretically be exploited using very
+    // large CN blockchains, such as Monero.
+    //
+    // This is a partial fix. Thanks and credit given to CryptoNote author
+    // 'cryptozoidberg' for collaboration and the fix. Also thanks to
+    // 'moneromooo'. Referencing HackerOne report #506595.
+    //
+    // Thanks to aivve (Karbo)
+
+    if (arg.blocks.size() + arg.txs.size() > CURRENCY_PROTOCOL_MAX_OBJECT_REQUEST_COUNT) {
+        logger(Logging::ERROR)
+            << context
+            << "Requested objects count is too big ("
+            << arg.blocks.size() << ") expected not more then "
+            << CURRENCY_PROTOCOL_MAX_OBJECT_REQUEST_COUNT;
+        m_p2p->drop_connection(context, true);
+        return 1;
+    }
+
     NOTIFY_RESPONSE_GET_OBJECTS::request rsp;
     if (!m_core.handle_get_objects(arg, rsp)) {
         logger(Logging::ERROR)
@@ -701,18 +722,18 @@ bool CryptoNoteProtocolHandler::on_connection_synchronized()
 {
     bool val_expected = false;
 
+/*
     if (m_synchronized.compare_exchange_strong(val_expected, true)) {
         logger(Logging::INFO)
-        << ENDL
-        << "**********************************************************************" << ENDL
-        << "You are now synchronized with the network. You may now start simplewallet." << ENDL
-        << ENDL
-        << "Please note, that the blockchain will be saved only after you quit the daemon" << ENDL
-        << "with \"exit\" command or if you use \"save\" command." << ENDL
-        << "Otherwise, you will possibly need to synchronize the blockchain again." << ENDL
-        << ENDL
-        << "Use \"help\" command to see the list of available commands." << ENDL
-        << "**********************************************************************";
+        << ENDL ;
+        logger(INFO, BRIGHT_MAGENTA) << "===[ " + std::string(CryptoNote::CRYPTONOTE_NAME) + " Tip! ]=============================" << ENDL ;
+        logger(INFO, WHITE) << " Always exit " + WalletConfig::daemonName + " and " + WalletConfig::walletName + " with the \"exit\" command to preserve your chain and wallet data." << ENDL ;
+        logger(INFO, WHITE) << " Use the \"help\" command to see a list of available commands." << ENDL ;
+        logger(INFO, WHITE) << " Use the \"backup\" command in " + WalletConfig::walletName + " to display your keys/seed for restoring a corrupted wallet." << ENDL ;
+        logger(INFO, WHITE) << " If you need more assistance, you can contact us for support at " + WalletConfig::contactLink << ENDL;
+        logger(INFO, BRIGHT_MAGENTA) << "===================================================" << ENDL << ENDL ;
+
+        logger(INFO, BRIGHT_GREEN) << asciiArt << ENDL;
         m_core.on_synchronized();
 
         uint32_t height;
@@ -720,7 +741,7 @@ bool CryptoNoteProtocolHandler::on_connection_synchronized()
         m_core.get_blockchain_top(height, hash);
         m_observerManager.notify(&ICryptoNoteProtocolObserver::blockchainSynchronized, height);
     }
-
+*/
     return true;
 }
 
@@ -817,7 +838,7 @@ void CryptoNoteProtocolHandler::relay_transactions(NOTIFY_NEW_TRANSACTIONS::requ
 void CryptoNoteProtocolHandler::requestMissingPoolTransactions(
     const CryptoNoteConnectionContext &context)
 {
-    if (context.version < P2PProtocolVersion::V1) {
+    if (context.version < 1) {
         return;
     }
 
