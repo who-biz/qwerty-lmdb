@@ -24,7 +24,7 @@
 #include <CryptoNoteCore/ITransaction.h>
 #include <CryptoNoteCore/TransactionApiExtra.h>
 #include <CryptoNoteCore/TransactionUtils.h>
-#include "../src/config/CryptoNoteConfig.h" // TODO: Replace with <...> path.
+#include "CryptoNoteConfig.h" // TODO: Replace with <...> path.
 
 using namespace Crypto;
 
