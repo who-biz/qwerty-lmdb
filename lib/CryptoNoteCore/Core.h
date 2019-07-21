@@ -338,6 +338,7 @@ private:
     size_t median(std::vector<size_t> &v);
 
 private:
+     const BlockchainDB* m_db;
     const Currency &m_currency;
     Logging::LoggerRef logger;
     CryptoNote::RealTimeProvider m_timeProvider;

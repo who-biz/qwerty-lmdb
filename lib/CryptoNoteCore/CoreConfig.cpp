@@ -25,6 +25,7 @@ namespace CryptoNote {
 CoreConfig::CoreConfig()
 {
     configFolder = Tools::getDefaultDataDirectory();
+    dbType = Tools::getDefaultDbType();
 }
 
 void CoreConfig::init(const boost::program_options::variables_map &options)
@@ -35,6 +36,13 @@ void CoreConfig::init(const boost::program_options::variables_map &options)
         ) {
         configFolder = command_line::get_arg(options, command_line::arg_data_dir);
         configFolderDefaulted = options[command_line::arg_data_dir.name].defaulted();
+    }
+    if (options.count(command_line::arg_db_type.name) != 0
+        && (!options[command_line::arg_db_type.name].defaulted() 
+            || dbType == Tools::getDefaultDbType())
+        ) {
+        dbType = command_line::get_arg(options, command_line::arg_db_type);
+        dbTypeDefaulted = options[command_line::arg_db_type.name].defaulted();
     }
 }
 

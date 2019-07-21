@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <numeric>
 #include <boost/foreach.hpp>
+#include <BlockchainDB/BlockchainDB.h>
 #include <Common/Math.h>
 #include <Common/int-util.h>
 #include <Common/ShuffleGenerator.h>
@@ -475,13 +476,29 @@ uint32_t Blockchain::getCurrentBlockchainHeight()
     return static_cast<uint32_t>(m_blocks.size());
 }
 
-bool Blockchain::init(const std::string &config_folder, bool load_existing)
+bool Blockchain::init(const std::string &db_type, const std::string &config_folder, bool load_existing)
 {
     std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
     if (!config_folder.empty() && !Tools::create_directories_if_necessary(config_folder)) {
         logger(ERROR, BRIGHT_RED) << "Failed to create data directory: " << m_config_folder;
         return false;
     }
+
+
+  BlockchainDB *db;
+  if (db == nullptr) {
+    logger(ERROR, BRIGHT_RED) << "Attempted to init Blockchain with a null DB";
+    return false;
+  }
+
+/*
+  if (!db->is_open())
+  {
+    logger(ERROR, BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
+    return false;
+  }
+*/
+   m_db = db;
 
     m_config_folder = config_folder;
 

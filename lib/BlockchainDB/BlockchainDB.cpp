@@ -60,10 +60,15 @@ const command_line::arg_descriptor<bool> arg_db_salvage  = {
 };
 
 
-BlockchainLMDB *new_db()
+BlockchainLMDB *new_db(const std::string& db_type)
 {
-  BlockchainLMDB *m_db = new BlockchainLMDB();
-  return m_db;
+  if (db_type == "lmdb")
+  {
+    BlockchainLMDB *m_db = new BlockchainLMDB();
+    return m_db;
+  }
+  else
+    return NULL;
 }
 
 void BlockchainDB::init_options(boost::program_options::options_description& desc)

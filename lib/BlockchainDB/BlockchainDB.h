@@ -1427,10 +1427,9 @@ public:
   void set_auto_remove_logs(bool auto_remove) { m_auto_remove_logs = auto_remove; }
 
   bool m_open;  //!< Whether or not the BlockchainDB is open/ready for use
-  mutable boost::unique_lock<boost::recursive_mutex> m_synchronization_lock;  //!< A lock, currently for when BlockchainLMDB needs to resize the backing db file
 
 };  // class BlockchainDB
 
-BlockchainLMDB *new_db();
+BlockchainLMDB *new_db(const std::string& db_type);
 
 #endif  // BLOCKCHAIN_DB_H

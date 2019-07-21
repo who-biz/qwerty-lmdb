@@ -20,6 +20,11 @@
 #include <unordered_set>
 #include <boost/utility/value_init.hpp>
 #include <boost/range/combine.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/filesystem.hpp>
+
+#include "BlockchainDB/BlockchainDB.h"
+#include "Blockchain.h"
 #include <Common/CommandLine.h>
 #include <Common/Math.h>
 #include <Common/StringTools.h>
@@ -115,7 +120,25 @@ void core::init_options(boost::program_options::options_description &desc)
 bool core::handle_command_line(const boost::program_options::variables_map &vm)
 {
     m_config_folder = command_line::get_arg(vm, command_line::arg_data_dir);
-    return true;
+
+  std::string db_type = command_line::get_arg(vm, command_line::arg_db_type);
+
+  BlockchainDB* db;
+  if (db == NULL)
+  {
+    logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
+    return false;
+  }
+
+  boost::filesystem::path folder(m_config_folder);
+  folder /= db->get_db_name();
+  logger(INFO) << "Loading blockchain from folder " << folder.string() << " ... ";
+
+  const std::string filename = folder.string();
+  blockchain_db_sync_mode sync_mode = db_default_sync;
+  uint64_t blocks_per_sync = 1;
+
+  return true;
 }
 
 uint32_t core::get_current_blockchain_height()
@@ -188,7 +211,9 @@ bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool l
         return false;
     }
 
-    r = m_blockchain.init(m_config_folder, load_existing);
+   std::string m_db_type = config.dbType;
+
+    r = m_blockchain.init(m_db_type, m_config_folder, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;

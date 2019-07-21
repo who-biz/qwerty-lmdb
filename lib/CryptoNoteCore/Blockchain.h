@@ -22,6 +22,7 @@
 #include <atomic>
 #include <google/sparse_hash_set>
 #include <google/sparse_hash_map>
+#include <BlockchainDB/BlockchainDB.h>
 #include <Common/ObserverManager.h>
 #include <Common/Util.h>
 #include <CryptoNoteCore/BlockchainIndices.h>
@@ -51,6 +52,14 @@ struct COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS_request;
 struct COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS_response;
 struct COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS_outs_for_amount;
 
+enum blockchain_db_sync_mode
+{
+  db_default_sync,
+  db_sync,
+  db_async,
+  db_nosync
+};
+
 class Blockchain : public CryptoNote::ITransactionValidator
 {
 public:
@@ -70,8 +79,8 @@ public:
     bool haveSpentKeyImages(const Transaction &tx) override;
     bool checkTransactionSize(size_t blobSize) override;
 
-    bool init() { return init(Tools::getDefaultDataDirectory(), true); }
-    bool init(const std::string &config_folder, bool load_existing);
+    bool init() { return init(Tools::getDefaultDbType(), Tools::getDefaultDataDirectory(), true); }
+    bool init(const std::string &db_type, const std::string &config_folder, bool load_existing);
     bool deinit();
 
     bool getLowerBound(uint64_t timestamp, uint64_t startOffset, uint32_t &height);
@@ -240,6 +249,8 @@ public:
     bool have_tx_keyimg_as_spent(const Crypto::KeyImage &key_im);
 
 private:
+    BlockchainDB *m_db;
+
     struct MultisignatureOutputUsage
     {
         void serialize(ISerializer &s)
@@ -292,6 +303,8 @@ private:
     typedef google::sparse_hash_map<uint64_t, std::vector<std::pair<TransactionIndex, uint16_t>>> outputs_container;
     typedef google::sparse_hash_map<uint64_t, std::vector<MultisignatureOutputUsage>> MultisignatureOutputsContainer;
 
+    blockchain_db_sync_mode m_db_sync_mode;
+
     const Currency &m_currency;
     tx_memory_pool &m_tx_pool;
     std::recursive_mutex m_blockchain_lock; // TODO: add here reader/writer lock
@@ -334,6 +347,43 @@ private:
     IntrusiveLinkedList<MessageQueue<BlockchainMessage>> m_messageQueueList;
 
     Logging::LoggerRef logger;
+
+    // user options, must be called before calling init()
+
+    /**
+     * @brief sets various performance options
+     *
+     * @param maxthreads max number of threads when preparing blocks for addition
+     * @param blocks_per_sync number of blocks to cache before syncing to database
+     * @param sync_mode the ::blockchain_db_sync_mode to use
+     * @param fast_sync sync using built-in block hashes as trusted
+     */
+    void set_user_options(uint64_t maxthreads, uint64_t blocks_per_sync, blockchain_db_sync_mode sync_mode, bool fast_sync);
+
+    /**
+     * @brief Put DB in safe sync mode
+     */
+    void safesyncmode(const bool onoff);
+
+    /**
+     * @brief get a reference to the BlockchainDB in use by Blockchain
+     * 
+     * @return a reference to the BlockchainDB instance
+     */
+    const BlockchainDB& get_db() const
+    {
+      return *m_db;
+    }
+
+    /**
+     * @brief get a reference to the BlockchainDB in use by Blockchain
+     *
+     * @return a reference to the BlockchainDB instance
+     */
+    BlockchainDB& get_db()
+    {
+      return *m_db;
+    }
 
     void rebuildCache();
     bool storeCache();
@@ -491,6 +541,11 @@ bool Blockchain::scanOutputKeysForIndexes(
                 *pmax_related_block_height = amount_outs_vec[i].first.block;
             }
         }
+    BlockchainDB *m_db;
+
+    blockchain_db_sync_mode m_db_sync_mode;
+    bool m_db_default_sync;
+
     }
 
     return true;

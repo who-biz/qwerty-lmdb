@@ -26,6 +26,7 @@
 
 #include "DaemonCommandsHandler.h"
 
+#include "BlockchainDB/DBTypes.h"
 #include "Common/SignalHandler.h"
 #include "Common/StringTools.h"
 #include "Common/PathTools.h"
@@ -58,6 +59,7 @@ namespace po = boost::program_options;
 
 namespace
 {
+  const command_line::arg_descriptor<std::string> arg_db_type     = {"db-type", "Specify database type", Tools::getDefaultDbType()};
   const command_line::arg_descriptor<std::string> arg_config_file = {"config-file", "Specify configuration file", std::string(CryptoNote::CRYPTONOTE_NAME) + ".conf"};
   const command_line::arg_descriptor<bool>        arg_os_version  = {"os-version", ""};
   const command_line::arg_descriptor<std::string> arg_log_file    = {"log-file", "", ""};
@@ -125,6 +127,7 @@ int main(int argc, char* argv[])
     command_line::add_arg(desc_cmd_only, command_line::arg_version);
     command_line::add_arg(desc_cmd_only, arg_os_version);
     // tools::get_default_data_dir() can't be called during static initialization
+    command_line::add_arg(desc_cmd_only, command_line::arg_db_type, Tools::getDefaultDbType());
     command_line::add_arg(desc_cmd_only, command_line::arg_data_dir, Tools::getDefaultDataDirectory());
     command_line::add_arg(desc_cmd_only, arg_config_file);
 
@@ -165,6 +168,7 @@ int main(int argc, char* argv[])
 
       std::string data_dir = command_line::get_arg(vm, command_line::arg_data_dir);
       std::string config = command_line::get_arg(vm, arg_config_file);
+      std::string db_type = command_line::get_arg(vm,arg_db_type);
 
       boost::filesystem::path data_dir_path(data_dir);
       boost::filesystem::path config_path(config);
@@ -350,6 +354,16 @@ int main(int argc, char* argv[])
         logger(INFO, BRIGHT_YELLOW) << "Rollback blockchain to height " << _index;
         ccore.rollbackBlockchain(_index);
       }
+    }
+
+    if (command_line::has_arg(vm, arg_db_type)) {
+      std::string db_str = command_line::get_arg(vm, arg_db_type);
+      if(!db_str.empty()) {
+        if (db_str != "lmdb") {
+          std::cout << "Invalid database type (" << db_str <<"), available types are: lmdb " << std::endl;
+          return 1;
+        }
+      } 
     }
 
     // start components
