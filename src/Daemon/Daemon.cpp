@@ -345,7 +345,7 @@ int main(int argc, char* argv[])
         uint32_t _index = 0;
         if (!Common::fromString(rollback_str, _index)) {
           std::cout << "wrong block index parameter" << ENDL;
-          return false;
+          return 1;
         }
         logger(INFO, BRIGHT_YELLOW) << "Rollback blockchain to height " << _index;
         ccore.rollbackBlockchain(_index);
