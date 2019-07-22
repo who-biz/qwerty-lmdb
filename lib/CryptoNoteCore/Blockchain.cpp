@@ -18,6 +18,8 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with Qwertycoin.  If not, see <http://www.gnu.org/licenses/>.
 
+#include "Blockchain.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -359,6 +361,7 @@ Blockchain::Blockchain(
     ILogger &logger,
     bool blockchainIndexesEnabled)
     : logger(logger, "Blockchain"),
+      m_db(),
       m_currency(currency),
       m_tx_pool(tx_pool),
       m_current_block_cumul_sz_limit(0),
@@ -476,16 +479,15 @@ uint32_t Blockchain::getCurrentBlockchainHeight()
     return static_cast<uint32_t>(m_blocks.size());
 }
 
-bool Blockchain::init(const std::string &db_type, const std::string &config_folder, bool load_existing)
-{
-    std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-    if (!config_folder.empty() && !Tools::create_directories_if_necessary(config_folder)) {
-        logger(ERROR, BRIGHT_RED) << "Failed to create data directory: " << m_config_folder;
-        return false;
-    }
+bool Blockchain::init(const std::string& db_type, const std::string& config_folder, bool load_existing) {
+  std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  if (!config_folder.empty() && !Tools::create_directories_if_necessary(config_folder)) {
+    logger(ERROR, BRIGHT_RED) << "Failed to create data directory: " << m_config_folder;
+    return false;
+  }
 
-
-  BlockchainDB *db;
+  bool r = m_db->is_open();
+  BlockchainDB* db = m_db;
   if (db == nullptr) {
     logger(ERROR, BRIGHT_RED) << "Attempted to init Blockchain with a null DB";
     return false;
@@ -498,7 +500,6 @@ bool Blockchain::init(const std::string &db_type, const std::string &config_fold
     return false;
   }
 */
-   m_db = db;
 
     m_config_folder = config_folder;
 

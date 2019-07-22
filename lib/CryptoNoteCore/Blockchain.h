@@ -80,7 +80,7 @@ public:
     bool checkTransactionSize(size_t blobSize) override;
 
     bool init() { return init(Tools::getDefaultDbType(), Tools::getDefaultDataDirectory(), true); }
-    bool init(const std::string &db_type, const std::string &config_folder, bool load_existing);
+    bool init(const std::string& db_type, const std::string &config_folder, bool load_existing);
     bool deinit();
 
     bool getLowerBound(uint64_t timestamp, uint64_t startOffset, uint32_t &height);

@@ -1430,6 +1430,6 @@ public:
 
 };  // class BlockchainDB
 
-BlockchainLMDB *new_db(const std::string& db_type);
+BlockchainLMDB* new_db();
 
 #endif  // BLOCKCHAIN_DB_H

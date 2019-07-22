@@ -31,6 +31,8 @@
 #ifndef BLOBDATATYPE_H
 #define BLOBDATATYPE_H
 
+#include "binary_archive.h"
+#include "hex_str.h"
 #include "Common/StringTools.h"
 
 #pragma once
