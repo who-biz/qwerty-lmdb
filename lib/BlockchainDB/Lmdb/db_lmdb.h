@@ -277,11 +277,14 @@ public:
   virtual void batch_abort();
 
   virtual void block_wtxn_start();
-  virtual void block_txn_stop();
+  virtual void block_wtxn_stop();
+  virtual void block_txn_start(bool readonly);
   virtual void block_txn_abort();
   virtual void block_rxtn_start(bool readonly);
   virtual bool block_rtxn_start(MDB_txn **mtxn, mdb_txn_cursors **mcur) const;
+  virtual void block_txn_start() const;
   virtual void block_rtxn_stop() const;
+  virtual void block_txn_stop() const;
 
   virtual void pop_block(CryptoNote::Block& blk, std::vector<CryptoNote::Transaction>& txs);
 

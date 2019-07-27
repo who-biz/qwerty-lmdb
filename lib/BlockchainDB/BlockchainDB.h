@@ -699,8 +699,6 @@ public:
    */
   virtual void set_batch_transactions(bool) = 0;
 
-  virtual void block_txn_start(bool readonly=false) = 0;
-  virtual void block_txn_stop() = 0;
   virtual void block_txn_abort() = 0;
 
   // adds a block with the given metadata to the top of the blockchain, returns the new height
@@ -1175,7 +1173,7 @@ public:
    *
    * @return the tx hash and output index
    */
-  virtual output_data_t get_output_tx_and_index_from_global(const uint64_t& index) const = 0;
+  virtual tx_out_index get_output_tx_and_index_from_global(const uint64_t& index) const = 0;
 
   /**
    * @brief gets an output's tx hash and index
@@ -1426,7 +1424,7 @@ public:
 
 };  // class BlockchainDB
 
-std::unique_ptr<BlockchainDB> new_db(const std::string& db_type);
+BlockchainDB* new_db(const std::string& db_type);
 
 #endif  // BLOCKCHAIN_DB_H
 

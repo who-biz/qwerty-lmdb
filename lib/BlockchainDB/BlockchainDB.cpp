@@ -59,17 +59,11 @@ const command_line::arg_descriptor<bool> arg_db_salvage  = {
 };
 
 
-std::unique_ptr<BlockchainDB>::unique_ptr(BlockchainLMDB*)
-{
-  std::make_unique<BlockchainDB(BlockchainLMDB());
-}
-
 BlockchainDB *new_db(const std::string& db_type)
 {
   if (db_type == "lmdb")
   {
-    BlockchainDB *m_db = new BlockchainLMDB();
-    return m_db;
+    return new BlockchainLMDB();
   }
   else
     return NULL;
@@ -162,7 +156,7 @@ uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk
   // call out to subclass implementation to add the block & metadata
   add_block(blk, block_size, cumulative_difficulty, coins_generated, blk_hash);
 
-  block_txn_stop();
+  block_txn_abort();
 
  // ++num_calls;
 

@@ -758,6 +758,7 @@ void BlockchainLMDB::check_open() const
 }
 
 BlockchainLMDB::BlockchainLMDB(): BlockchainDB()
+{
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
 
   // batch transaction shouldn't be active at this point. If it is, consider it aborted.
@@ -2254,6 +2255,17 @@ void BlockchainLMDB::block_rtxn_stop() const
   memset(&m_tinfo->m_ti_rflags, 0, sizeof(m_tinfo->m_ti_rflags));
 }
 
+void BlockchainLMDB::block_txn_start(bool readonly)
+{
+  if (readonly)
+  {
+    MDB_txn *mtxn;
+	mdb_txn_cursors *mcur;
+	block_rtxn_start(&mtxn, &mcur);
+    return;
+  }
+}
+
 void BlockchainLMDB::block_wtxn_start()
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
@@ -2277,7 +2289,7 @@ void BlockchainLMDB::block_wtxn_start()
   }
 }
 
-void BlockchainLMDB::block_txn_stop()
+void BlockchainLMDB::block_wtxn_stop()
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   if (!m_write_txn)
