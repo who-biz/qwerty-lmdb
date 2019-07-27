@@ -161,6 +161,10 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
     if (!Tools::directoryExists(config.coreConfig.configFolder)) {
       throw std::runtime_error("Directory does not exist: " + config.coreConfig.configFolder);
     }
+  } else if (!config.coreConfig.dbTypeDefaulted) {
+    if (!Tools::directoryExists(config.coreConfig.dbType)) {
+      throw std::runtime_error("Db Type does not exist: " + config.coreConfig.dbType);
+    }
   } else {
     if (!Tools::create_directories_if_necessary(config.coreConfig.configFolder)) {
       throw std::runtime_error("Can't create directory: " + config.coreConfig.configFolder);
@@ -170,7 +174,8 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   log(Logging::INFO) << "Starting Payment Gate with local node";
 
   CryptoNote::Currency currency = currencyBuilder.currency();
-  CryptoNote::core core(currency, NULL, logger, false);
+  std::unique_ptr<BlockchainDB> db;
+  CryptoNote::core core(db.release(), currency, NULL, logger, false);
 
   CryptoNote::CryptoNoteProtocolHandler protocol(currency, *dispatcher, core, NULL, logger);
   CryptoNote::NodeServer p2pNode(*dispatcher, protocol, logger);
@@ -196,7 +201,7 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
 
   log(Logging::INFO) << "initializing core";
   CryptoNote::MinerConfig emptyMiner;
-  core.init(config.coreConfig, emptyMiner, true);
+  core.init(db.release(), config.coreConfig, emptyMiner, true);
 
   std::promise<std::error_code> initPromise;
   auto initFuture = initPromise.get_future();

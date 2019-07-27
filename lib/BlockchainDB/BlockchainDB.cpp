@@ -59,11 +59,12 @@ const command_line::arg_descriptor<bool> arg_db_salvage  = {
 };
 
 
-BlockchainDB *new_db(const std::string& db_type)
+BlockchainDB* new_db(const std::string& db_type)
 {
   if (db_type == "lmdb")
   {
-    return new BlockchainLMDB();
+    std::unique_ptr<BlockchainLMDB> db;
+    return db.release();
   }
   else
     return NULL;
@@ -155,8 +156,6 @@ uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk
 
   // call out to subclass implementation to add the block & metadata
   add_block(blk, block_size, cumulative_difficulty, coins_generated, blk_hash);
-
-  block_txn_abort();
 
  // ++num_calls;
 

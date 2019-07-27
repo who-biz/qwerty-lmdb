@@ -1426,6 +1426,7 @@ public:
 
 BlockchainDB* new_db(const std::string& db_type);
 
+
 #endif  // BLOCKCHAIN_DB_H
 
 

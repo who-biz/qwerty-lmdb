@@ -24,6 +24,7 @@
 #include <boost/filesystem.hpp>
 
 #include "Blockchain.h"
+#include "BlockchainDB/BlockchainDB.h"
 #include <Common/CommandLine.h>
 #include <Common/Math.h>
 #include <Common/StringTools.h>
@@ -41,7 +42,6 @@
 #include <Logging/LoggerRef.h>
 #include <Rpc/CoreRpcServerCommandsDefinitions.h>
 #include "CryptoNoteConfig.h" // TODO: User absoute paths instead of relative path.
-#include "BlockchainDB/BlockchainDB.h"
 
 
 #undef ERROR
@@ -216,14 +216,7 @@ bool core::init(BlockchainDB* dbp, const CoreConfig &config, const MinerConfig &
     }
     catch (std::exception &e) { logger(ERROR, BRIGHT_RED) << "Exception caught in Core init: " << e.what(); }
 
-    std::unique_ptr<BlockchainDB> db(new_db(m_db_type));
-    if (db == NULL)
-    {
-      logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
-      return false;
-    }
-
-    folder /= db->get_db_name();
+    folder /= dbp->get_db_name();
     logger(INFO, WHITE) << "Loading blockchain from folder " << folder.string() << " ...";
 
     const std::string filename = folder.string();
@@ -288,8 +281,8 @@ bool core::init(BlockchainDB* dbp, const CoreConfig &config, const MinerConfig &
           blocks_per_sync = bps;
       }
 
-      db->open(filename, db_flags);
-      if(!db->m_open)
+      dbp->open(filename, db_flags);
+      if(!dbp->m_open)
         return false;
     }
     catch (const DB_ERROR& e)
@@ -298,10 +291,7 @@ bool core::init(BlockchainDB* dbp, const CoreConfig &config, const MinerConfig &
       return false;
     }
 
-    m_blockchain.set_user_options(4, 1, sync_mode, true); // plug in handle for checkpoints in 4th parameter
-							  // i.e. --with-checkpoints=0
-
-    r = m_blockchain.init(db.release(), m_config_folder, load_existing);
+    r = m_blockchain.init(dbp, m_config_folder, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;
