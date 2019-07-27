@@ -88,7 +88,7 @@ core::core(
       m_currency(currency),
       logger(logger, "core"),
       m_mempool(currency, m_blockchain, *this, m_timeProvider, logger, blockchainIndexesEnabled),
-      m_blockchain(currency, m_mempool, logger, blockchainIndexesEnabled),
+      m_blockchain(dbp, currency, m_mempool, logger, blockchainIndexesEnabled),
       m_miner(new miner(currency, *this, logger)),
       m_starter_message_showed(false)
 {
@@ -181,7 +181,7 @@ std::time_t core::getStartTime() const
     return start_time;
 }
 
-bool core::init(BlockchainDB* dbp, const CoreConfig &config, const MinerConfig &minerConfig, bool load_existing)
+bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool load_existing)
 {
     m_config_folder = config.configFolder;
     bool r = m_mempool.init(m_config_folder);
@@ -205,93 +205,90 @@ bool core::init(BlockchainDB* dbp, const CoreConfig &config, const MinerConfig &
     try
     {
       const boost::filesystem::path old_files = folder;
-      if (boost::filesystem::exists(old_files / "blockchain.bin"))
+      if (boost::filesystem::exists(old_files / "blockindexes.bin"))
       {
         logger(ERROR, BRIGHT_RED) << "Found old-style blockchain.bin in " << old_files.string();
         logger(ERROR, BRIGHT_RED) << "Qwertycoin now uses a new format. You can either remove blockchain.bin to start syncing";
         logger(ERROR, BRIGHT_RED) << "the blockchain anew, or use blur-blockchain-export and blur-blockchain-import to";
         logger(ERROR, BRIGHT_RED) << "convert your existing blockchain.bin to the new format. See README.md for instructions.";
-        return false;
       }
     }
     catch (std::exception &e) { logger(ERROR, BRIGHT_RED) << "Exception caught in Core init: " << e.what(); }
 
-    folder /= dbp->get_db_name();
-    logger(INFO, WHITE) << "Loading blockchain from folder " << folder.string() << " ...";
-
-    const std::string filename = folder.string();
-    // default to fast:async:1
-    blockchain_db_sync_mode sync_mode = db_default_sync;
-    uint64_t blocks_per_sync = 1;
-
-    try
+    if (m_db_type == "lmdb")
     {
-      uint64_t db_flags = 0;
+      folder /= m_db_type;
+      logger(INFO, WHITE) << "Loading blockchain from folder " << folder.string() << " ...";
 
-      std::vector<std::string> options;
-      boost::trim(db_sync_mode);
-      boost::split(options, db_sync_mode, boost::is_any_of(" :"));
-
+      const std::string filename = folder.string();
       // default to fast:async:1
-      uint64_t DEFAULT_FLAGS = DBF_FAST;
+      blockchain_db_sync_mode sync_mode = db_default_sync;
+      uint64_t blocks_per_sync = 1;
 
-      if(options.size() == 0)
+      try
       {
+        uint64_t db_flags = 0;
+
+        std::vector<std::string> options;
+        boost::trim(db_sync_mode);
+        boost::split(options, db_sync_mode, boost::is_any_of(" :"));
+
         // default to fast:async:1
-        db_flags = DEFAULT_FLAGS;
-      }
+        uint64_t DEFAULT_FLAGS = DBF_FAST;
 
-      bool safemode = false;
-      if(options.size() >= 1)
-      {
-        if(options[0] == "safe")
+        if(options.size() == 0)
         {
-          safemode = true;
-          db_flags = DBF_SAFE;
-          sync_mode = db_nosync;
-        }
-        else if(options[0] == "fast")
-        {
-          db_flags = DBF_FAST;
-          sync_mode = db_async;
-        }
-        else if(options[0] == "fastest")
-        {
-          db_flags = DBF_FASTEST;
-          blocks_per_sync = 1000; // default to fastest:async:1000
-          sync_mode = db_async;
-        }
-        else
+          // default to fast:async:1
           db_flags = DEFAULT_FLAGS;
-      }
+        }
 
-      if(options.size() >= 2 && !safemode)
+        bool safemode = false;
+        if(options.size() >= 1)
+        {
+          if(options[0] == "safe")
+          {
+            safemode = true;
+            db_flags = DBF_SAFE;
+            sync_mode = db_nosync;
+          }
+          else if(options[0] == "fast")
+          {
+            db_flags = DBF_FAST;
+            sync_mode = db_async;
+          }
+          else if(options[0] == "fastest")
+          {
+            db_flags = DBF_FASTEST;
+            blocks_per_sync = 1000; // default to fastest:async:1000
+            sync_mode = db_async;
+          }
+          else
+            db_flags = DEFAULT_FLAGS;
+        }
+
+        if(options.size() >= 2 && !safemode)
+        {
+          if(options[1] == "sync")
+            sync_mode = db_sync;
+          else if(options[1] == "async")
+            sync_mode = db_async;
+        }
+
+        if(options.size() >= 3 && !safemode)
+        {
+          char *endptr;
+          uint64_t bps = strtoull(options[2].c_str(), &endptr, 0);
+          if (*endptr == '\0')
+            blocks_per_sync = bps;
+        }
+      }
+      catch (const DB_ERROR& e)
       {
-        if(options[1] == "sync")
-          sync_mode = db_sync;
-        else if(options[1] == "async")
-          sync_mode = db_async;
-      }
-
-      if(options.size() >= 3 && !safemode)
-      {
-        char *endptr;
-        uint64_t bps = strtoull(options[2].c_str(), &endptr, 0);
-        if (*endptr == '\0')
-          blocks_per_sync = bps;
-      }
-
-      dbp->open(filename, db_flags);
-      if(!dbp->m_open)
+        logger(ERROR, BRIGHT_RED) << "Error opening database: " << e.what();
         return false;
-    }
-    catch (const DB_ERROR& e)
-    {
-      logger(ERROR, BRIGHT_RED) << "Error opening database: " << e.what();
-      return false;
-    }
+      }
 
-    r = m_blockchain.init(dbp, m_config_folder, load_existing);
+    r = m_blockchain.init(m_config_folder, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;
@@ -306,6 +303,7 @@ bool core::init(BlockchainDB* dbp, const CoreConfig &config, const MinerConfig &
     start_time = std::time(nullptr);
 
     return load_state_data();
+}
 }
 
 bool core::set_genesis_block(const Block &b)

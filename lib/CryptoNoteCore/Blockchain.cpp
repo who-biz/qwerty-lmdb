@@ -354,11 +354,13 @@ private:
 };
 
 Blockchain::Blockchain(
+    BlockchainDB* dbp,
     const Currency &currency,
     tx_memory_pool &tx_pool,
     ILogger &logger,
     bool blockchainIndexesEnabled)
     : logger(logger, "Blockchain"),
+      m_db(dbp),
       m_currency(currency),
       m_tx_pool(tx_pool),
       m_current_block_cumul_sz_limit(0),
@@ -476,7 +478,7 @@ uint32_t Blockchain::getCurrentBlockchainHeight()
     return static_cast<uint32_t>(m_blocks.size());
 }
 
-bool Blockchain::init(std::unique_ptr<BlockchainDB>::pointer db, const std::string &config_folder, bool load_existing)
+bool Blockchain::init(const std::string &config_folder, bool load_existing)
 {
     std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
     if (!config_folder.empty() && !Tools::create_directories_if_necessary(config_folder)) {
@@ -485,18 +487,6 @@ bool Blockchain::init(std::unique_ptr<BlockchainDB>::pointer db, const std::stri
     }
 
 
-  if (db == nullptr) {
-    logger(ERROR, BRIGHT_RED) << "Attempted to init Blockchain with a null DB";
-    return false;
-  }
-
-/*
-  if (!db->is_open())
-  {
-    logger(ERROR, BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
-    return false;
-  }
-*/
     m_config_folder = config_folder;
 
     if (!m_blocks.open(

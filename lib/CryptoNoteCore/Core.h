@@ -87,7 +87,7 @@ public:
     miner &get_miner() { return *m_miner; }
 
     static void init_options(boost::program_options::options_description &desc);
-    bool init(BlockchainDB* db, const CoreConfig &config, const MinerConfig &minerConfig, bool load_existing);
+    bool init(const CoreConfig &config, const MinerConfig &minerConfig, bool load_existing);
     bool set_genesis_block(const Block &b);
     bool deinit();
 
