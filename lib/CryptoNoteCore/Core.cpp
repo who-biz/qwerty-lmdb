@@ -218,8 +218,12 @@ bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool l
     if (m_db_type == "lmdb")
     {
       folder /= m_db_type;
+    }
       logger(INFO, WHITE) << "Loading blockchain from folder " << folder.string() << " ...";
 
+
+    if (m_db_type == "lmdb")
+    {
       const std::string filename = folder.string();
       // default to fast:async:1
       blockchain_db_sync_mode sync_mode = db_default_sync;
@@ -287,7 +291,7 @@ bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool l
         logger(ERROR, BRIGHT_RED) << "Error opening database: " << e.what();
         return false;
       }
-
+    }
     r = m_blockchain.init(m_config_folder, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
@@ -303,7 +307,6 @@ bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool l
     start_time = std::time(nullptr);
 
     return load_state_data();
-}
 }
 
 bool core::set_genesis_block(const Block &b)
