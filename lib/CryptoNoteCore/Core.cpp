@@ -208,9 +208,7 @@ bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool l
       if (boost::filesystem::exists(old_files / "blockindexes.bin"))
       {
         logger(ERROR, BRIGHT_RED) << "Found old-style blockchain.bin in " << old_files.string();
-        logger(ERROR, BRIGHT_RED) << "Qwertycoin now uses a new format. You can either remove blockchain.bin to start syncing";
-        logger(ERROR, BRIGHT_RED) << "the blockchain anew, or use blur-blockchain-export and blur-blockchain-import to";
-        logger(ERROR, BRIGHT_RED) << "convert your existing blockchain.bin to the new format. See README.md for instructions.";
+        logger(ERROR, BRIGHT_RED) << "Qwertycoin now uses a new format. Remove blockchain.bin to start syncing";
       }
     }
     catch (std::exception &e) { logger(ERROR, BRIGHT_RED) << "Exception caught in Core init: " << e.what(); }
@@ -292,6 +290,7 @@ bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool l
         return false;
       }
     }
+
     r = m_blockchain.init(m_config_folder, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";

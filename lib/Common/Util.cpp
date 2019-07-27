@@ -347,7 +347,7 @@ std::string getDefaultDataDirectory()
 
 std::string getDefaultDbType()
 {
- std::string ret = "lmdb";
+ std::string ret = "";
  return ret;
 }
 
