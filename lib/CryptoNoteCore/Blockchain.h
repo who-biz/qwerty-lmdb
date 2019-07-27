@@ -22,7 +22,6 @@
 #include <atomic>
 #include <google/sparse_hash_set>
 #include <google/sparse_hash_map>
-#include <BlockchainDB/BlockchainDB.h>
 #include <Common/ObserverManager.h>
 #include <Common/Util.h>
 #include <CryptoNoteCore/BlockchainIndices.h>
@@ -39,6 +38,7 @@
 #include <CryptoNoteCore/TransactionPool.h>
 #include <CryptoNoteCore/UpgradeDetector.h>
 #include <Logging/LoggerRef.h>
+#include <BlockchainDB/BlockchainDB.h>
 
 #undef ERROR
 
@@ -70,6 +70,8 @@ public:
         bool blockchainIndexesEnabled
     );
 
+    void set_user_options(uint64_t maxthreads, uint64_t blocks_per_sync, blockchain_db_sync_mode sync_mode, bool fast_sync);
+
     bool addObserver(IBlockchainStorageObserver *observer);
     bool removeObserver(IBlockchainStorageObserver *observer);
 
@@ -79,8 +81,8 @@ public:
     bool haveSpentKeyImages(const Transaction &tx) override;
     bool checkTransactionSize(size_t blobSize) override;
 
-    bool init() { return init(Tools::getDefaultDbType(), Tools::getDefaultDataDirectory(), true); }
-    bool init(const std::string &db_type, const std::string &config_folder, bool load_existing);
+    bool init() { std::unique_ptr<BlockchainDB> db; return init(db.release(), Tools::getDefaultDataDirectory(), true); }
+    bool init(BlockchainDB* db, const std::string &config_folder, bool load_existing);
     bool deinit();
 
     bool getLowerBound(uint64_t timestamp, uint64_t startOffset, uint32_t &height);
@@ -347,18 +349,6 @@ private:
     IntrusiveLinkedList<MessageQueue<BlockchainMessage>> m_messageQueueList;
 
     Logging::LoggerRef logger;
-
-    // user options, must be called before calling init()
-
-    /**
-     * @brief sets various performance options
-     *
-     * @param maxthreads max number of threads when preparing blocks for addition
-     * @param blocks_per_sync number of blocks to cache before syncing to database
-     * @param sync_mode the ::blockchain_db_sync_mode to use
-     * @param fast_sync sync using built-in block hashes as trusted
-     */
-    void set_user_options(uint64_t maxthreads, uint64_t blocks_per_sync, blockchain_db_sync_mode sync_mode, bool fast_sync);
 
     /**
      * @brief Put DB in safe sync mode

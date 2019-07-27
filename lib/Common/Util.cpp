@@ -351,6 +351,12 @@ std::string getDefaultDbType()
  return ret;
 }
 
+std::string getDefaultDbSyncMode()
+{
+ std::string ret = "fast:async:1000";
+ return ret;
+}
+
 bool create_directories_if_necessary(const std::string &path)
 {
     namespace fs = boost::filesystem;

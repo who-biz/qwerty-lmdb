@@ -30,9 +30,9 @@
 
 #include <boost/thread/tss.hpp>
 #include "../external/db_drivers/liblmdb/lmdb.h"
-#include "BlockchainDB/BlockchainDB.h"
 #include "BlockchainDB/Structures.h"
 #include "BlockchainDB/BlobDataType.h"
+#include "BlockchainDB/BlockchainDB.h"
 
 typedef struct mdb_txn_cursors
 {
@@ -149,11 +149,16 @@ struct mdb_txn_safe
 // transaction, as those lookups are part of the validation done prior to the
 // write for block and tx data, so no write transaction is open at the time.
 
-class BlockchainLMDB
+
+class BlockchainLMDB : public BlockchainDB
 {
 public:
-  BlockchainLMDB(bool batch_transactions=false);
+
+  BlockchainLMDB();
   ~BlockchainLMDB();
+
+
+  friend class BlockchainDB;
 
   virtual void open(const std::string& filename, const int mdb_flags=0);
 

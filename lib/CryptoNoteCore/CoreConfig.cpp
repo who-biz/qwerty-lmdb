@@ -26,6 +26,7 @@ CoreConfig::CoreConfig()
 {
     configFolder = Tools::getDefaultDataDirectory();
     dbType = Tools::getDefaultDbType();
+    dbSyncMode = Tools::getDefaultDbSyncMode();
 }
 
 void CoreConfig::init(const boost::program_options::variables_map &options)
@@ -38,11 +39,18 @@ void CoreConfig::init(const boost::program_options::variables_map &options)
         configFolderDefaulted = options[command_line::arg_data_dir.name].defaulted();
     }
     if (options.count(command_line::arg_db_type.name) != 0
-        && (!options[command_line::arg_db_type.name].defaulted() 
+        && (!options[command_line::arg_db_type.name].defaulted()
             || dbType == Tools::getDefaultDbType())
         ) {
         dbType = command_line::get_arg(options, command_line::arg_db_type);
         dbTypeDefaulted = options[command_line::arg_db_type.name].defaulted();
+    }
+    if (options.count(command_line::arg_db_sync_mode.name) != 0
+        && (!options[command_line::arg_db_sync_mode.name].defaulted()
+            || dbSyncMode == Tools::getDefaultDbSyncMode())
+        ) {
+        dbSyncMode = command_line::get_arg(options, command_line::arg_db_sync_mode);
+        dbSyncModeDefaulted = options[command_line::arg_db_sync_mode.name].defaulted();
     }
 }
 

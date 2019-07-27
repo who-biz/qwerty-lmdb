@@ -23,7 +23,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 
-#include "BlockchainDB/BlockchainDB.h"
 #include "Blockchain.h"
 #include <Common/CommandLine.h>
 #include <Common/Math.h>
@@ -42,6 +41,8 @@
 #include <Logging/LoggerRef.h>
 #include <Rpc/CoreRpcServerCommandsDefinitions.h>
 #include "CryptoNoteConfig.h" // TODO: User absoute paths instead of relative path.
+#include "BlockchainDB/BlockchainDB.h"
+
 
 #undef ERROR
 
@@ -78,11 +79,13 @@ private:
 };
 
 core::core(
+    BlockchainDB* dbp,
     const Currency &currency,
     i_cryptonote_protocol *pprotocol,
     Logging::ILogger &logger,
     bool blockchainIndexesEnabled)
-    : m_currency(currency),
+    : m_db(dbp),
+      m_currency(currency),
       logger(logger, "core"),
       m_mempool(currency, m_blockchain, *this, m_timeProvider, logger, blockchainIndexesEnabled),
       m_blockchain(currency, m_mempool, logger, blockchainIndexesEnabled),
@@ -115,30 +118,6 @@ void core::set_checkpoints(Checkpoints &&chk_pts)
 
 void core::init_options(boost::program_options::options_description &desc)
 {
-}
-
-bool core::handle_command_line(const boost::program_options::variables_map &vm)
-{
-    m_config_folder = command_line::get_arg(vm, command_line::arg_data_dir);
-
-  std::string db_type = command_line::get_arg(vm, command_line::arg_db_type);
-
-  BlockchainDB* db;
-  if (db == NULL)
-  {
-    logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
-    return false;
-  }
-
-  boost::filesystem::path folder(m_config_folder);
-  folder /= db->get_db_name();
-  logger(INFO) << "Loading blockchain from folder " << folder.string() << " ... ";
-
-  const std::string filename = folder.string();
-  blockchain_db_sync_mode sync_mode = db_default_sync;
-  uint64_t blocks_per_sync = 1;
-
-  return true;
 }
 
 uint32_t core::get_current_blockchain_height()
@@ -202,7 +181,7 @@ std::time_t core::getStartTime() const
     return start_time;
 }
 
-bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool load_existing)
+bool core::init(BlockchainDB* dbp, const CoreConfig &config, const MinerConfig &minerConfig, bool load_existing)
 {
     m_config_folder = config.configFolder;
     bool r = m_mempool.init(m_config_folder);
@@ -211,9 +190,118 @@ bool core::init(const CoreConfig &config, const MinerConfig &minerConfig, bool l
         return false;
     }
 
-   std::string m_db_type = config.dbType;
+    std::string m_db_type = config.dbType;
+    std::string db_sync_mode = config.dbSyncMode;
 
-    r = m_blockchain.init(m_db_type, m_config_folder, load_existing);
+    boost::filesystem::path folder(m_config_folder);
+
+    // make sure the data directory exists, and try to lock it
+    bool z = boost::filesystem::exists(folder) || boost::filesystem::create_directories(folder);
+    assert(z == true);
+    if (!z)
+      logger(ERROR, BRIGHT_RED) << "Failed to create directory!";
+
+    // check for blockchain.bin
+    try
+    {
+      const boost::filesystem::path old_files = folder;
+      if (boost::filesystem::exists(old_files / "blockchain.bin"))
+      {
+        logger(ERROR, BRIGHT_RED) << "Found old-style blockchain.bin in " << old_files.string();
+        logger(ERROR, BRIGHT_RED) << "Qwertycoin now uses a new format. You can either remove blockchain.bin to start syncing";
+        logger(ERROR, BRIGHT_RED) << "the blockchain anew, or use blur-blockchain-export and blur-blockchain-import to";
+        logger(ERROR, BRIGHT_RED) << "convert your existing blockchain.bin to the new format. See README.md for instructions.";
+        return false;
+      }
+    }
+    catch (std::exception &e) { logger(ERROR, BRIGHT_RED) << "Exception caught in Core init: " << e.what(); }
+
+    std::unique_ptr<BlockchainDB> db(new_db(m_db_type));
+    if (db == NULL)
+    {
+      logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
+      return false;
+    }
+
+    folder /= db->get_db_name();
+    logger(INFO, WHITE) << "Loading blockchain from folder " << folder.string() << " ...";
+
+    const std::string filename = folder.string();
+    // default to fast:async:1
+    blockchain_db_sync_mode sync_mode = db_default_sync;
+    uint64_t blocks_per_sync = 1;
+
+    try
+    {
+      uint64_t db_flags = 0;
+
+      std::vector<std::string> options;
+      boost::trim(db_sync_mode);
+      boost::split(options, db_sync_mode, boost::is_any_of(" :"));
+
+      // default to fast:async:1
+      uint64_t DEFAULT_FLAGS = DBF_FAST;
+
+      if(options.size() == 0)
+      {
+        // default to fast:async:1
+        db_flags = DEFAULT_FLAGS;
+      }
+
+      bool safemode = false;
+      if(options.size() >= 1)
+      {
+        if(options[0] == "safe")
+        {
+          safemode = true;
+          db_flags = DBF_SAFE;
+          sync_mode = db_nosync;
+        }
+        else if(options[0] == "fast")
+        {
+          db_flags = DBF_FAST;
+          sync_mode = db_async;
+        }
+        else if(options[0] == "fastest")
+        {
+          db_flags = DBF_FASTEST;
+          blocks_per_sync = 1000; // default to fastest:async:1000
+          sync_mode = db_async;
+        }
+        else
+          db_flags = DEFAULT_FLAGS;
+      }
+
+      if(options.size() >= 2 && !safemode)
+      {
+        if(options[1] == "sync")
+          sync_mode = db_sync;
+        else if(options[1] == "async")
+          sync_mode = db_async;
+      }
+
+      if(options.size() >= 3 && !safemode)
+      {
+        char *endptr;
+        uint64_t bps = strtoull(options[2].c_str(), &endptr, 0);
+        if (*endptr == '\0')
+          blocks_per_sync = bps;
+      }
+
+      db->open(filename, db_flags);
+      if(!db->m_open)
+        return false;
+    }
+    catch (const DB_ERROR& e)
+    {
+      logger(ERROR, BRIGHT_RED) << "Error opening database: " << e.what();
+      return false;
+    }
+
+    m_blockchain.set_user_options(4, 1, sync_mode, true); // plug in handle for checkpoints in 4th parameter
+							  // i.e. --with-checkpoints=0
+
+    r = m_blockchain.init(db.release(), m_config_folder, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;

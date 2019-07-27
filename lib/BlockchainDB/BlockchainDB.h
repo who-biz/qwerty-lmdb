@@ -44,7 +44,6 @@
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/Currency.h"
 #include "BlockchainDB/BlobDataType.h"
-#include "BlockchainDB/Lmdb/db_lmdb.h"
 #include "Structures.h"
 
 /** \file
@@ -293,6 +292,7 @@ class KEY_IMAGE_EXISTS : public DB_EXCEPTION
  */
 class BlockchainDB
 {
+
 friend class BlockchainLMDB;
 private:
   /*********************************************************************
@@ -487,12 +487,8 @@ protected:
 public:
 
   friend class BlockchainLMDB;
-  class BlockchainLMDB *BlockchainLMDB; 
 
-  /**
-   * @brief An empty constructor.
-   */
-  BlockchainDB(): m_open(false) { }
+  BlockchainDB() {}
 
   /**
    * @brief An empty destructor.
@@ -1430,6 +1426,8 @@ public:
 
 };  // class BlockchainDB
 
-BlockchainLMDB *new_db(const std::string& db_type);
+std::unique_ptr<BlockchainDB> new_db(const std::string& db_type);
 
 #endif  // BLOCKCHAIN_DB_H
+
+

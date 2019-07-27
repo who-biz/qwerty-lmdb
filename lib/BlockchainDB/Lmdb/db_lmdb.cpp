@@ -26,7 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "db_lmdb.h"
 
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
@@ -39,7 +38,6 @@
 #include "Common/Util.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include <Logging/LoggerRef.h>
-#include "../external/db_drivers/liblmdb/lmdb.h"
 #include "BlockchainDB/BlockchainDB.h"
 #include "CryptoNoteCore/CryptoNoteTools.h"
 #include "CryptoNoteCore/Currency.h"
@@ -47,6 +45,8 @@
 #include "CryptoNoteCore/Core.h"
 #include "BlockchainDB/BlobDataType.h"
 #include "crypto/crypto.h"
+#include "db_lmdb.h"
+
 
 #if defined(__i386) || defined(__x86_64)
 #define MISALIGNED_OK	1
@@ -757,8 +757,7 @@ void BlockchainLMDB::check_open() const
     throw(DB_ERROR("DB operation attempted on a not-open DB instance"));
 }
 
-BlockchainLMDB::~BlockchainLMDB()
-{
+BlockchainLMDB::BlockchainLMDB(): BlockchainDB()
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
 
   // batch transaction shouldn't be active at this point. If it is, consider it aborted.

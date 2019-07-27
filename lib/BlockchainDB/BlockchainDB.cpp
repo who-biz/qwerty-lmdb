@@ -29,8 +29,6 @@
 #include <boost/range/adaptor/reversed.hpp>
 
 #include "Common/StringTools.h"
-#include "BlockchainDB.h"
-#include "Lmdb/db_lmdb.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/Blockchain.h"
 #include "BlockchainDB/BlobDataType.h"
@@ -38,6 +36,7 @@
 #include "CryptoNoteCore/CryptoNoteTools.h"
 #include <iostream>
 
+#include "BlockchainDB.h"
 #include "BlockchainDB/Lmdb/db_lmdb.h"
 
 using namespace Common;
@@ -60,11 +59,16 @@ const command_line::arg_descriptor<bool> arg_db_salvage  = {
 };
 
 
-BlockchainLMDB *new_db(const std::string& db_type)
+std::unique_ptr<BlockchainDB>::unique_ptr(BlockchainLMDB*)
+{
+  std::make_unique<BlockchainDB(BlockchainLMDB());
+}
+
+BlockchainDB *new_db(const std::string& db_type)
 {
   if (db_type == "lmdb")
   {
-    BlockchainLMDB *m_db = new BlockchainLMDB();
+    BlockchainDB *m_db = new BlockchainLMDB();
     return m_db;
   }
   else
