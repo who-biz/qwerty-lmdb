@@ -14,7 +14,6 @@ set(QwertycoinFramework_INCLUDE_DIRS
     "${CMAKE_CURRENT_LIST_DIR}"
     "${CMAKE_CURRENT_LIST_DIR}/../include"
     "${CMAKE_CURRENT_BINARY_DIR}/external/db_drivers/liblmdb"
-    "${CMAKE_CURRENT_BINARY_DIR}/external/boost"
 )
 
 if(MSVC)

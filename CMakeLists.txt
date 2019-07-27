@@ -48,6 +48,7 @@ include(external/sparsehash)
 include(external/Threads)
 
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/lib")
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/external/db_drivers")
 
 if(BUILD_WITH_TOOLS)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/src")
