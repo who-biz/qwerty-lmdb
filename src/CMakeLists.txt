@@ -70,6 +70,7 @@ set(QwertycoinTools_Daemon_LIBS
     QwertycoinFramework::Common
     QwertycoinFramework::CryptoNoteCore
     QwertycoinFramework::Logging
+    QwertycoinFramework::LMDB
     QwertycoinFramework::P2p
     QwertycoinFramework::Rpc
     QwertycoinFramework::Serialization

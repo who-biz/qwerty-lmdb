@@ -201,7 +201,7 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
 
   log(Logging::INFO) << "initializing core";
   CryptoNote::MinerConfig emptyMiner;
-  core.init(db.release(), config.coreConfig, emptyMiner, true);
+  core.init(config.coreConfig, emptyMiner, true);
 
   std::promise<std::error_code> initPromise;
   auto initFuture = initPromise.get_future();
