@@ -488,12 +488,12 @@ public:
 
   friend class BlockchainLMDB;
 
-  BlockchainDB() {}
+  BlockchainDB(): m_open(false) {}
 
   /**
    * @brief An empty destructor.
    */
-  virtual ~BlockchainDB() { };
+  virtual ~BlockchainDB();
 
   /**
    * @brief init command line options

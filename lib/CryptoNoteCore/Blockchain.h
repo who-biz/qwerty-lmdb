@@ -220,6 +220,18 @@ public:
     void rollbackBlockchainTo(uint32_t height);
 	bool have_tx_keyimg_as_spent(const Crypto::KeyImage &key_im);
 
+    void safesyncmode(const bool onoff);
+
+    const BlockchainDB& get_db() const
+    {
+      return *m_db;
+    }
+
+    BlockchainDB& get_db()
+    {
+      return *m_db;
+    }
+
 private:
     BlockchainDB *m_db;
 
@@ -312,31 +324,6 @@ private:
     IntrusiveLinkedList<MessageQueue<BlockchainMessage>> m_messageQueueList;
 
     Logging::LoggerRef logger;
-
-    /**
-     * @brief Put DB in safe sync mode
-     */
-    void safesyncmode(const bool onoff);
-
-    /**
-     * @brief get a reference to the BlockchainDB in use by Blockchain
-     * 
-     * @return a reference to the BlockchainDB instance
-     */
-    const BlockchainDB& get_db() const
-    {
-      return *m_db;
-    }
-
-    /**
-     * @brief get a reference to the BlockchainDB in use by Blockchain
-     *
-     * @return a reference to the BlockchainDB instance
-     */
-    BlockchainDB& get_db()
-    {
-      return *m_db;
-    }
 
     void rebuildCache();
     bool storeCache();

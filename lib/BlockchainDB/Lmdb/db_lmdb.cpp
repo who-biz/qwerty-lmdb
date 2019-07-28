@@ -380,8 +380,6 @@ inline int lmdb_txn_renew(MDB_txn *txn)
   return res;
 }
 
-bool m_open = true;
-
 void BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& block_size, const CryptoNote::difficulty_type& cumulative_difficulty, const uint64_t& coins_generated,
     const Crypto::Hash& blk_hash)
 {

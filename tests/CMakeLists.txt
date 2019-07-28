@@ -301,6 +301,7 @@ set(QwertycoinTests_UnitTests_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/ArrayViewTests.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/Base58.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/BinarySerializationCompatibility.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/UnitTests/BlockchainDB.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/BlockReward.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/BlockingQueue.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/Chacha8.cpp"

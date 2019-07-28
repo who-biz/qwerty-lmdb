@@ -21,6 +21,17 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 message(STATUS "CMake build type: ${CMAKE_BUILD_TYPE}")
 
+# Configure Hunter (CMake driven cross-platform package manager for C/C++).
+# WARNING: Must be included before project(...) function call!
+set(HUNTER_CONFIGURATION_TYPES Release;Debug CACHE STRING "Hunter configuration types")
+set(HUNTER_JOBS_NUMBER 4 CACHE STRING "Hunter jobs number")
+include(hunter/HunterGate)
+HunterGate(
+    URL "https://github.com/ruslo/hunter/archive/v0.23.158.tar.gz"
+    SHA1 "4f3d8287a546091d1968ee80e02f121b312fceea"
+    FILEPATH "${CMAKE_CURRENT_LIST_DIR}/cmake/hunter/HunterConfig.cmake"
+)
+
 set(PROJECT_DISPLAY_NAME "Qwertycoin")
 set(PROJECT_NAME "qwertycoin")
 set(PROJECT_DESCRIPTION "Safe. Simple. Seamless. Secure.")
@@ -43,6 +54,7 @@ include(project/GlobalVariables)
 set_directory_properties(PROPERTIES EP_BASE "${CMAKE_CURRENT_BINARY_DIR}/_ExternalProjects")
 include(ExternalProject)
 include(external/Boost)
+include(external/GTest)
 include(external/MiniUPnP)
 include(external/sparsehash)
 include(external/Threads)
@@ -57,3 +69,10 @@ endif()
 if(BUILD_WITH_PACKAGE)
     include(project/CPackConfig)
 endif()
+
+if(BUILD_WITH_TESTS)
+    enable_testing()
+    add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/tests")
+endif()
+
+

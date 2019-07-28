@@ -297,7 +297,6 @@ bool core::load_state_data() {
 }
 
 bool core::deinit() {
-  m_db->close();
   m_miner->stop();
   m_mempool.deinit();
   m_blockchain.deinit();
