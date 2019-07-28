@@ -19,20 +19,19 @@
 #pragma once
 
 #include <mutex>
-#include <Logging/CommonLogger.h>
+#include "CommonLogger.h"
 
 namespace Logging {
 
-class ConsoleLogger : public CommonLogger
-{
+class ConsoleLogger : public CommonLogger {
 public:
-    explicit ConsoleLogger(Level level = DEBUGGING);
+  ConsoleLogger(Level level = DEBUGGING);
 
 protected:
-    void doLogString(const std::string &message) override;
+  virtual void doLogString(const std::string& message) override;
 
 private:
-    std::mutex mutex;
+  std::mutex mutex;
 };
 
-} // namespace Logging
+}

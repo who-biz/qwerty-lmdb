@@ -17,21 +17,19 @@
 // along with Qwertycoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
-
 #include <chrono>
 #include <System/ContextGroup.h>
 #include <System/Timer.h>
 
 namespace System {
 
-class ContextGroupTimeout
-{
+class ContextGroupTimeout {
 public:
-    ContextGroupTimeout(Dispatcher &, ContextGroup &, std::chrono::nanoseconds);
+  ContextGroupTimeout(Dispatcher&, ContextGroup&, std::chrono::nanoseconds);
 
 private:
-    Timer m_timeoutTimer;
-    ContextGroup m_workingContextGroup;
+  Timer timeoutTimer;
+  ContextGroup workingContextGroup;
 };
 
-} // namespace System
+}

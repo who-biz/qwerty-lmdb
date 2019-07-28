@@ -30,23 +30,21 @@
 
 #pragma once
 
-#include <Logging/ILogger.h>
-#include <Logging/LoggerMessage.h>
+#include "ILogger.h"
+#include "LoggerMessage.h"
 
 namespace Logging {
 
 class LoggerRef
 {
 public:
-    LoggerRef(ILogger &logger, const std::string &category);
-
-    ILogger &getLogger() const;
-
-    LoggerMessage operator()(Level level = INFO, const std::string &color = DEFAULT) const;
+	LoggerRef(ILogger& logger, const std::string& category);
+	LoggerMessage operator()(Level level = INFO, const std::string& color = DEFAULT) const;
+	ILogger& getLogger() const;
 
 private:
-    ILogger *m_logger;
-    std::string m_sCategory;
+	ILogger* m_logger;
+	std::string m_sCategory;
 };
 
-} // namespace Logging
+} //Logging

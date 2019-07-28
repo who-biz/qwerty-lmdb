@@ -22,22 +22,21 @@
 
 namespace Tools {
 
-class ScopeExit
-{
+class ScopeExit {
 public:
-    explicit ScopeExit(std::function<void()> &&handler);
-    ScopeExit(const ScopeExit &) = delete;
-    ScopeExit(ScopeExit &&) = delete;
-    ~ScopeExit();
+  ScopeExit(std::function<void()>&& handler);
+  ~ScopeExit();
 
-    ScopeExit &operator=(const ScopeExit &) = delete;
-    ScopeExit &operator=(ScopeExit &&) = delete;
+  ScopeExit(const ScopeExit&) = delete;
+  ScopeExit(ScopeExit&&) = delete;
+  ScopeExit& operator=(const ScopeExit&) = delete;
+  ScopeExit& operator=(ScopeExit&&) = delete;
 
-    void cancel();
+  void cancel();
 
 private:
-    std::function<void()> m_handler;
-    bool m_cancelled;
+  std::function<void()> m_handler;
+  bool m_cancelled;
 };
 
-} // namespace Tools
+}

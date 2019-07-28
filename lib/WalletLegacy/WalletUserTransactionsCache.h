@@ -19,104 +19,92 @@
 
 #pragma once
 
-#include <crypto/hash.h>
-#include <WalletLegacy/IWalletLegacy.h>
-#include <WalletLegacy/WalletLegacyEvent.h>
-#include <WalletLegacy/WalletUnconfirmedTransactions.h>
-#include <ITransfersContainer.h>
+#include "crypto/hash.h"
+#include "IWalletLegacy.h"
+#include "ITransfersContainer.h"
+
+#include "WalletLegacy/WalletLegacyEvent.h"
+#include "WalletLegacy/WalletUnconfirmedTransactions.h"
+
+namespace CryptoNote {
+class ISerializer;
+}
 
 namespace CryptoNote {
 
-class ISerializer;
-
 class WalletUserTransactionsCache
 {
-    typedef std::vector<WalletLegacyTransfer> UserTransfers;
-    typedef std::vector<WalletLegacyTransaction> UserTransactions;
-
 public:
-    explicit WalletUserTransactionsCache(uint64_t mempoolTxLiveTime = 60 * 60 * 24);
+  explicit WalletUserTransactionsCache(uint64_t mempoolTxLiveTime = 60 * 60 * 24);
 
-    bool serialize(CryptoNote::ISerializer &serializer);
+  bool serialize(CryptoNote::ISerializer& serializer);
 
-    uint64_t unconfirmedTransactionsAmount() const;
-    uint64_t unconfrimedOutsAmount() const;
-    size_t getTransactionCount() const;
-    size_t getTransferCount() const;
+  uint64_t unconfirmedTransactionsAmount() const;
+  uint64_t unconfrimedOutsAmount() const;
+  size_t getTransactionCount() const;
+  size_t getTransferCount() const;
 
-    TransactionId addNewTransaction(
-        uint64_t amount,
-        uint64_t fee,
-        const std::string &extra,
-        const std::vector<WalletLegacyTransfer> &transfers,
-        uint64_t unlockTime,
-        const std::vector<TransactionMessage> &messages);
+  TransactionId addNewTransaction(
+								  uint64_t amount, 
+								  uint64_t fee, 
+								  const std::string& extra, 
+								  const std::vector<WalletLegacyTransfer>& transfers, 
+								  uint64_t unlockTime,
+								  const std::vector<TransactionMessage>& messages);
+								  
+  TransactionId addNewTransaction(
+								  uint64_t amount, 
+								  uint64_t fee, 
+								  const std::string& extra, 
+								  const std::vector<WalletLegacyTransfer>& transfers, 
+								  uint64_t unlockTime);
+								  
+  void updateTransaction(TransactionId transactionId, const CryptoNote::Transaction& tx, uint64_t amount, const std::list<TransactionOutputInformation>& usedOutputs, Crypto::SecretKey& tx_key);
+  void updateTransactionSendingState(TransactionId transactionId, std::error_code ec);
 
-    TransactionId addNewTransaction(
-        uint64_t amount,
-        uint64_t fee,
-        const std::string &extra,
-        const std::vector<WalletLegacyTransfer> &transfers,
-        uint64_t unlockTime);
+  std::shared_ptr<WalletLegacyEvent> onTransactionUpdated(const TransactionInformation& txInfo, int64_t txBalance);
+  std::shared_ptr<WalletLegacyEvent> onTransactionDeleted(const Crypto::Hash& transactionHash);
 
-    void updateTransaction(
-        TransactionId transactionId,
-        const CryptoNote::Transaction &tx,
-        uint64_t amount,
-        const std::list<TransactionOutputInformation> &usedOutputs,
-        Crypto::SecretKey &tx_key);
-    void updateTransactionSendingState(TransactionId transactionId, std::error_code ec);
+  TransactionId findTransactionByTransferId(TransferId transferId) const;
 
-    std::shared_ptr<WalletLegacyEvent> onTransactionUpdated(
-        const TransactionInformation &txInfo,
-        int64_t txBalance);
-    std::shared_ptr<WalletLegacyEvent> onTransactionDeleted(const Crypto::Hash &transactionHash);
+  bool getTransaction(TransactionId transactionId, WalletLegacyTransaction& transaction) const;
+  WalletLegacyTransaction& getTransaction(TransactionId transactionId);
+  TransactionId findTransactionByHash(const Crypto::Hash& hash);
+  bool getTransfer(TransferId transferId, WalletLegacyTransfer& transfer) const;
+  WalletLegacyTransfer& getTransfer(TransferId transferId);
 
-    TransactionId findTransactionByTransferId(TransferId transferId) const;
+  bool isUsed(const TransactionOutputInformation& out) const;
+  void reset();
 
-    bool getTransaction(TransactionId transactionId, WalletLegacyTransaction &transaction) const;
-    WalletLegacyTransaction &getTransaction(TransactionId transactionId);
-    TransactionId findTransactionByHash(const Crypto::Hash &hash);
-    bool getTransfer(TransferId transferId, WalletLegacyTransfer &transfer) const;
-    WalletLegacyTransfer& getTransfer(TransferId transferId);
+  std::vector<TransactionId> deleteOutdatedTransactions();
 
-    bool isUsed(const TransactionOutputInformation &out) const;
-    void reset();
-
-    std::vector<TransactionId> deleteOutdatedTransactions();
-
-    std::vector<Payments> getTransactionsByPaymentIds(const std::vector<PaymentId>&paymentIds)const;
+  std::vector<Payments> getTransactionsByPaymentIds(const std::vector<PaymentId>& paymentIds) const;
 
 private:
-    TransactionId insertTransaction(WalletLegacyTransaction &&Transaction);
-    TransferId insertTransfers(const std::vector<WalletLegacyTransfer> &transfers);
-    void updateUnconfirmedTransactions();
 
-    using Offset = UserTransactions::size_type;
-    using UserPaymentIndex=std::unordered_map<PaymentId,std::vector<Offset>,boost::hash<PaymentId>>;
+  TransactionId insertTransaction(WalletLegacyTransaction&& Transaction);
+  TransferId insertTransfers(const std::vector<WalletLegacyTransfer>& transfers);
+  void updateUnconfirmedTransactions();
 
-    void getGoodItems(UserTransactions &transactions, UserTransfers &transfers);
-    void getGoodTransaction(
-        TransactionId txId,
-        size_t offset,
-        UserTransactions &transactions,
-        UserTransfers &transfers);
+  typedef std::vector<WalletLegacyTransfer> UserTransfers;
+  typedef std::vector<WalletLegacyTransaction> UserTransactions;
+  using Offset = UserTransactions::size_type;
+  using UserPaymentIndex = std::unordered_map<PaymentId, std::vector<Offset>, boost::hash<PaymentId>>;
 
-    void getTransfersByTx(TransactionId id, UserTransfers &transfers);
+  void getGoodItems(UserTransactions& transactions, UserTransfers& transfers);
+  void getGoodTransaction(TransactionId txId, size_t offset, UserTransactions& transactions, UserTransfers& transfers);
 
-    void rebuildPaymentsIndex();
-    void pushToPaymentsIndex(const PaymentId &paymentId, Offset distance);
-    void pushToPaymentsIndexInternal(
-        Offset distance,
-        const WalletLegacyTransaction &info,
-        std::vector<uint8_t> &extra);
-    void popFromPaymentsIndex(const PaymentId &paymentId, Offset distance);
+  void getTransfersByTx(TransactionId id, UserTransfers& transfers);
 
-private:
-    UserTransactions m_transactions;
-    UserTransfers m_transfers;
-    WalletUnconfirmedTransactions m_unconfirmedTransactions;
-    UserPaymentIndex m_paymentsIndex;
+  void rebuildPaymentsIndex();
+  void pushToPaymentsIndex(const PaymentId& paymentId, Offset distance);
+  void pushToPaymentsIndexInternal(Offset distance, const WalletLegacyTransaction& info, std::vector<uint8_t>& extra);
+  void popFromPaymentsIndex(const PaymentId& paymentId, Offset distance);
+
+  UserTransactions m_transactions;
+  UserTransfers m_transfers;
+  WalletUnconfirmedTransactions m_unconfirmedTransactions;
+  UserPaymentIndex m_paymentsIndex;
 };
 
-} // namespace CryptoNote
+} //namespace CryptoNote

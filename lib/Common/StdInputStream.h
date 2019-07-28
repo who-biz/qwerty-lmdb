@@ -19,21 +19,18 @@
 #pragma once
 
 #include <istream>
-#include <Common/IInputStream.h>
+#include "IInputStream.h"
 
 namespace Common {
 
-class StdInputStream : public IInputStream
-{
+class StdInputStream : public IInputStream {
 public:
-    explicit StdInputStream(std::istream &in);
-
-    size_t readSome(void *data, size_t size) override;
-
-    StdInputStream &operator=(const StdInputStream &) = delete;
+  StdInputStream(std::istream& in);
+  StdInputStream& operator=(const StdInputStream&) = delete;
+  size_t readSome(void* data, size_t size) override;
 
 private:
-    std::istream &in;
+  std::istream& in;
 };
 
-} // namespace Common
+}

@@ -23,16 +23,14 @@
 
 namespace CryptoNote {
 
-class IInputStream
-{
+class IInputStream {
 public:
-    virtual size_t read(char *data, size_t size) = 0;
+  virtual size_t read(char* data, size_t size) = 0;
 };
 
-class IOutputStream
-{
+class IOutputStream {
 public:
-    virtual void write(const char *data, size_t size) = 0;
+  virtual void write(const char* data, size_t size) = 0;
 };
 
-} // namespace CryptoNote
+}

@@ -20,13 +20,11 @@
 
 namespace CryptoNote {
 
-class ICoreObserver
-{
+class ICoreObserver {
 public:
-    virtual ~ICoreObserver() = default;
-
-    virtual void blockchainUpdated() {};
-    virtual void poolUpdated() {};
+  virtual ~ICoreObserver() {};
+  virtual void blockchainUpdated() {};
+  virtual void poolUpdated() {};
 };
 
-} // namespace CryptoNote
+}

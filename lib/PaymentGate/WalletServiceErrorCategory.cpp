@@ -16,14 +16,12 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with Qwertycoin.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <PaymentGate/WalletServiceErrorCategory.h>
+#include "WalletServiceErrorCategory.h"
 
 namespace CryptoNote {
-
 namespace error {
 
 WalletServiceErrorCategory WalletServiceErrorCategory::INSTANCE;
 
-} // namespace error
-
-} // namespace CryptoNote
+}
+}

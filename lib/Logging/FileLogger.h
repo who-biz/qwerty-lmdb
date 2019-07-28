@@ -19,19 +19,17 @@
 #pragma once
 
 #include <fstream>
-#include <Logging/StreamLogger.h>
+#include "StreamLogger.h"
 
 namespace Logging {
 
-class FileLogger : public StreamLogger
-{
+class FileLogger : public StreamLogger {
 public:
-  explicit FileLogger(Level level = DEBUGGING);
-
-  void init(const std::string &filename);
+  FileLogger(Level level = DEBUGGING);
+  void init(const std::string& filename);
 
 private:
-  std::ofstream m_fileStream;
+  std::ofstream fileStream;
 };
 
-} // namespace Logging
+}

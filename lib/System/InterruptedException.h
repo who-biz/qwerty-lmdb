@@ -22,13 +22,11 @@
 
 namespace System {
 
-class InterruptedException : public std::exception
-{
-public:
-    const char *what() const noexcept override
-    {
-        return "interrupted";
+class InterruptedException : public std::exception {
+  public:
+    virtual const char* what() const throw() override {
+      return "interrupted";
     }
 };
 
-} // namespace System
+}

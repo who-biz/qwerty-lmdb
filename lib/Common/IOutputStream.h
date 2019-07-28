@@ -22,12 +22,10 @@
 
 namespace Common {
 
-class IOutputStream
-{
+class IOutputStream {
 public:
-    virtual ~IOutputStream() = default;
-
-    virtual size_t writeSome(const void *data, size_t size) = 0;
+  virtual ~IOutputStream() { }
+  virtual size_t writeSome(const void* data, size_t size) = 0;
 };
 
-} // namespace Common
+}

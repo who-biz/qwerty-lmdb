@@ -20,12 +20,12 @@
 
 #include <cstdint>
 #include <vector>
-#include <crypto/hash.h>
 
-namespace CryptoNote {
+#include "crypto/hash.h"
 
-typedef std::uint64_t difficulty_type;
+namespace CryptoNote
+{
+    typedef std::uint64_t difficulty_type;
 
-bool check_hash(const Crypto::Hash &hash, difficulty_type difficulty);
-
-} // namespace CryptoNote
+    bool check_hash(const Crypto::Hash &hash, difficulty_type difficulty);
+}

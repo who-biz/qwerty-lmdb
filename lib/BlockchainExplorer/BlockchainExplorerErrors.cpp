@@ -16,40 +16,13 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with Qwertycoin.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <BlockchainExplorer/BlockchainExplorerErrors.h>
+#include "BlockchainExplorerErrors.h"
 
 namespace CryptoNote {
-
 namespace error {
 
 BlockchainExplorerErrorCategory BlockchainExplorerErrorCategory::INSTANCE;
 
-const char *BlockchainExplorerErrorCategory::name() const noexcept
-{
-    return "BlockchainExplorerErrorCategory";
-}
-
-std::string BlockchainExplorerErrorCategory::message(int ev) const
-{
-    switch (ev) {
-    case static_cast<int>(BlockchainExplorerErrorCodes::NOT_INITIALIZED):
-        return "Object was not initialized";
-    case static_cast<int>(BlockchainExplorerErrorCodes::ALREADY_INITIALIZED):
-        return "Object has been already initialized";
-    case static_cast<int>(BlockchainExplorerErrorCodes::INTERNAL_ERROR):
-        return "Internal error";
-    case static_cast<int>(BlockchainExplorerErrorCodes::REQUEST_ERROR):
-        return "Error in request parameters";
-    default:
-        return "Unknown error";
-    }
-}
-
-std::error_condition BlockchainExplorerErrorCategory::default_error_condition(int ev) const noexcept
-{
-    return std::error_condition{ev, *this};
-}
-
 } //namespace error
-
 } //namespace CryptoNote
+

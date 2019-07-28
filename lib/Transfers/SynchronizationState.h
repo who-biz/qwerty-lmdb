@@ -18,49 +18,48 @@
 
 #pragma once
 
-#include <map>
+#include "CommonTypes.h"
+#include "IStreamSerializable.h"
+#include "Serialization/ISerializer.h"
 #include <vector>
-#include <Serialization/ISerializer.h>
-#include <Transfers/CommonTypes.h>
-#include <IStreamSerializable.h>
+#include <map>
 
 namespace CryptoNote {
 
-class SynchronizationState : public IStreamSerializable
-{
+class SynchronizationState : public IStreamSerializable {
 public:
-    struct CheckResult
-    {
-        bool detachRequired;
-        uint32_t detachHeight;
-        bool hasNewBlocks;
-        uint32_t newBlockHeight;
-    };
 
-    typedef std::vector<Crypto::Hash> ShortHistory;
+  struct CheckResult {
+    bool detachRequired;
+    uint32_t detachHeight;
+    bool hasNewBlocks;
+    uint32_t newBlockHeight;
+  };
 
-    explicit SynchronizationState(const Crypto::Hash &genesisBlockHash)
-    {
-        m_blockchain.push_back(genesisBlockHash);
-    }
+  typedef std::vector<Crypto::Hash> ShortHistory;
 
-    ShortHistory getShortHistory(uint32_t localHeight) const;
-    CheckResult checkInterval(const BlockchainInterval &interval) const;
+  explicit SynchronizationState(const Crypto::Hash& genesisBlockHash) {
+    m_blockchain.push_back(genesisBlockHash);
+  }
 
-    void detach(uint32_t height);
-    void addBlocks(const Crypto::Hash *blockHashes, uint32_t height, uint32_t count);
-    uint32_t getHeight() const;
-    const std::vector<Crypto::Hash> &getKnownBlockHashes() const;
+  ShortHistory getShortHistory(uint32_t localHeight) const;
+  CheckResult checkInterval(const BlockchainInterval& interval) const;
 
-    // IStreamSerializable
-    void save(std::ostream &os) override;
-    void load(std::istream &in) override;
+  void detach(uint32_t height);
+  void addBlocks(const Crypto::Hash* blockHashes, uint32_t height, uint32_t count);
+  uint32_t getHeight() const;
+  const std::vector<Crypto::Hash>& getKnownBlockHashes() const;
 
-    // serialization
-    CryptoNote::ISerializer &serialize(CryptoNote::ISerializer &s, const std::string &name);
+  // IStreamSerializable
+  virtual void save(std::ostream& os) override;
+  virtual void load(std::istream& in) override;
+
+  // serialization
+  CryptoNote::ISerializer& serialize(CryptoNote::ISerializer& s, const std::string& name);
 
 private:
-    std::vector<Crypto::Hash> m_blockchain;
+
+  std::vector<Crypto::Hash> m_blockchain;
 };
 
-} // namespace CryptoNote
+}

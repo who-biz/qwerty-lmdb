@@ -22,24 +22,21 @@
 
 namespace System {
 
-class ContextGroup
-{
+class ContextGroup {
 public:
-    explicit ContextGroup(Dispatcher &dispatcher);
-    ContextGroup(const ContextGroup &) = delete;
-    ContextGroup(ContextGroup &&other) noexcept;
-    ~ContextGroup();
-
-    void interrupt();
-    void spawn(std::function<void()> &&procedure);
-    void wait();
-
-    ContextGroup &operator=(const ContextGroup &) = delete;
-    ContextGroup &operator=(ContextGroup &&other) noexcept;
+  explicit ContextGroup(Dispatcher& dispatcher);
+  ContextGroup(const ContextGroup&) = delete;
+  ContextGroup(ContextGroup&& other);
+  ~ContextGroup();
+  ContextGroup& operator=(const ContextGroup&) = delete;
+  ContextGroup& operator=(ContextGroup&& other);
+  void interrupt();
+  void spawn(std::function<void()>&& procedure);
+  void wait();
 
 private:
-    Dispatcher *dispatcher;
-    NativeContextGroup contextGroup;
+  Dispatcher* dispatcher;
+  NativeContextGroup contextGroup;
 };
 
-} // namespace System
+}

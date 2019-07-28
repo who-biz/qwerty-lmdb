@@ -19,25 +19,20 @@
 #pragma once
 
 #include <vector>
-#include <Logging/CommonLogger.h>
+#include "CommonLogger.h"
 
 namespace Logging {
 
-class LoggerGroup : public CommonLogger
-{
+class LoggerGroup : public CommonLogger {
 public:
-    explicit LoggerGroup(Level level = DEBUGGING);
+  LoggerGroup(Level level = DEBUGGING);
 
-    void addLogger(ILogger &logger);
-    void removeLogger(ILogger &logger);
-
-    virtual void operator()(const std::string &category,
-                            Level level,
-                            boost::posix_time::ptime time,
-                            const std::string &body) override;
+  void addLogger(ILogger& logger);
+  void removeLogger(ILogger& logger);
+  virtual void operator()(const std::string& category, Level level, boost::posix_time::ptime time, const std::string& body) override;
 
 protected:
-    std::vector<ILogger *> m_loggers;
+  std::vector<ILogger*> loggers;
 };
 
-} // namespace Logging
+}

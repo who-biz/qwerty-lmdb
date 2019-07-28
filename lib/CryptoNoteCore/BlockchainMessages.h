@@ -19,77 +19,67 @@
 #pragma once
 
 #include <vector>
+
 #include <CryptoNote.h>
 
 namespace CryptoNote {
 
-class NewBlockMessage
-{
+class NewBlockMessage {
 public:
-    explicit NewBlockMessage(const Crypto::Hash &hash);
-    NewBlockMessage() = default;
-
-    void get(Crypto::Hash &hash) const;
-
+  NewBlockMessage(const Crypto::Hash& hash);
+  NewBlockMessage() = default;
+  void get(Crypto::Hash& hash) const;
 private:
-    Crypto::Hash blockHash;
+  Crypto::Hash blockHash;
 };
 
-class NewAlternativeBlockMessage
-{
+class NewAlternativeBlockMessage {
 public:
-    explicit NewAlternativeBlockMessage(const Crypto::Hash &hash);
-    NewAlternativeBlockMessage() = default;
-
-    void get(Crypto::Hash &hash) const;
-
+  NewAlternativeBlockMessage(const Crypto::Hash& hash);
+  NewAlternativeBlockMessage() = default;
+  void get(Crypto::Hash& hash) const;
 private:
-    Crypto::Hash blockHash;
+  Crypto::Hash blockHash;
 };
 
-class ChainSwitchMessage
-{
+class ChainSwitchMessage {
 public:
-    explicit ChainSwitchMessage(std::vector<Crypto::Hash> &&hashes);
-    ChainSwitchMessage(const ChainSwitchMessage &other);
-
-    void get(std::vector<Crypto::Hash> &hashes) const;
-
+  ChainSwitchMessage(std::vector<Crypto::Hash>&& hashes);
+  ChainSwitchMessage(const ChainSwitchMessage& other);
+  void get(std::vector<Crypto::Hash>& hashes) const;
 private:
-    std::vector<Crypto::Hash> blocksFromCommonRoot;
+  std::vector<Crypto::Hash> blocksFromCommonRoot;
 };
 
-class BlockchainMessage
-{
+class BlockchainMessage {
 public:
-    enum class MessageType
-    {
-        NEW_BLOCK_MESSAGE,
-        NEW_ALTERNATIVE_BLOCK_MESSAGE,
-        CHAIN_SWITCH_MESSAGE
-    };
+  enum class MessageType {
+    NEW_BLOCK_MESSAGE,
+    NEW_ALTERNATIVE_BLOCK_MESSAGE,
+    CHAIN_SWITCH_MESSAGE
+  };
 
-    BlockchainMessage(const BlockchainMessage &other);
-    explicit BlockchainMessage(NewBlockMessage &&message);
-    explicit BlockchainMessage(NewAlternativeBlockMessage &&message);
-    explicit BlockchainMessage(ChainSwitchMessage &&message);
-    ~BlockchainMessage();
+  BlockchainMessage(NewBlockMessage&& message);
+  BlockchainMessage(NewAlternativeBlockMessage&& message);
+  BlockchainMessage(ChainSwitchMessage&& message);
 
-    MessageType getType() const;
+  BlockchainMessage(const BlockchainMessage& other);
 
-    bool getNewBlockHash(Crypto::Hash &hash) const;
-    bool getNewAlternativeBlockHash(Crypto::Hash &hash) const;
-    bool getChainSwitch(std::vector<Crypto::Hash> &hashes) const;
+  ~BlockchainMessage();
 
+  MessageType getType() const;
+
+  bool getNewBlockHash(Crypto::Hash& hash) const;
+  bool getNewAlternativeBlockHash(Crypto::Hash& hash) const;
+  bool getChainSwitch(std::vector<Crypto::Hash>& hashes) const;
 private:
-    const MessageType type;
+  const MessageType type;
 
-    union
-    {
-        NewBlockMessage newBlockMessage;
-        NewAlternativeBlockMessage newAlternativeBlockMessage;
-        ChainSwitchMessage* chainSwitchMessage;
-    };
+  union {
+    NewBlockMessage newBlockMessage;
+    NewAlternativeBlockMessage newAlternativeBlockMessage;
+    ChainSwitchMessage* chainSwitchMessage;
+  };
 };
 
-} // namespace CryptoNote
+}

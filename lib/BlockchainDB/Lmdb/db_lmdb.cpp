@@ -48,6 +48,7 @@
 #include "db_lmdb.h"
 #include "../external/db_drivers/liblmdb/lmdb.h"
 #include "BlockchainDB/BlockchainDB.h"
+#include "CryptoNoteConfig.h"
 
 #if defined(__i386) || defined(__x86_64)
 #define MISALIGNED_OK	1

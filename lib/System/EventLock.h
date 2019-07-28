@@ -22,16 +22,14 @@ namespace System {
 
 class Event;
 
-class EventLock
-{
+class EventLock {
 public:
-    explicit EventLock(Event &event);
-    ~EventLock();
-
-    EventLock &operator=(const EventLock &) = delete;
+  explicit EventLock(Event& event);
+  ~EventLock();
+  EventLock& operator=(const EventLock&) = delete;
 
 private:
-    Event &m_event;
+  Event& event;
 };
 
-} // namespace System
+}

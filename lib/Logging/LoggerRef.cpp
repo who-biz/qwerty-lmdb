@@ -28,24 +28,23 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <Logging/LoggerRef.h>
+#include "LoggerRef.h"
 
 namespace Logging {
 
-LoggerRef::LoggerRef(ILogger &logger, const std::string &category)
-    : m_logger(&logger),
-      m_sCategory(category)
+LoggerRef::LoggerRef(ILogger& logger, const std::string& category)
+	: m_logger(&logger)
+	, m_sCategory(category)
+{}
+
+LoggerMessage LoggerRef::operator()(Level level, const std::string& color) const
 {
+	return LoggerMessage(*m_logger, m_sCategory, level, color);
 }
 
-ILogger &LoggerRef::getLogger() const
+ILogger& LoggerRef::getLogger() const
 {
-    return *m_logger;
+	return *m_logger;
 }
 
-LoggerMessage LoggerRef::operator()(Level level, const std::string &color) const
-{
-    return LoggerMessage(*m_logger, m_sCategory, level, color);
-}
-
-} // namespace Logging
+} //Logging
