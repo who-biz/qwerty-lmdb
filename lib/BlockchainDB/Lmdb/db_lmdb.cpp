@@ -57,12 +57,10 @@
 using namespace Common;
 using namespace Crypto;
 using namespace Logging;
-using namespace CryptoNote;
 
 // Increase when the DB structure changes
 #define VERSION 1
 
-	
 /*template <typename T>
 inline void throw0(const T &e)
 {
@@ -235,7 +233,7 @@ typedef struct mdb_block_info
   uint64_t bi_timestamp;
   uint64_t bi_coins;
   uint64_t bi_size; // a size_t really but we need 32-bit compat
-  difficulty_type bi_diff;
+  CryptoNote::difficulty_type bi_diff;
   Crypto::Hash bi_hash;
 } mdb_block_info;
 
@@ -562,9 +560,9 @@ void BlockchainLMDB::remove_transaction_data(const Crypto::Hash& tx_hash, const 
 
   result = mdb_cursor_get(m_cur_tx_outputs, &val_tx_id, NULL, MDB_SET);
   /*if (result == MDB_NOTFOUND)
-    //Logger(INFO) << "tx has no outputs to remove: " << tx_hash);
-  else if (result)
-    throw(DB_ERROR(lmdb_error("Failed to locate tx outputs for removal: ", result).c_str()));*/
+    //Logger(INFO) << "tx has no outputs to remove: " << tx_hash);*/
+  if (result)
+    throw(DB_ERROR(lmdb_error("Failed to locate tx outputs for removal: ", result).c_str()));
   if (!result)
   {
     result = mdb_cursor_del(m_cur_tx_outputs, 0);
@@ -593,7 +591,7 @@ uint64_t BlockchainLMDB::add_output(const Crypto::Hash& tx_hash,
   CURSOR(output_txs)
   CURSOR(output_amounts)
 
-//  if (tx_output.target.type() != typeid(txout_to_key))
+//  if (tx_output.target.type() != typeid(CryptoNote::KeyOutput))
 //    throw(DB_ERROR("Wrong output type: expected txout_to_key"));
 
   outtx ot = {m_num_outputs, tx_hash, local_index};
@@ -620,7 +618,7 @@ uint64_t BlockchainLMDB::add_output(const Crypto::Hash& tx_hash,
   else
     ok.amount_index = 0;
   ok.output_id = m_num_outputs;
-  ok.data.pubkey = boost::get < KeyOutput > (tx_output.target).key;
+  ok.data.pubkey = boost::get < CryptoNote::KeyOutput > (tx_output.target).key;
   ok.data.unlock_time = unlock_time;
   ok.data.height = m_height;
   data.mv_size = sizeof(outkey);
@@ -753,7 +751,7 @@ CryptoNote::TransactionOutput BlockchainLMDB::output_from_blob(const CryptoNote:
   std::stringstream ss;
   ss << blob;
 //  serial::binary_archive<false> ba(ss);
-  TransactionOutput o;
+  CryptoNote::TransactionOutput o;
 
 //  if (!serial::serialize(ba, o))
 //    throw(DB_ERROR("Error deserializing tx output blob"));
@@ -779,7 +777,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
     throw(DB_OPEN_FAILURE("Attempted to open db, but it's already open"));
 
   boost::filesystem::path direc(filename);
-  /*if (boost::filesystem::exists(direc))
+  if (boost::filesystem::exists(direc))
   {
     if (!boost::filesystem::is_directory(direc))
       throw(DB_OPEN_FAILURE("LMDB needs a directory path, but a file was passed"));
@@ -788,7 +786,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   {
     if (!boost::filesystem::create_directories(direc))
       throw(DB_OPEN_FAILURE(std::string("Failed to create directory ").append(filename).c_str()));
-  }*/
+  }
 
   // check for existing LMDB files in base directory
   boost::filesystem::path old_files = direc.parent_path();
@@ -1487,7 +1485,7 @@ size_t BlockchainLMDB::get_block_size(const uint64_t& height) const
   return ret;
 }
 
-difficulty_type BlockchainLMDB::get_block_cumulative_difficulty(const uint64_t& height) const
+CryptoNote::difficulty_type BlockchainLMDB::get_block_cumulative_difficulty(const uint64_t& height) const
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__ << "  height: " << height);
   check_open();
@@ -1505,12 +1503,12 @@ difficulty_type BlockchainLMDB::get_block_cumulative_difficulty(const uint64_t& 
     throw(DB_ERROR("Error attempting to retrieve a cumulative difficulty from the db"));
 
   mdb_block_info *bi = (mdb_block_info *)result.mv_data;
-  difficulty_type ret = bi->bi_diff;
+  CryptoNote::difficulty_type ret = bi->bi_diff;
   TXN_POSTFIX_RDONLY();
   return ret;
 }
 
-difficulty_type BlockchainLMDB::get_block_difficulty(const uint64_t& height) const
+CryptoNote::difficulty_type BlockchainLMDB::get_block_difficulty(const uint64_t& height) const
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
@@ -1898,10 +1896,10 @@ output_data_t BlockchainLMDB::get_output_key(const uint64_t &global_index) const
 //  if (!parse_and_validate_tx_from_blob(bd, tx))
 //    throw(DB_ERROR("Failed to parse tx from blob retrieved from the db"));
 */
-//  const TransactionOutput tx_output = tx.outputs[ot->local_index];
+//  const CryptoNote::TransactionOutput tx_output = tx.outputs[ot->local_index];
   od.unlock_time = tip->data.unlock_time;
   od.height = tip->data.block_id;
-//  od.pubkey = boost::get<KeyOutput>(tx_output.target).key;
+//  od.pubkey = boost::get<CryptoNote::KeyOutput>(tx_output.target).key;
 
   TXN_POSTFIX_RDONLY();
   return od;
@@ -2101,7 +2099,7 @@ bool BlockchainLMDB::for_all_transactions(std::function<bool(const Crypto::Hash&
       break;
     if (ret)
       throw(DB_ERROR(lmdb_error("Failed to enumerate transactions: ", ret).c_str()));
-    Transaction tx;
+    CryptoNote::Transaction tx;
     CryptoNote::blobdata bd;
     bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
   //  if (!parse_and_validate_tx_from_blob(bd, tx))
@@ -2320,7 +2318,7 @@ void BlockchainLMDB::block_txn_abort()
 }
 
 uint64_t BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& block_size, const CryptoNote::difficulty_type& cumulative_difficulty, const uint64_t& coins_generated,
-    const std::vector<Transaction>& txs)
+    const std::vector<CryptoNote::Transaction>& txs)
 {
   //LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   check_open();
@@ -2343,7 +2341,7 @@ uint64_t BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& b
   return ++m_height;
 }
 
-void BlockchainLMDB::pop_block(Block& blk, std::vector<Transaction>& txs)
+void BlockchainLMDB::pop_block(CryptoNote::Block& blk, std::vector<CryptoNote::Transaction>& txs)
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
@@ -2483,7 +2481,7 @@ std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> BlockchainLMDB::get
       while (num_elems > 0) {
         const tx_out_index toi = get_output_tx_and_index(amount, num_elems - 1);
         const uint64_t height = get_tx_block_height(toi.first);
-        if (height + parameters::CRYPTONOTE_TX_SPENDABLE_AGE <= blockchain_height)
+        if (height + CryptoNote::parameters::CRYPTONOTE_TX_SPENDABLE_AGE <= blockchain_height)
           break;
         --num_elems;
       }
@@ -2988,7 +2986,7 @@ void BlockchainLMDB::migrate_0_1()
 //      if (!parse_and_validate_block_from_blob(bd, b))
 //        throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
 
-      add_transaction(NULL_HASH, b.baseTransaction);
+      add_transaction(CryptoNote::NULL_HASH, b.baseTransaction);
 /*      for (unsigned int j = 0; j<b.tx_hashes.size(); j++) {
         CryptoNote::Transaction tx;
         hk.mv_data = &b.txHashes[j];
@@ -2998,7 +2996,7 @@ void BlockchainLMDB::migrate_0_1()
 //        bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
 //        if (!parse_and_validate_tx_from_blob(bd, tx))
 //          throw(DB_ERROR("Failed to parse tx from blob retrieved from the db"));
-        add_transaction(null_hash, tx, &b.txHashes[j]);
+        add_transaction(CryptoNote::NULL_HASH, tx, &b.txHashes[j]);
         result = mdb_cursor_del(c_txs, 0);
         if (result)
           throw(DB_ERROR(lmdb_error("Failed to get record from txs: ", result).c_str()));

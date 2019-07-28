@@ -135,21 +135,6 @@ struct mdb_txn_safe
 };
 
 
-// If m_batch_active is set, a batch transaction exists beyond this class, such
-// as a batch import with verification enabled, or possibly (later) a batch
-// network sync.
-//
-// For some of the lookup methods, such as get_block_timestamp(), tx_exists(),
-// and get_tx(), when m_batch_active is set, the lookup uses the batch
-// transaction. This isn't only because the transaction is available, but it's
-// necessary so that lookups include the database updates only present in the
-// current batch write.
-//
-// A regular network sync without batch writes is expected to open a new read
-// transaction, as those lookups are part of the validation done prior to the
-// write for block and tx data, so no write transaction is open at the time.
-
-
 class BlockchainLMDB : public BlockchainDB
 {
 public:

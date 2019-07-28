@@ -21,7 +21,7 @@
 #include <cstdint>
 #include <system_error>
 
-#include "CryptoNoteCore/ITransaction.h"
+#include "ITransaction.h"
 #include "ITransfersContainer.h"
 #include "IStreamSerializable.h"
 
