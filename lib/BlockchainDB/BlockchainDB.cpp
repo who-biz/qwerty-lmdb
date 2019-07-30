@@ -206,8 +206,8 @@ CryptoNote::Block BlockchainDB::get_block_from_height(const uint64_t& height) co
 {
   CryptoNote::blobdata bd = get_block_blob_from_height(height);
   CryptoNote::Block b;
-//  if (!parse_and_validate_block_from_blob(bd, b))
-//    throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
+  if (!parse_and_validate_block_from_blob(bd, b))
+    throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
 
   return b;
 }
@@ -216,8 +216,8 @@ CryptoNote::Block BlockchainDB::get_block(const Crypto::Hash& h) const
 {
   CryptoNote::blobdata bd = get_block_blob(h);
   CryptoNote::Block b;
-//  if (!parse_and_validate_block_from_blob(bd, b))
-//    throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
+  if (!parse_and_validate_block_from_blob(bd, b))
+    throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
 
   return b;
 }

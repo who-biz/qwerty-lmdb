@@ -158,13 +158,13 @@ class BlockchainDBTest : public testing::Test
 protected:
   BlockchainDBTest() : m_db( new T() ), m_hardfork(*m_db, 1, 0)
   {
-/*    for (auto& i : t_blocks)
+    for (auto& i : t_blocks)
     {
       CryptoNote::Block bl;
       CryptoNote::blobdata bd = h2b(i);
       parse_and_validate_block_from_blob(bd, bl);
       m_blocks.push_back(bl);
-    }*/
+    }
     for (auto& i : t_transactions)
     {
       std::vector<CryptoNote::Transaction> txs;

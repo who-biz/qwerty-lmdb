@@ -32,7 +32,8 @@
 #include "TransactionExtra.h"
 #include "CryptoNoteTools.h"
 #include "Currency.h"
-
+#include "CryptoNoteCore/Core.h"
+#include "CryptoNoteCore/VerificationContext.h"
 #include "CryptoNoteConfig.h"
 
 using namespace Logging;
@@ -634,6 +635,15 @@ bool is_valid_decomposed_amount(uint64_t amount) {
     bool r = parseAndValidateTransactionFromBinaryArray(ba, tx, tx_hash, tx_prefix_hash);
     return r;
   }
-
-
+  //---------------------------------------------------------------
+  bool parse_and_validate_block_from_blob(const blobdata& b_blob, Block& b)
+  {
+    std::stringstream ss;
+    ss << b_blob;
+    BinaryArray ba = hex_to_bin(ss.str());
+    block_verification_context bvc = boost::value_initialized<block_verification_context>();
+    core* m_core;
+    bool r = m_core->handle_incoming_block_blob(ba, bvc, true, true);
+    return r;
+  }
 }
