@@ -77,7 +77,7 @@ set(QwertycoinFramework_BlockchainDB_SOURCES
 )
 
 set(QwertycoinFramework_BlockchainDB_LIBS
-    QwertycoinFramework_LMDB)
+    QwertycoinFramework::LMDB)
 
 add_library(QwertycoinFramework_BlockchainDB STATIC ${QwertycoinFramework_BlockchainDB_SOURCES})
 add_library(QwertycoinFramework::BlockchainDB ALIAS QwertycoinFramework_BlockchainDB)
@@ -95,6 +95,11 @@ set(QwertycoinFramework_LMDB_SOURCES
    "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb_load.c"
    "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb_dump.c"
 )
+
+
+set(QwertycoinFramework_LMDB_LIBS
+    QwertycoinFramework::BlockchainDB)
+
 add_library(QwertycoinFramework_LMDB STATIC ${QwertycoinFramework_LMDB_SOURCES})
 add_library(QwertycoinFramework::LMDB ALIAS QwertycoinFramework_LMDB)
 target_include_directories(QwertycoinFramework_LMDB PRIVATE ${QwertycoinFramework_INCLUDE_DIRS})

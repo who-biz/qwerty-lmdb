@@ -47,7 +47,7 @@ static uint8_t get_block_version(const CryptoNote::Block &b)
   return b.majorVersion;
 }
 
-HardFork::HardFork(CryptoNote::BlockchainDB &db, uint8_t original_version, uint64_t original_version_till_height, time_t forked_time, time_t update_time, uint64_t window_size, uint8_t default_threshold_percent):
+HardFork::HardFork(BlockchainDB &db, uint8_t original_version, uint64_t original_version_till_height, time_t forked_time, time_t update_time, uint64_t window_size, uint8_t default_threshold_percent):
   db(db),
   original_version(original_version),
   original_version_till_height(original_version_till_height),
@@ -214,9 +214,6 @@ bool HardFork::reorganize_from_block_height(uint64_t height)
   if (height >= db.height())
     return false;
 
-  db.set_batch_transactions(true);
-  bool stop_batch = db.batch_start();
-
   versions.clear();
 
   for (size_t n = 0; n < 255; ++n)
@@ -242,9 +239,6 @@ bool HardFork::reorganize_from_block_height(uint64_t height)
   for (uint64_t h = height + 1; h < bc_height; ++h) {
     add(db.get_block_from_height(h), h);
   }
-
-  if (stop_batch)
-    db.batch_stop();
 
   return true;
 }

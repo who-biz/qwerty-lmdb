@@ -30,7 +30,6 @@
 
 #include "INode.h"
 #include "CryptoNoteCore/Currency.h"
-#include "BlockchainDB/BlockchainDB.h"
 
 namespace CryptoNote
 {
@@ -39,6 +38,7 @@ namespace CryptoNote
 
   class HardFork
   {
+
   public:
     typedef enum {
       LikelyForked,

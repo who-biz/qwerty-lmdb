@@ -227,8 +227,8 @@ bool BlockchainDB::get_tx(const Crypto::Hash& h, CryptoNote::Transaction &tx) co
   CryptoNote::blobdata bd;
   if (!get_tx_blob(h, bd))
     return false;
-//  if (!parse_and_validate_tx_from_blob(bd, tx))
-//    throw(DB_ERROR("Failed to parse transaction from blob retrieved from the db"));
+  if (!parse_and_validate_tx_from_blob(bd, tx))
+    throw(DB_ERROR("Failed to parse transaction from blob retrieved from the db"));
 
   return true;
 }
@@ -247,10 +247,6 @@ void BlockchainDB::fixup()
     //Logger(INFO, WHITE) << "Database is opened read only - skipping fixup check";
     return;
   }
-
-  set_batch_transactions(false);
-  batch_start();
-  batch_stop();
 }
 
 } //namespace CryptoNote

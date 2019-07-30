@@ -126,7 +126,6 @@ struct mdb_txn_safe
 
   mdb_threadinfo* m_tinfo;
   MDB_txn* m_txn;
-  bool m_batch_txn = false;
   bool m_check;
   static std::atomic<uint64_t> num_active_txns;
 
@@ -141,7 +140,7 @@ class BlockchainLMDB : public BlockchainDB
 public:
 
   BlockchainLMDB();
-  virtual ~BlockchainLMDB();
+  virtual ~BlockchainLMDB() {};
 
   friend class BlockchainDB;
 
@@ -164,8 +163,6 @@ public:
   virtual void unlock();
 
   virtual bool block_exists(const Crypto::Hash& h, uint64_t *height = nullptr) const;
-
-  virtual CryptoNote::Block get_block(const Crypto::Hash&) const;
 
   virtual uint64_t get_block_height(const Crypto::Hash& h) const;
 
@@ -216,7 +213,7 @@ public:
 
   virtual output_data_t get_output_key(const uint64_t& amount, const uint64_t& index);
   virtual output_data_t get_output_key(const uint64_t& global_index) const;
-  virtual void get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<output_data_t> &outputs, bool allow_partial = false);
+//  virtual void get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<output_data_t> &outputs, bool allow_partial = false);
 
   virtual tx_out_index get_output_tx_and_index_from_global(const uint64_t& index) const;
   virtual void get_output_tx_and_index_from_global(const std::vector<uint64_t> &global_indices,
@@ -231,7 +228,7 @@ public:
 
   virtual void add_txpool_tx(const CryptoNote::Transaction &tx, const txpool_tx_meta_t& meta);
   virtual void update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t& meta);
-  virtual uint64_t get_txpool_tx_count(bool include_unrelayed_txes = true) const;
+ // virtual uint64_t get_txpool_tx_count(bool include_unrelayed_txes = true) const;
   virtual uint64_t get_txpool_tx_count() const;
 
   virtual bool txpool_has_tx(const Crypto::Hash &txid) const;
@@ -255,11 +252,6 @@ public:
                             , const std::vector<CryptoNote::Transaction>& txs
                             );
 
-  virtual void set_batch_transactions(bool batch_transactions);
-  virtual bool batch_start(uint64_t batch_num_blocks=0, uint64_t batch_bytes=0);
-  virtual void batch_commit();
-  virtual void batch_stop();
-  virtual void batch_abort();
 
   virtual void block_txn_start(bool readonly);
   virtual void block_txn_stop();
@@ -352,7 +344,6 @@ private:
   // migrate from DB version 0 to 1
   void migrate_0_1();
 
-  void cleanup_batch();
 
 private:
   bool m_open;
@@ -384,10 +375,6 @@ private:
   mutable unsigned int m_cum_count;
   std::string m_folder;
   mdb_txn_safe* m_write_txn; // may point to either a short-lived txn or a batch txn
-  mdb_txn_safe* m_write_batch_txn; // persist batch txn outside of BlockchainLMDB
-
-  bool m_batch_transactions; // support for batch Transactions
-  bool m_batch_active; // whether batch Transaction is in progress
 
   mdb_txn_cursors m_wcursors;
   mutable boost::thread_specific_ptr<mdb_threadinfo> m_tinfo;

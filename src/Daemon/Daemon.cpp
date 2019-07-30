@@ -127,9 +127,9 @@ int main(int argc, char* argv[])
     command_line::add_arg(desc_cmd_only, command_line::arg_version);
     command_line::add_arg(desc_cmd_only, arg_os_version);
     // tools::get_default_data_dir() can't be called during static initialization
+    command_line::add_arg(desc_cmd_only, command_line::arg_data_dir, Tools::getDefaultDataDirectory());
     command_line::add_arg(desc_cmd_only, command_line::arg_db_type, Tools::getDefaultDbType());
     command_line::add_arg(desc_cmd_only, command_line::arg_db_sync_mode, Tools::getDefaultDbSyncMode());
-    command_line::add_arg(desc_cmd_only, command_line::arg_data_dir, Tools::getDefaultDataDirectory());
     command_line::add_arg(desc_cmd_only, arg_config_file);
 
     command_line::add_arg(desc_cmd_sett, arg_log_file);
@@ -169,8 +169,9 @@ int main(int argc, char* argv[])
 
       std::string data_dir = command_line::get_arg(vm, command_line::arg_data_dir);
       std::string config = command_line::get_arg(vm, arg_config_file);
-      std::string db_type = command_line::get_arg(vm,arg_db_type);
-      std::string db_sync_mode = command_line::get_arg(vm,arg_db_sync_mode);
+      std::string db_type = command_line::get_arg(vm, command_line::arg_db_type);
+      std::string db_sync_mode = command_line::get_arg(vm, command_line::arg_db_sync_mode);
+
 
       boost::filesystem::path data_dir_path(data_dir);
       boost::filesystem::path config_path(config);
@@ -250,9 +251,6 @@ int main(int argc, char* argv[])
     if (testnet_mode) {
       logger(INFO) << "Starting in testnet mode!";
     }
-
-   std::string db_str = command_line::get_arg(vm, arg_db_type);
-   BlockchainDB* db = new_db(db_str);
 
     //create objects and link them
     CryptoNote::CurrencyBuilder currencyBuilder(logManager);

@@ -356,6 +356,7 @@ set(QwertycoinTests_UnitTests_LIBS
     QwertycoinFramework::CryptoNoteProtocol
     QwertycoinFramework::Http
     QwertycoinFramework::InProcessNode
+    QwertycoinFramework::LMDB
     QwertycoinFramework::Logging
     QwertycoinFramework::Rpc
     QwertycoinFramework::Wallet

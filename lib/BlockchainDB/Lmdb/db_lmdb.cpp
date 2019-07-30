@@ -298,20 +298,6 @@ mdb_txn_safe::~mdb_txn_safe()
     memset(&m_tinfo->m_ti_rflags, 0, sizeof(m_tinfo->m_ti_rflags));
   } else if (m_txn != nullptr)
   {
-    if (m_batch_txn) // this is a batch txn and should have been handled before this point for safety
-    {
-      //Logger(INFO) <<"WARNING: mdb_txn_safe: m_txn is a batch txn and it's not NULL in destructor - calling mdb_txn_abort()";
-    }
-    else
-    {
-      // Example of when this occurs: a lookup fails, so a read-only txn is
-      // aborted through this destructor. However, successful read-only txns
-      // ideally should have been committed when done and not end up here.
-      //
-      // NOTE: not sure if this is ever reached for a non-batch write
-      // transaction, but it's probably not ideal if it did.
-      //Logger(INFO /*, BRIGHT_GREEN*/) <<"mdb_txn_safe: m_txn not NULL in destructor - calling mdb_txn_abort()";
-    }
     mdb_txn_abort(m_txn);
   }
   num_active_txns--;
@@ -657,12 +643,22 @@ void BlockchainLMDB::add_tx_amount_output_indices(const uint64_t tx_id,
     throw(DB_ERROR(std::string("Failed to add <tx hash, amount output index array> to db transaction: ").append(mdb_strerror(result)).c_str()));
 }
 
-void BlockchainLMDB::remove_tx_outputs(const uint64_t tx_id, const CryptoNote::Transaction& tx)
+void BlockchainLMDB::remove_tx_outputs(const uint64_t tx_id, const Transaction& tx)
 {
-  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainDB::" << __func__;
-
   std::vector<uint64_t> amount_output_indices = get_tx_amount_output_indices(tx_id);
 
+  if (amount_output_indices.empty())
+  {
+    if (tx.outputs.empty()) { }
+    else
+      throw(DB_ERROR("tx has outputs, but no output indices found"));
+  }
+
+  for (size_t i = tx.outputs.size(); i-- > 0;)
+  {
+    uint64_t amount = tx.outputs[i].amount;
+    remove_output(amount, amount_output_indices[i]);
+  }
 }
 
 void BlockchainLMDB::remove_output(const uint64_t amount, const uint64_t& out_index)
@@ -947,11 +943,6 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
 void BlockchainLMDB::close()
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
-  if (m_batch_active)
-  {
-    //Logger(INFO /*, BRIGHT_GREEN*/) <<"close() first calling batch_abort() due to active batch transaction";
-    batch_abort();
-  }
   this->sync();
   m_tinfo.reset();
 
@@ -1051,14 +1042,8 @@ void BlockchainLMDB::unlock()
 #define TXN_PREFIX(flags); \
   mdb_txn_safe auto_txn; \
   mdb_txn_safe* txn_ptr = &auto_txn; \
-  if (m_batch_active) \
-    txn_ptr = m_write_txn; \
-  else \
-  { \
-    if (auto mdb_res = lmdb_txn_begin(m_env, NULL, flags, auto_txn)) \
-  }\
-      throw(DB_ERROR(lmdb_error(std::string("Failed to create a transaction for the db in ")+__FUNCTION__+": ", mdb_res).c_str())); \
-  } \
+  if (auto mdb_res = lmdb_txn_begin(m_env, NULL, flags, auto_txn)) \
+    throw(DB_ERROR(lmdb_error(std::string("Failed to create a transaction for the db in ")+__FUNCTION__+": ", mdb_res).c_str())); \
 
 #define TXN_PREFIX_RDONLY() \
   MDB_txn *m_txn; \
@@ -1067,12 +1052,11 @@ void BlockchainLMDB::unlock()
   bool my_rtxn = block_rtxn_start(&m_txn, &m_cursors); \
   if (my_rtxn) auto_txn.m_tinfo = m_tinfo.get(); \
   else auto_txn.uncheck()\
-  
+
 #define TXN_POSTFIX_RDONLY()
 
 #define TXN_POSTFIX_SUCCESS() \
   do { \
-    if (! m_batch_active) \
       auto_txn.commit(); \
   } while(0)\
 
@@ -1088,7 +1072,7 @@ void BlockchainLMDB::unlock()
 #define TXN_BLOCK_PREFIX(flags); \
   mdb_txn_safe auto_txn; \
   mdb_txn_safe* txn_ptr = &auto_txn; \
-  if (m_batch_active || m_write_txn) \
+  if (m_write_txn) \
     txn_ptr = m_write_txn; \
   else \
   { \
@@ -1098,7 +1082,7 @@ void BlockchainLMDB::unlock()
 
 #define TXN_BLOCK_POSTFIX_SUCCESS() \
   do { \
-    if (! m_batch_active && ! m_write_txn) \
+    if (! m_write_txn) \
       auto_txn.commit(); \
   } while(0)
 
@@ -1798,7 +1782,7 @@ uint64_t BlockchainLMDB::get_tx_count() const
 
   return db_stats.ms_entries;
 }
-/*
+
 std::vector<CryptoNote::Transaction> BlockchainLMDB::get_tx_list(const std::vector<Crypto::Hash>& hlist) const
 {
   check_open();
@@ -1806,12 +1790,12 @@ std::vector<CryptoNote::Transaction> BlockchainLMDB::get_tx_list(const std::vect
 
   for (auto& h : hlist)
   {
-    v.push_back(get_transaction(h));
+    v.push_back(get_tx(h));
   }
 
   return v;
 }
-*/
+
 uint64_t BlockchainLMDB::get_tx_block_height(const Crypto::Hash& h) const
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
@@ -1969,6 +1953,40 @@ tx_out_index BlockchainLMDB::get_output_tx_and_index(const uint64_t& amount, con
     throw(OUTPUT_DNE("Attempting to get an output index by amount and amount index, but amount not found"));
 
   return indices[0];
+}
+
+
+std::vector<uint64_t> BlockchainLMDB::get_tx_amount_output_indices(const uint64_t tx_id) const
+{
+  check_open();
+
+  TXN_PREFIX_RDONLY();
+  RCURSOR(tx_outputs);
+
+  int result = 0;
+  MDB_val_set(k_tx_id, tx_id);
+  MDB_val v;
+  std::vector<uint64_t> amount_output_indices;
+
+  result = mdb_cursor_get(m_cur_tx_outputs, &k_tx_id, &v, MDB_SET);
+  if (result == MDB_NOTFOUND)
+  { }
+  else if (result)
+    throw(DB_ERROR(lmdb_error("DB error attempting to get data for tx_outputs[tx_index]", result).c_str()));
+
+  const uint64_t* indices = (const uint64_t*)v.mv_data;
+  int num_outputs = v.mv_size / sizeof(uint64_t);
+
+  amount_output_indices.reserve(num_outputs);
+  for (int i = 0; i < num_outputs; ++i)
+  {
+    // LOG_PRINT_L0("amount output index[" << 2*i << "]" << ": " << paired_indices[2*i] << "  global output index: " << paired_indices[2*i+1]);
+    amount_output_indices.push_back(indices[i]);
+  }
+  indices = nullptr;
+
+  TXN_POSTFIX_RDONLY();
+  return amount_output_indices;
 }
 
 bool BlockchainLMDB::has_key_image(const Crypto::KeyImage& img) const
@@ -2194,17 +2212,6 @@ bool BlockchainLMDB::for_all_outputs(uint64_t amount, const std::function<bool(u
   return fret;
 }
 
-void BlockchainLMDB::set_batch_transactions(bool batch_transactions)
-{
-  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
-  if ((batch_transactions) && (m_batch_transactions))
-  {
-    //Logger(INFO,WHITE) << "batch transaction mode already enabled, but asked to enable batch mode";
-  }
-  m_batch_transactions = batch_transactions;
-  //Logger(INFO,WHITE) << "batch transactions " << (m_batch_transactions ? "enabled" : "disabled"));
-}
-
 // return true if we started the txn, false if already started
 bool BlockchainLMDB::block_rtxn_start(MDB_txn **mtxn, mdb_txn_cursors **mcur) const
 {
@@ -2251,16 +2258,20 @@ void BlockchainLMDB::block_txn_start(bool readonly)
   }
 }
 
+void BlockchainLMDB::block_txn_stop()
+{
+//  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
+  if (m_tinfo->m_ti_rtxn)
+  {
+    mdb_txn_reset(m_tinfo->m_ti_rtxn);
+    memset(&m_tinfo->m_ti_rflags, 0, sizeof(m_tinfo->m_ti_rflags));
+  }
+}
+
 void BlockchainLMDB::block_txn_abort()
 {
   //LOG_PRINT_L3("BlockchainLMDB::" << __func__);
-    if (! m_batch_active)
-    {
-      delete m_write_txn;
-      m_write_txn = nullptr;
-      memset(&m_wcursors, 0, sizeof(m_wcursors));
-    }
-  else if (m_tinfo->m_ti_rtxn)
+  if (m_tinfo->m_ti_rtxn)
   {
     mdb_txn_reset(m_tinfo->m_ti_rtxn);
     memset(&m_tinfo->m_ti_rflags, 0, sizeof(m_tinfo->m_ti_rflags));
@@ -2933,8 +2944,6 @@ void BlockchainLMDB::migrate_0_1()
     z = m_height;
 
     hk.mv_size = sizeof(Crypto::Hash);
-    set_batch_transactions(true);
-    batch_start(1000);
     txn.m_txn = m_write_txn->m_txn;
     m_height = 0;
 
@@ -2951,7 +2960,6 @@ void BlockchainLMDB::migrate_0_1()
           if (result)
             throw(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
           m_write_txn->m_txn = txn.m_txn;
-          m_write_batch_txn->m_txn = txn.m_txn;
           memset(&m_wcursors, 0, sizeof(m_wcursors));
         }
         result = mdb_cursor_open(txn, m_blocks, &c_blocks);
@@ -2990,7 +2998,6 @@ void BlockchainLMDB::migrate_0_1()
         result = mdb_cursor_del(c_props, 0);
         if (result)
           throw(DB_ERROR(lmdb_error("Failed to delete a record from props: ", result).c_str()));
-        batch_stop();
         break;
       } else if (result) {
         throw(DB_ERROR(lmdb_error("Failed to get a record from blocks: ", result).c_str()));
