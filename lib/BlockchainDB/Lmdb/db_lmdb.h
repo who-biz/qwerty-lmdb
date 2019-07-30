@@ -140,7 +140,7 @@ class BlockchainLMDB : public BlockchainDB
 public:
 
   BlockchainLMDB();
-  virtual ~BlockchainLMDB() {};
+  virtual ~BlockchainLMDB();
 
   friend class BlockchainDB;
 
@@ -378,6 +378,8 @@ private:
 
   mdb_txn_cursors m_wcursors;
   mutable boost::thread_specific_ptr<mdb_threadinfo> m_tinfo;
+
+  constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 33;
 
 }; // class BlockchainLMDB
 

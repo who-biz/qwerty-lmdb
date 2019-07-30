@@ -185,6 +185,9 @@ const char* const LMDB_SPENT_KEYS = "spent_keys";
 const char* const LMDB_TXPOOL_META = "txpool_meta";
 const char* const LMDB_TXPOOL_BLOB = "txpool_blob";
 
+const char* const LMDB_HF_STARTING_HEIGHTS = "hf_starting_heights";
+const char* const LMDB_HF_VERSIONS = "hf_versions";
+
 const char* const LMDB_PROPERTIES = "properties";
 
 const char zerokey[8] = {0};
@@ -759,11 +762,34 @@ CryptoNote::TransactionOutput BlockchainLMDB::output_from_blob(const CryptoNote:
   return o;
 }
 
+
 void BlockchainLMDB::check_open() const
 {
 //  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   if (!m_open)
-    throw(DB_ERROR("DB operation attempted on a not-open DB instance"));
+    throw DB_ERROR("DB operation attempted on a not-open DB instance");
+}
+
+BlockchainLMDB::~BlockchainLMDB()
+{
+ // LOG_PRINT_L3("BlockchainLMDB::" << __func__);
+
+  if (m_open)
+    close();
+}
+
+BlockchainLMDB::BlockchainLMDB(): BlockchainDB()
+{
+//  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
+  // initialize folder to something "safe" just in case
+  // someone accidentally misuses this class...
+  m_folder = "thishsouldnotexistbecauseitisgibberish";
+
+  m_write_txn = nullptr;
+  m_cum_size = 0;
+  m_cum_count = 0;
+
+  m_hardfork = nullptr;
 }
 
 void BlockchainLMDB::open(const std::string& filename, const int db_flags)
@@ -771,42 +797,53 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   int result;
   int mdb_flags = MDB_NORDAHEAD;
 
-  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
+//  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
 
   if (m_open)
-    throw(DB_OPEN_FAILURE("Attempted to open db, but it's already open"));
+    throw DB_OPEN_FAILURE("Attempted to open db, but it's already open");
 
   boost::filesystem::path direc(filename);
   if (boost::filesystem::exists(direc))
   {
     if (!boost::filesystem::is_directory(direc))
-      throw(DB_OPEN_FAILURE("LMDB needs a directory path, but a file was passed"));
+      throw DB_OPEN_FAILURE("LMDB needs a directory path, but a file was passed");
   }
   else
   {
     if (!boost::filesystem::create_directories(direc))
-      throw(DB_OPEN_FAILURE(std::string("Failed to create directory ").append(filename).c_str()));
+      throw DB_OPEN_FAILURE(std::string("Failed to create directory ").append(filename).c_str());
   }
 
   // check for existing LMDB files in base directory
   boost::filesystem::path old_files = direc.parent_path();
-  if (boost::filesystem::exists(old_files / CryptoNote::parameters::CRYPTONOTE_BLOCKCHAINDATA_FILENAME)
-      || boost::filesystem::exists(old_files / CryptoNote::parameters::CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME))
+  if (boost::filesystem::exists(old_files / parameters::CRYPTONOTE_BLOCKCHAINDATA_FILENAME)
+      || boost::filesystem::exists(old_files / parameters::CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME))
   {
-    //Logger(INFO) <<"Found existing LMDB files in " << old_files.string());
-    //Logger(INFO) <<"Move " << CryptoNote::parameters::CryptoNote_BLOCKCHAINDATA_FILENAME << " and/or " << CryptoNote_BLOCKCHAINDATA_LOCK_FILENAME << " to " << filename << ", or delete them, and then restart";
+   // LOG_PRINT_L0("Found existing LMDB files in " << old_files.string());
+   // LOG_PRINT_L0("Move " << CRYPTONOTE_BLOCKCHAINDATA_FILENAME << " and/or " << CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME << " to " << filename << ", or delete them, and then restart");
     throw DB_ERROR("Database could not be opened");
   }
 
   m_folder = filename;
 
+#ifdef __OpenBSD__
+  if ((mdb_flags & MDB_WRITEMAP) == 0) {
+//    MCLOG_RED(el::Level::Info, "global", "Running on OpenBSD: forcing WRITEMAP");
+    mdb_flags |= MDB_WRITEMAP;
+  }
+#endif
   // set up lmdb environment
   if ((result = mdb_env_create(&m_env)))
-    throw(DB_ERROR(lmdb_error("Failed to create lmdb environment: ", result).c_str()));
+    throw DB_ERROR(lmdb_error("Failed to create lmdb environment: ", result).c_str());
   if ((result = mdb_env_set_maxdbs(m_env, 20)))
-    throw(DB_ERROR(lmdb_error("Failed to set max number of dbs: ", result).c_str()));
+    throw DB_ERROR(lmdb_error("Failed to set max number of dbs: ", result).c_str());
 
   int threads = boost::thread::hardware_concurrency();
+  if (threads > 110 &&	/* maxreaders default is 126, leave some slots for other read processes */
+    (result = mdb_env_set_maxreaders(m_env, threads+16)))
+    throw DB_ERROR(lmdb_error("Failed to set max number of readers: ", result).c_str());
+
+  size_t mapsize = DEFAULT_MAPSIZE;
 
   if (db_flags & DBF_FAST)
     mdb_flags |= MDB_NOSYNC;
@@ -818,7 +855,20 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
     mdb_flags |= MDB_PREVSNAPSHOT;
 
   if (auto result = mdb_env_open(m_env, filename.c_str(), mdb_flags, 0644))
-    throw(DB_ERROR(lmdb_error("Failed to open lmdb environment: ", result).c_str()));
+    throw DB_ERROR(lmdb_error("Failed to open lmdb environment: ", result).c_str());
+
+  MDB_envinfo mei;
+  mdb_env_info(m_env, &mei);
+  uint64_t cur_mapsize = (double)mei.me_mapsize;
+
+  if (cur_mapsize < mapsize)
+  {
+    if (auto result = mdb_env_set_mapsize(m_env, mapsize))
+      throw DB_ERROR(lmdb_error("Failed to set max memory map size: ", result).c_str());
+    mdb_env_info(m_env, &mei);
+    cur_mapsize = (double)mei.me_mapsize;
+//    LOG_PRINT_L1("LMDB memory map size: " << cur_mapsize);
+  }
 
   int txn_flags = 0;
   if (mdb_flags & MDB_RDONLY)
@@ -827,7 +877,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   // get a read/write MDB_txn, depending on mdb_flags
   mdb_txn_safe txn;
   if (auto mdb_res = mdb_txn_begin(m_env, NULL, txn_flags, txn))
-    throw(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", mdb_res).c_str()));
+    throw DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", mdb_res).c_str());
 
   // open necessary databases, and set properties as needed
   // uses macros to avoid having to change things too many places
@@ -851,6 +901,10 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   // this subdb is dropped on sight, so it may not be present when we open the DB.
   // Since we use MDB_CREATE, we'll get an exception if we open read-only and it does not exist.
   // So we don't open for read-only, and also not drop below. It is not used elsewhere.
+  if (!(mdb_flags & MDB_RDONLY))
+    lmdb_db_open(txn, LMDB_HF_STARTING_HEIGHTS, MDB_CREATE, m_hf_starting_heights, "Failed to open db handle for m_hf_starting_heights");
+
+  lmdb_db_open(txn, LMDB_HF_VERSIONS, MDB_INTEGERKEY | MDB_CREATE, m_hf_versions, "Failed to open db handle for m_hf_versions");
 
   lmdb_db_open(txn, LMDB_PROPERTIES, MDB_CREATE, m_properties, "Failed to open db handle for m_properties");
 
@@ -865,11 +919,18 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   mdb_set_compare(txn, m_txpool_blob, compare_hash32);
   mdb_set_compare(txn, m_properties, compare_string);
 
+  if (!(mdb_flags & MDB_RDONLY))
+  {
+    result = mdb_drop(txn, m_hf_starting_heights, 1);
+    if (result && result != MDB_NOTFOUND)
+      throw DB_ERROR(lmdb_error("Failed to drop m_hf_starting_heights: ", result).c_str());
+  }
+
   // get and keep current height
   MDB_stat db_stats;
   if ((result = mdb_stat(txn, m_blocks, &db_stats)))
-    throw(DB_ERROR(lmdb_error("Failed to query m_blocks: ", result).c_str()));
-  //Logger(INFO) << "Setting m_height to: " << db_stats.ms_entries);
+    throw DB_ERROR(lmdb_error("Failed to query m_blocks: ", result).c_str());
+ // LOG_PRINT_L2("Setting m_height to: " << db_stats.ms_entries);
   uint64_t m_height = db_stats.ms_entries;
 
   bool compatible = true;
@@ -881,7 +942,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   {
     if (*(const uint32_t*)v.mv_data > VERSION)
     {
-      //MWARNING("Existing lmdb database was made by a later version. We don't know how it will change yet.");
+    //  MWARNING("Existing lmdb database was made by a later version. We don't know how it will change yet.");
       compatible = false;
     }
 #if VERSION > 0
@@ -911,6 +972,8 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
     txn.abort();
     mdb_env_close(m_env);
     m_open = false;
+//    MFATAL("Existing lmdb database is incompatible with this version.");
+//    MFATAL("Please delete the existing database and resync.");
     return;
   }
 
@@ -927,7 +990,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
         txn.abort();
         mdb_env_close(m_env);
         m_open = false;
-        //Logger(INFO, BRIGHT_RED) << "Failed to write version to database.";
+      //  MERROR("Failed to write version to database.");
         return;
       }
     }
@@ -942,7 +1005,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
 
 void BlockchainLMDB::close()
 {
-  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
+//  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   this->sync();
   m_tinfo.reset();
 
@@ -3062,12 +3125,6 @@ void BlockchainLMDB::migrate(const uint32_t oldversion)
   default:
     ;
   }
-}
-
-BlockchainLMDB::BlockchainLMDB(): BlockchainDB()
-{
-  if (m_open)
-   close();
 }
 
 } //namespace CryptoNote
