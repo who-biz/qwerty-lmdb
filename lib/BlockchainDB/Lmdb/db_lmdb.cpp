@@ -57,6 +57,7 @@
 using namespace Common;
 using namespace Crypto;
 using namespace Logging;
+using namespace CryptoNote;
 
 // Increase when the DB structure changes
 #define VERSION 1
@@ -226,6 +227,8 @@ inline int lmdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned int flags, MDB
     m_tinfo->m_ti_rflags.m_rf_ ## name = true; \
   }
 
+namespace CryptoNote {
+
 
 typedef struct mdb_block_info
 {
@@ -258,6 +261,7 @@ typedef struct outtx {
     Crypto::Hash tx_hash;
     uint64_t local_index;
 } outtx;
+} // namespace CryptoNote
 
 std::atomic<uint64_t> mdb_txn_safe::num_active_txns{0};
 std::atomic_flag mdb_txn_safe::creation_gate = ATOMIC_FLAG_INIT;
@@ -379,6 +383,8 @@ inline int lmdb_txn_renew(MDB_txn *txn)
   int res = mdb_txn_renew(txn);
   return res;
 }
+
+namespace CryptoNote {
 
 void BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& block_size, const CryptoNote::difficulty_type& cumulative_difficulty, const uint64_t& coins_generated,
     const Crypto::Hash& blk_hash)
@@ -2245,52 +2251,6 @@ void BlockchainLMDB::block_txn_start(bool readonly)
   }
 }
 
-void BlockchainLMDB::block_wtxn_start()
-{
-  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
-  // Distinguish the exceptions here from exceptions that would be thrown while
-  // using the txn and committing it.
-  //
-  // If an exception is thrown in this setup, we don't want the caller to catch
-  // it and proceed as if there were an existing write txn, such as trying to
-  // call block_txn_abort(). It also indicates a serious issue which will
-  // probably be thrown up another layer.
-  if (! m_batch_active && m_write_txn)
-    throw(DB_ERROR_TXN_START((std::string("Attempted to start new write txn when write txn already exists in ")+__FUNCTION__).c_str()));
-  if (! m_batch_active)
-  {
-    memset(&m_wcursors, 0, sizeof(m_wcursors));
-    if (m_tinfo.get())
-    {
-      if (m_tinfo->m_ti_rflags.m_rf_txn)
-      memset(&m_tinfo->m_ti_rflags, 0, sizeof(m_tinfo->m_ti_rflags));
-    }
-  }
-}
-
-void BlockchainLMDB::block_wtxn_stop()
-{
-  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
-  if (!m_write_txn)
-    throw(DB_ERROR_TXN_START((std::string("Attempted to stop write txn when no such txn exists in ")+__FUNCTION__).c_str()));
-    if (! m_batch_active)
-    {
-      //TIME_MEASURE_START(time1);
-      m_write_txn->commit();
-      //TIME_MEASURE_FINISH(time1);
-      //TIME_commit1 += time1;
-
-      delete m_write_txn;
-      m_write_txn = nullptr;
-      memset(&m_wcursors, 0, sizeof(m_wcursors));
-  }
-  else if (m_tinfo->m_ti_rtxn)
-  {
-    mdb_txn_reset(m_tinfo->m_ti_rtxn);
-    memset(&m_tinfo->m_ti_rflags, 0, sizeof(m_tinfo->m_ti_rflags));
-  }
-}
-
 void BlockchainLMDB::block_txn_abort()
 {
   //LOG_PRINT_L3("BlockchainLMDB::" << __func__);
@@ -2507,6 +2467,61 @@ std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> BlockchainLMDB::get
   TXN_POSTFIX_RDONLY();
 
   return histogram;
+}
+
+void BlockchainLMDB::drop_hard_fork_info()
+{
+  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
+  check_open();
+
+  TXN_BLOCK_PREFIX(0);
+
+  auto result = mdb_drop(*txn_ptr, m_hf_starting_heights, 1);
+  if (result)
+    throw(DB_ERROR(lmdb_error("Error dropping hard fork starting heights db: ", result).c_str()));
+  result = mdb_drop(*txn_ptr, m_hf_versions, 1);
+  if (result)
+    throw(DB_ERROR(lmdb_error("Error dropping hard fork versions db: ", result).c_str()));
+
+  TXN_POSTFIX_SUCCESS();
+}
+
+void BlockchainLMDB::set_hard_fork_version(uint64_t height, uint8_t version)
+{
+  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
+  check_open();
+
+  TXN_BLOCK_PREFIX(0);
+
+  MDB_val_copy<uint64_t> val_key(height);
+  MDB_val_copy<uint8_t> val_value(version);
+  int result;
+  result = mdb_put(*txn_ptr, m_hf_versions, &val_key, &val_value, MDB_APPEND);
+  if (result == MDB_KEYEXIST)
+    result = mdb_put(*txn_ptr, m_hf_versions, &val_key, &val_value, 0);
+  if (result)
+    throw(DB_ERROR(lmdb_error("Error adding hard fork version to db transaction: ", result).c_str()));
+
+  TXN_BLOCK_POSTFIX_SUCCESS();
+}
+
+uint8_t BlockchainLMDB::get_hard_fork_version(uint64_t height) const
+{
+  //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
+  check_open();
+
+  TXN_PREFIX_RDONLY();
+  RCURSOR(hf_versions);
+
+  MDB_val_copy<uint64_t> val_key(height);
+  MDB_val val_ret;
+  auto result = mdb_cursor_get(m_cur_hf_versions, &val_key, &val_ret, MDB_SET);
+  if (result == MDB_NOTFOUND || result)
+    throw(DB_ERROR(lmdb_error("Error attempting to retrieve a hard fork version at height " + boost::lexical_cast<std::string>(height) + " from the db: ", result).c_str()));
+
+  uint8_t ret = *(const uint8_t*)val_ret.mv_data;
+  TXN_POSTFIX_RDONLY();
+  return ret;
 }
 
 bool BlockchainLMDB::is_read_only() const
@@ -3048,3 +3063,4 @@ BlockchainLMDB::BlockchainLMDB(): BlockchainDB()
    close();
 }
 
+} //namespace CryptoNote

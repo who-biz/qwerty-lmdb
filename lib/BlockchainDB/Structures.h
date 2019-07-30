@@ -1,10 +1,7 @@
-#ifndef STRUCTURES_H
-#define STRUCTURES_H
-
 #include "CryptoNoteCore/TransactionPool.h"
 
 #pragma once
-
+namespace CryptoNote {
 #pragma pack(push, 1)
 struct output_data_t
 {
@@ -25,5 +22,5 @@ struct tx_data_t
 
 typedef std::pair<Crypto::Hash, uint64_t> tx_out_index;
 typedef CryptoNote::tx_memory_pool::TransactionDetails txpool_tx_meta_t;
-#endif // STRUCTURES_H
+}
 

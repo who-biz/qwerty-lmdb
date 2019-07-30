@@ -66,6 +66,7 @@ add_dependencies(QwertycoinFramework ${QwertycoinFramework_LIBS})
 # QwertycoinFramework::BlockchainDB
 
 set(QwertycoinFramework_BlockchainDB_SOURCES
+   "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/BlobDataType.cpp"
    "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/BlobDataType.h"
    "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/BlockchainDB.cpp"
    "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/BlockchainDB.h"
@@ -132,6 +133,8 @@ set(QwertycoinFramework_Common_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/Common/DnsTools.h"
     "${CMAKE_CURRENT_LIST_DIR}/Common/FileMappedVector.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/Common/FileMappedVector.h"
+    "${CMAKE_CURRENT_LIST_DIR}/Common/hex_str.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/Common/hex_str.h"
     "${CMAKE_CURRENT_LIST_DIR}/Common/IInputStream.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/Common/IInputStream.h"
     "${CMAKE_CURRENT_LIST_DIR}/Common/IOutputStream.cpp"
@@ -286,6 +289,8 @@ set(QwertycoinFramework_CryptoNoteCore_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/CryptoNoteCore/Currency.h"
     "${CMAKE_CURRENT_LIST_DIR}/CryptoNoteCore/Difficulty.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/CryptoNoteCore/Difficulty.h"
+    "${CMAKE_CURRENT_LIST_DIR}/CryptoNoteCore/Hardfork.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/CryptoNoteCore/Hardfork.h"
     "${CMAKE_CURRENT_LIST_DIR}/CryptoNoteCore/IBlock.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/CryptoNoteCore/IBlock.h"
     "${CMAKE_CURRENT_LIST_DIR}/CryptoNoteCore/IBlockchainStorageObserver.h"

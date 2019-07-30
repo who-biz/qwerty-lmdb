@@ -414,7 +414,7 @@ inline bool do_replay_events(std::vector<test_event_entry>& events, t_test_class
   Logging::ConsoleLogger logger;
   CryptoNote::CoreConfig coreConfig;
   coreConfig.init(vm);
-  std::unique_ptr<BlockchainDB> db;
+  std::unique_ptr<CryptoNote::BlockchainDB> db;
   CryptoNote::MinerConfig emptyMinerConfig;
   CryptoNote::cryptonote_protocol_stub pr; //TODO: stub only for this kind of test, make real validation of relayed objects
   CryptoNote::core c(db.release(), validator.currency(), &pr, logger, false);

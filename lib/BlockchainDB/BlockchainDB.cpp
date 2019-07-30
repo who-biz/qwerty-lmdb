@@ -42,6 +42,8 @@
 using namespace Common;
 using namespace Crypto;
 
+namespace CryptoNote {
+
 static const char *db_types[] = {
   "lmdb", NULL
 };
@@ -63,8 +65,7 @@ BlockchainDB* new_db(const std::string& db_type)
 {
   if (db_type == "lmdb")
   {
-    std::unique_ptr<BlockchainLMDB> db;
-    return db.release();
+    return new BlockchainLMDB();
   }
   else
     return NULL;
@@ -163,6 +164,11 @@ uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk
 }
 
 
+void BlockchainDB::set_hard_fork(HardFork* hf)
+{
+  m_hardfork = hf;
+}
+
 void BlockchainDB::pop_block(CryptoNote::Block& blk, std::vector<CryptoNote::Transaction>& txs)
 {
   blk = get_top_block();
@@ -249,3 +255,4 @@ void BlockchainDB::fixup()
   batch_stop();
 }
 
+} // namespace CryptoNote

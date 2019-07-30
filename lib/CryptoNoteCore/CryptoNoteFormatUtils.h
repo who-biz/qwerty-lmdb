@@ -26,6 +26,7 @@
 
 #include "Serialization/BinaryOutputStreamSerializer.h"
 #include "Serialization/BinaryInputStreamSerializer.h"
+#include "BlockchainDB/BlobDataType.h"
 
 namespace Logging {
 class ILogger;
@@ -163,5 +164,9 @@ void get_tx_tree_hash(const std::vector<Crypto::Hash>& tx_hashes, Crypto::Hash& 
 Crypto::Hash get_tx_tree_hash(const std::vector<Crypto::Hash>& tx_hashes);
 Crypto::Hash get_tx_tree_hash(const Block& b);
 bool is_valid_decomposed_amount(uint64_t amount);
+
+bool parse_and_validate_tx_from_blob(const CryptoNote::blobdata& tx_blob, CryptoNote::Transaction& tx, Crypto::Hash& tx_hash, Crypto::Hash& tx_prefix_hash);
+bool parse_and_validate_tx_from_blob(const CryptoNote::blobdata& tx_blob, CryptoNote::Transaction& tx);
+
 
 }

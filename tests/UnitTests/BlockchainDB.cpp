@@ -36,16 +36,19 @@
 #include "gtest/gtest.h"
 
 #include "Common/StringTools.h"
-#include "BlockchainDB/BlockchainDB.h"
 #include "BlockchainDB/Lmdb/db_lmdb.h"
+#include "BlockchainDB/BlobDataType.h"
+#include "BlockchainDB/Structures.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
+#include "CryptoNoteCore/CryptoNoteTools.h"
+#include "CryptoNote.h"
 
 using namespace CryptoNote;
 using Common::podToHex;
 
 #define ASSERT_HASH_EQ(a,b) ASSERT_EQ(podToHex(a), podToHex(b))
 
-namespace {  // anonymous namespace
+namespace {
 
 const std::vector<std::string> t_blocks =
   {
@@ -82,10 +85,10 @@ const std::vector<std::vector<std::string>> t_transactions =
 
 // if the return type (blobdata for now) of block_to_blob ever changes
 // from std::string, this might break.
-bool compare_blocks(const block& a, const block& b)
+bool compare_blocks(const CryptoNote::Block& a, const CryptoNote::Block& b)
 {
-  auto hash_a = pod_to_hex(get_block_hash(a));
-  auto hash_b = pod_to_hex(get_block_hash(b));
+  auto hash_a = podToHex(get_block_hash(a));
+  auto hash_b = podToHex(get_block_hash(b));
 
   return hash_a == hash_b;
 }
@@ -94,8 +97,8 @@ bool compare_blocks(const block& a, const block& b)
 void print_block(const block& blk, const std::string& prefix = "")
 {
   std::cerr << prefix << ": " << std::endl
-            << "\thash - " << pod_to_hex(get_block_hash(blk)) << std::endl
-            << "\tparent - " << pod_to_hex(blk.prev_id) << std::endl
+            << "\thash - " << podToHex(get_block_hash(blk)) << std::endl
+            << "\tparent - " << podToHex(blk.prev_id) << std::endl
             << "\ttimestamp - " << blk.timestamp << std::endl
   ;
 }
@@ -153,22 +156,22 @@ template <typename T>
 class BlockchainDBTest : public testing::Test
 {
 protected:
-  BlockchainDBTest() : m_db(new T())//, m_hardfork(*m_db, 1, 0)
+  BlockchainDBTest() : m_db( new T() ), m_hardfork(*m_db, 1, 0)
   {
-    for (auto& i : t_blocks)
+/*    for (auto& i : t_blocks)
     {
-      Block bl;
-      blobdata bd = h2b(i);
+      CryptoNote::Block bl;
+      CryptoNote::blobdata bd = h2b(i);
       parse_and_validate_block_from_blob(bd, bl);
       m_blocks.push_back(bl);
-    }
+    }*/
     for (auto& i : t_transactions)
     {
-      std::vector<Transaction> txs;
+      std::vector<CryptoNote::Transaction> txs;
       for (auto& j : i)
       {
-        Transaction tx;
-        blobdata bd = h2b(j);
+        CryptoNote::Transaction tx;
+        CryptoNote::blobdata bd = h2b(j);
         parse_and_validate_tx_from_blob(bd, tx);
         txs.push_back(tx);
       }
@@ -182,13 +185,13 @@ protected:
   }
 
   BlockchainDB* m_db;
-//  HardFork m_hardfork;
+  HardFork m_hardfork;
   std::string m_prefix;
   std::vector<Block> m_blocks;
   std::vector<std::vector<Transaction> > m_txs;
   std::vector<std::string> m_filenames;
 
-  void init_hard_fork()
+  void init_hardfork()
   {
     m_hardfork.init();
     m_db->set_hard_fork(&m_hardfork);
@@ -228,10 +231,10 @@ protected:
   }
 };
 
+
 using testing::Types;
 
-typedef Types<BlockchainLMDB
-> implementations;
+typedef Types<BlockchainLMDB> implementations;
 
 TYPED_TEST_CASE(BlockchainDBTest, implementations);
 
@@ -263,7 +266,6 @@ TYPED_TEST(BlockchainDBTest, AddBlock)
   // make sure open does not throw
   ASSERT_NO_THROW(this->m_db->open(dirPath));
   this->get_filenames();
-  this->init_hard_fork();
 
   // adding a block with no parent in the blockchain should throw.
   // note: this shouldn't be possible, but is a good (and cheap) failsafe.
@@ -276,7 +278,7 @@ TYPED_TEST(BlockchainDBTest, AddBlock)
   ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]));
   ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[1], t_sizes[1], t_diffs[1], t_coins[1], this->m_txs[1]));
 
-  block b;
+  Block b;
   ASSERT_TRUE(this->m_db->block_exists(get_block_hash(this->m_blocks[0])));
   ASSERT_NO_THROW(b = this->m_db->get_block(get_block_hash(this->m_blocks[0])));
 
@@ -289,13 +291,13 @@ TYPED_TEST(BlockchainDBTest, AddBlock)
   // assert that we can't add the same block twice
   ASSERT_THROW(this->m_db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]), TX_EXISTS);
 
-  for (auto& h : this->m_blocks[0].tx_hashes)
+  for (auto& h : this->m_blocks[0].transactionHashes)
   {
     Transaction tx;
     ASSERT_TRUE(this->m_db->tx_exists(h));
     ASSERT_NO_THROW(tx = this->m_db->get_tx(h));
 
-    ASSERT_HASH_EQ(h, get_transaction_hash(tx));
+    ASSERT_HASH_EQ(h, getObjectHash(tx));
   }
 }
 
@@ -309,7 +311,6 @@ TYPED_TEST(BlockchainDBTest, RetrieveBlockData)
   // make sure open does not throw
   ASSERT_NO_THROW(this->m_db->open(dirPath));
   this->get_filenames();
-  this->init_hard_fork();
 
   ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]));
 
@@ -323,14 +324,14 @@ TYPED_TEST(BlockchainDBTest, RetrieveBlockData)
 
   ASSERT_HASH_EQ(get_block_hash(this->m_blocks[0]), this->m_db->get_block_hash_from_height(0));
 
-  std::vector<block> blks;
+  std::vector<Block> blks;
   ASSERT_NO_THROW(blks = this->m_db->get_blocks_range(0, 1));
   ASSERT_EQ(2, blks.size());
 
   ASSERT_HASH_EQ(get_block_hash(this->m_blocks[0]), get_block_hash(blks[0]));
   ASSERT_HASH_EQ(get_block_hash(this->m_blocks[1]), get_block_hash(blks[1]));
 
-  std::vector<crypto::hash> hashes;
+  std::vector<Crypto::Hash> hashes;
   ASSERT_NO_THROW(hashes = this->m_db->get_hashes_range(0, 1));
   ASSERT_EQ(2, hashes.size());
 
@@ -338,4 +339,4 @@ TYPED_TEST(BlockchainDBTest, RetrieveBlockData)
   ASSERT_HASH_EQ(get_block_hash(this->m_blocks[1]), hashes[1]);
 }
 
-}  // anonymous namespace
+} // anon namespace

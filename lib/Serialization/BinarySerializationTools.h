@@ -26,6 +26,8 @@
 
 #include <fstream>
 
+#pragma once
+
 namespace CryptoNote {
 
 template <typename T>

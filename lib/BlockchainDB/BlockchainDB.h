@@ -25,8 +25,9 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#ifndef BLOCKCHAIN_DB_H
-#define BLOCKCHAIN_DB_H
+
+#ifndef BLOCKCHAINDB_H
+#define BLOCKCHAINDB_H
 
 #pragma once
 
@@ -43,6 +44,7 @@
 #include <Serialization/BinaryOutputStreamSerializer.h>
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/Currency.h"
+#include "CryptoNoteCore/Hardfork.h"
 #include "BlockchainDB/BlobDataType.h"
 #include "Structures.h"
 
@@ -290,6 +292,9 @@ class KEY_IMAGE_EXISTS : public DB_EXCEPTION
  * A subclass which encounters an issue should report that issue by throwing
  * a DB_EXCEPTION which adequately conveys the issue.
  */
+
+namespace CryptoNote {
+
 class BlockchainDB
 {
 
@@ -483,6 +488,9 @@ protected:
   mutable uint64_t time_tx_exists = 0;  //!< a performance metric
   uint64_t time_commit1 = 0;  //!< a performance metric
   bool m_auto_remove_logs = true;  //!< whether or not to automatically remove old logs
+
+  HardFork* m_hardfork;
+
 
 public:
 
@@ -699,6 +707,8 @@ public:
    */
   virtual void set_batch_transactions(bool) = 0;
 
+  virtual void block_txn_start(bool readonly=false) = 0;
+  virtual void block_txn_stop() = 0;
   virtual void block_txn_abort() = 0;
 
   // adds a block with the given metadata to the top of the blockchain, returns the new height
@@ -971,6 +981,9 @@ public:
    * @return the current blockchain height
    */
   virtual uint64_t height() const = 0;
+
+
+  virtual void set_hard_fork(HardFork* hf);
 
 
   /**
@@ -1396,6 +1409,22 @@ public:
   virtual bool for_all_outputs(uint64_t amount, const std::function<bool(uint64_t height)> &f) const = 0;
 
 
+  virtual void set_hard_fork_version(uint64_t height, uint8_t version) = 0;
+
+  /**
+   * @brief checks which hardfork version a height is on
+   *
+   * @param height the height
+   *
+   * @return the version
+   */
+  virtual uint8_t get_hard_fork_version(uint64_t height) const = 0;
+
+  /**
+   * @brief delete hard fork info from database
+   */
+  virtual void drop_hard_fork_info() = 0;
+
   /**
    * @brief is BlockchainDB in read-only mode?
    *
@@ -1426,7 +1455,8 @@ public:
 
 BlockchainDB* new_db(const std::string& db_type);
 
+} //namespace CryptoNote
 
-#endif  // BLOCKCHAIN_DB_H
 
 
+#endif // BLOCKCHAINDB_H

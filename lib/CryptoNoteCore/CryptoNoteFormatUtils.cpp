@@ -620,4 +620,20 @@ bool is_valid_decomposed_amount(uint64_t amount) {
   return true;
 }
 
+  bool parse_and_validate_tx_from_blob(const CryptoNote::blobdata& tx_blob, CryptoNote::Transaction& tx, Crypto::Hash& tx_hash, Crypto::Hash& tx_prefix_hash)
+  {
+    const BinaryArray ba = hex_to_bin(tx_blob);
+    bool r = parseAndValidateTransactionFromBinaryArray(ba, tx, tx_hash, tx_prefix_hash);
+    return r;
+  }
+  //---------------------------------------------------------------
+  bool parse_and_validate_tx_from_blob(const CryptoNote::blobdata& tx_blob, CryptoNote::Transaction& tx)
+  {
+    const BinaryArray ba = hex_to_bin(tx_blob);
+    Crypto::Hash tx_hash, tx_prefix_hash;
+    bool r = parseAndValidateTransactionFromBinaryArray(ba, tx, tx_hash, tx_prefix_hash);
+    return r;
+  }
+
+
 }

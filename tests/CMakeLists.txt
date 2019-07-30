@@ -62,7 +62,7 @@ set(QwertycoinTests_CoreTests_LIBS
     Boost::date_time
     Boost::program_options
     Boost::serialization
-    codecov
+    QwertycoinFramework::BlockchainDB
     QwertycoinFramework::Common
     QwertycoinFramework::CryptoNoteCore
     QwertycoinFramework::InProcessNode
@@ -95,7 +95,7 @@ set(QwertycoinTests_CryptoTests_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/CryptoTests/random.c"
 )
 
-set(QwertycoinTests_CryptoTests_LIBS codecov)
+set(QwertycoinTests_CryptoTests_LIBS)
 
 add_executable(QwertycoinTests_CryptoTests ${QwertycoinTests_CryptoTests_SOURCES})
 add_executable(QwertycoinTests::CryptoTests ALIAS QwertycoinTests_CryptoTests)
@@ -117,7 +117,6 @@ set(QwertycoinTests_DifficultyTests_SOURCES
 )
 
 set(QwertycoinTests_DifficultyTests_LIBS
-    codecov
     QwertycoinFramework::Logging
     QwertycoinFramework::CryptoNoteCore
 )
@@ -140,7 +139,6 @@ set(QwertycoinTests_HashTargetTests_SOURCES
 )
 
 set(QwertycoinTests_HashTargetTests_LIBS
-    codecov
     QwertycoinFramework::CryptoNoteCore
 )
 
@@ -162,7 +160,6 @@ set(QwertycoinTests_HashTests_SOURCES
 )
 
 set(QwertycoinTests_HashTests_LIBS
-    codecov
     QwertycoinFramework::Crypto
 )
 
@@ -186,7 +183,6 @@ set(QwertycoinTests_NodeRpcProxyTests_SOURCES
 )
 
 set(QwertycoinTests_NodeRpcProxyTests_LIBS
-    codecov
     QwertycoinFramework::Common
     QwertycoinFramework::Logging
     QwertycoinFramework::NodeRpcProxy
@@ -226,7 +222,6 @@ set(QwertycoinTests_PerformanceTests_SOURCES
 
 set(QwertycoinTests_PerformanceTests_LIBS
     Boost::chrono
-    codecov
     QwertycoinFramework::CryptoNoteCore
     QwertycoinFramework::Logging
 )
@@ -264,7 +259,6 @@ set(QwertycoinTests_SystemTests_SOURCES
 )
 
 set(QwertycoinTests_SystemTests_LIBS
-    codecov
     GTest::main
     QwertycoinFramework::System
 )
@@ -287,7 +281,7 @@ set(QwertycoinTests_TestGenerator_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/TestGenerator/TestGenerator.h"
 )
 
-set(QwertycoinTests_TestGenerator_LIBS codecov)
+set(QwertycoinTests_TestGenerator_LIBS)
 
 add_library(QwertycoinTests_TestGenerator ${QwertycoinTests_TestGenerator_SOURCES})
 add_library(QwertycoinTests::TestGenerator ALIAS QwertycoinTests_TestGenerator)
@@ -356,8 +350,8 @@ set(QwertycoinTests_UnitTests_SOURCES
 )
 
 set(QwertycoinTests_UnitTests_LIBS
-    codecov
     GTest::main
+    QwertycoinFramework::BlockchainDB
     QwertycoinFramework::CryptoNoteCore
     QwertycoinFramework::CryptoNoteProtocol
     QwertycoinFramework::Http

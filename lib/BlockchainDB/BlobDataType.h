@@ -28,82 +28,143 @@
 // 
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#ifndef BLOBDATATYPE_H
-#define BLOBDATATYPE_H
+#pragma once
+
+#include <vector>
+#include <deque>
+#include <list>
+#include <set>
+#include <unordered_set>
+#include <string>
+#include <boost/type_traits/is_integral.hpp>
+#include <boost/type_traits/integral_constant.hpp>
 
 #include "Common/StringTools.h"
-
-#pragma once
+#include "Serialization/BinarySerializationTools.h"
+#include "Common/hex_str.h"
+#include "binary_archive.h"
 
 namespace CryptoNote
 {
-  typedef std::string blobdata;
-}
-/*
-template<class t_object>
-bool t_serializable_object_to_blob(const t_object& to, CryptoNote::blobdata& b_blob)
+typedef std::string blobdata;
+
+namespace serial {
+
+template <class T>
+struct is_blob_type { typedef boost::false_type type; };
+
+template <class T>
+struct is_basic_type { typedef boost::false_type type; };
+
+template<typename F, typename S>
+struct is_basic_type<std::pair<F,S>> { typedef boost::true_type type; };
+template<>
+struct is_basic_type<std::string> { typedef boost::true_type type; };
+
+template <class Archive, class T>
+struct serializer{
+  static bool serialize(Archive &ar, T &v) {
+    return serialize(ar, v, typename boost::is_integral<T>::type(), typename is_blob_type<T>::type(), typename is_basic_type<T>::type());
+  }
+  template<typename A>
+  static bool serialize(Archive &ar, T &v, boost::false_type, boost::true_type, A a) {
+    ar.serialize_blob(&v, sizeof(v));
+    return true;
+  }
+  template<typename A>
+  static bool serialize(Archive &ar, T &v, boost::true_type, boost::false_type, A a) {
+    ar.serialize_int(v);
+    return true;
+  }
+  static bool serialize(Archive &ar, T &v, boost::false_type, boost::false_type, boost::true_type) {
+    return do_serialize(ar, v);
+  }
+  static void serialize_custom(Archive &ar, T &v, boost::true_type) {
+  }
+};
+
+template <class Archive, class T>
+inline bool do_serialize(Archive &ar, T &v)
 {
-  std::stringstream ss;
-  serial::binary_archive<false> ba(ss);
-  std::vector<uint8_t> to_v = hex_to_vec(ss.str());
-  bool r = serial::serialize(ba, to);
-  b_blob = ss.str();
-  return r;
+  return serializer<Archive, T>::serialize(ar, v);
 }
+template <class Archive>
+inline bool do_serialize(Archive &ar, bool &v)
+{
+  ar.serialize_blob(&v, sizeof(v));
+  return true;
+}
+
+namespace detail {
+    /*! \fn do_check_stream_state
+     *
+     * \brief self explanatory
+     */
+    template<class Stream>
+    bool do_check_stream_state(Stream& s, boost::mpl::bool_<true>)
+    {
+      return s.good();
+    }
+    /*! \fn do_check_stream_state
+     *
+     * \brief self explanatory
+     *
+     * \detailed Also checks to make sure that the stream is not at EOF
+     */
+    template<class Stream>
+    bool do_check_stream_state(Stream& s, boost::mpl::bool_<false>)
+    {
+      bool result = false;
+      if (s.good())
+        {
+          std::ios_base::iostate state = s.rdstate();
+          result = EOF == s.peek();
+          s.clear(state);
+        }
+      return result;
+    }
+  }
+
+  /*! \fn check_stream_state
+   *
+   * \brief calls detail::do_check_stream_state for ar
+   */
+  template<class Archive>
+  bool check_stream_state(Archive& ar)
+  {
+    return detail::do_check_stream_state(ar.stream(), typename Archive::is_saving());
+  }
+
+  /*! \fn serialize
+   *
+   * \brief serializes \a v into \a ar
+   */
+  template <class Archive, class T>
+  inline bool serialize(Archive &ar, T &v)
+  {
+    bool r = do_serialize(ar, v);
+    return r && check_stream_state(ar);
+  }
+}
+
+  template<class t_object>
+  bool t_serializable_object_to_blob(const t_object& to, CryptoNote::blobdata& b_blob)
+  {
+    std::stringstream ss;
+    binary_archive<false> ba(ss);
+    bool r = serial::serialize(ba, const_cast<t_object&>(to));
+    b_blob = ss.str();
+    return r;
+  }
   //---------------------------------------------------------------
   template<class t_object>
-  CryptoNote::blobdata t_serializable_object_to_blob(const t_object& to)
+  CryptoNote::BinaryArray t_serializable_object_to_blob(const t_object& to)
   {
-    CryptoNote::blobdata b;
+    CryptoNote::BinaryArray b;
     t_serializable_object_to_blob(to, b);
     return b;
   }
-  //---------------------------------------------------------------
-  CryptoNote::blobdata tx_to_blob(const CryptoNote::Transaction& tx)
-  {
-    return t_serializable_object_to_blob(tx);
-  }
-  //---------------------------------------------------------------
-  bool block_to_blob(const CryptoNote::Block& b, CryptoNote::blobdata& b_blob)
-  {
-    return t_serializable_object_to_blob(b, b_blob);
-  }
-  //---------------------------------------------------------------
-  CryptoNote::blobdata block_to_blob(const CryptoNote::Block& b)
-  {
-    return t_serializable_object_to_blob(b);
-  }
-  //---------------------------------------------------------------
-  bool parse_and_validate_tx_from_blob(const CryptoNote::blobdata& tx_blob, CryptoNote::Transaction& tx, Crypto::Hash& tx_hash, Crypto::Hash& tx_prefix_hash)
-  {
-    CryptoNote::blobdata bd = tx_to_blob(tx);
-    if (bd.empty()) {
-      return false;
-    } else
-       return true;
-  }
-  //---------------------------------------------------------------
-   bool parse_and_validate_block_from_blob(const CryptoNote::blobdata& b_blob, CryptoNote::Block& b)
-  {
-    std::stringstream ss;
-    ss << b_blob;
-    std::vector<uint8_t> vec = hex_to_vec(ss.str());
-    serial::binary_archive<false> ba(ss);
-    bool r = serial::serialize(ba, b);
-    if(!r)
-      return false;
-    return true;
-  }
-  //---------------------------------------------------------------
-  bool parse_and_validate_tx_from_blob(const CryptoNote::blobdata& tx_blob, CryptoNote::Transaction& tx)
-  {
-    std::stringstream ss;
-    ss << tx_blob;
-    serial::binary_archive<false> ba(ss);
-    bool r = serial::serialize(ba, tx);
-    if (!r)
-      return false;
-    return true;
-  }
-*/
-#endif //BLOBDATATYPE_H
+
+
+} // namespace CryptoNote
+

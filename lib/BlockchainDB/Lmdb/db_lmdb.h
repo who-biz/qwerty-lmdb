@@ -134,6 +134,7 @@ struct mdb_txn_safe
   static std::atomic_flag creation_gate;
 };
 
+namespace CryptoNote {
 
 class BlockchainLMDB : public BlockchainDB
 {
@@ -260,15 +261,11 @@ public:
   virtual void batch_stop();
   virtual void batch_abort();
 
-  virtual void block_wtxn_start();
-  virtual void block_wtxn_stop();
   virtual void block_txn_start(bool readonly);
+  virtual void block_txn_stop();
   virtual void block_txn_abort();
-  virtual void block_rxtn_start(bool readonly);
   virtual bool block_rtxn_start(MDB_txn **mtxn, mdb_txn_cursors **mcur) const;
-  virtual void block_txn_start() const;
   virtual void block_rtxn_stop() const;
-  virtual void block_txn_stop() const;
 
   virtual void pop_block(CryptoNote::Block& blk, std::vector<CryptoNote::Transaction>& txs);
 
@@ -319,6 +316,10 @@ private:
   virtual void remove_spent_key(const Crypto::KeyImage& k_image);
 
   uint64_t num_outputs() const;
+
+  virtual void set_hard_fork_version(uint64_t height, uint8_t version);
+  virtual uint8_t get_hard_fork_version(uint64_t height) const;
+  virtual void drop_hard_fork_info();
 
   /**
    * @brief convert a tx output to a blob for storage
@@ -393,4 +394,5 @@ private:
 
 }; // class BlockchainLMDB
 
+} // namespace CryptoNote
 
