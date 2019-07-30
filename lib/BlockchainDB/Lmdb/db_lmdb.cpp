@@ -412,13 +412,13 @@ void BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& block
   CURSOR(block_info)
 
   // this call to mdb_cursor_put will change height()
-/*  MDB_val_copy<CryptoNote::blobdata> blob(blk);
-  CryptoNote::blobdata blob;
-  MDB_val_copy<CryptoNote::blobdata>(blob(blk));
+  const BinaryArray ba = block_to_blob(blk);
+  CryptoNote::blobdata bd = bin_to_hex(ba);
+  MDB_val_copy<CryptoNote::blobdata> blob(bd);
   result = mdb_cursor_put(m_cur_blocks, &key, &blob, MDB_APPEND);
   if (result)
     throw(DB_ERROR(lmdb_error("Failed to add block blob to db transaction: ", result).c_str()));
-*/
+
   mdb_block_info bi;
   bi.bi_height = m_height;
   bi.bi_timestamp = blk.timestamp;
@@ -513,12 +513,13 @@ uint64_t BlockchainLMDB::add_transaction_data(const Crypto::Hash& blk_hash, cons
   result = mdb_cursor_put(m_cur_tx_indices, (MDB_val *)&zerokval, &val_h, 0);
   if (result)
     throw(DB_ERROR(lmdb_error("Failed to add tx data to db transaction: ", result).c_str()));
-/*  CryptoNote::blobdata bd;
-  MDB_val_copy<CryptoNote::blobdata>(blob(tx_to_blob(tx)));
+  const BinaryArray ba = tx_to_blob(tx);
+  CryptoNote::blobdata bd = bin_to_hex(ba);
+  MDB_val_copy<CryptoNote::blobdata> blob(bd);
   result = mdb_cursor_put(m_cur_txs, &val_tx_id, &blob, MDB_APPEND);
   if (result)
     throw(DB_ERROR(lmdb_error("Failed to add tx blob to db transaction: ", result).c_str()));
-*/
+
   return tx_id;
 }
 
@@ -743,8 +744,8 @@ CryptoNote::blobdata BlockchainLMDB::output_to_blob(const CryptoNote::Transactio
 {
   //LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   CryptoNote::blobdata b;
-//  if (!t_serializable_object_to_blob(output, b))
-//    throw(DB_ERROR("Error serializing output to blob"));
+  if (!t_serializable_object_to_blob(output, b))
+    throw(DB_ERROR("Error serializing output to blob"));
   return b;
 }
 
@@ -753,9 +754,8 @@ CryptoNote::TransactionOutput BlockchainLMDB::output_from_blob(const CryptoNote:
   //LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   std::stringstream ss;
   ss << blob;
-//  serial::binary_archive<false> ba(ss);
-  CryptoNote::TransactionOutput o;
-
+  BinaryArray ba = hex_to_bin(ss.str());
+  TransactionOutput o;
 //  if (!serial::serialize(ba, o))
 //    throw(DB_ERROR("Error deserializing tx output blob"));
 
@@ -1168,15 +1168,16 @@ void BlockchainLMDB::add_txpool_tx(const CryptoNote::Transaction &tx, const txpo
     else
       throw(DB_ERROR(lmdb_error("Error adding txpool tx metadata to db transaction: ", result).c_str()));
   }
-/*  CryptoNote::blobdata blob;
-//  MDB_val_copy<CryptoNote::blobdata>tx_val(tx_to_blob(tx));
+  const BinaryArray ba = tx_to_blob(tx);
+  CryptoNote::blobdata bod = bin_to_hex(ba);
+  MDB_val_copy<CryptoNote::blobdata> blob_val(bod);
   if (auto result = mdb_cursor_put(m_cur_txpool_blob, &k, &blob_val, MDB_NODUPDATA)) {
     if (result == MDB_KEYEXIST)
       throw(DB_ERROR("Attempting to add txpool tx blob that's already in the db"));
     else
-      throw(DB_ERROR(lmdb_error("Error adding txpool tx blob to db transaction: ", result).c_str()));*/
+      throw(DB_ERROR(lmdb_error("Error adding txpool tx blob to db transaction: ", result).c_str()));
   }
-
+}
 void BlockchainLMDB::update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t &meta)
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
@@ -1365,8 +1366,8 @@ bool BlockchainLMDB::for_all_txpool_txes(std::function<bool(const Crypto::Hash&,
         throw(DB_ERROR("Failed to find txpool tx blob to match metadata"));
       if (result)
         throw(DB_ERROR(lmdb_error("Failed to enumerate txpool tx blob: ", result).c_str()));
-//      bd.assign(reinterpret_cast<const char*>(b.mv_data), b.mv_size);
-//      passed_bd = &bd;
+      bd.assign(reinterpret_cast<const char*>(b.mv_data), b.mv_size);
+      passed_bd = &bd;
     }
 
     if (!f(txid, meta, passed_bd)) {
@@ -1928,29 +1929,29 @@ output_data_t BlockchainLMDB::get_output_key(const uint64_t &global_index) const
 
   MDB_val_set(val_h, ot->tx_hash);
   get_result = mdb_cursor_get(m_cur_tx_indices, (MDB_val *)&zerokval, &val_h, MDB_GET_BOTH);
- // if (get_result)
- //   throw(DB_ERROR(lmdb_error(std::string("DB error attempting to fetch transaction index from hash ") + epee::string_tools::pod_to_hex(ot->tx_hash) + ": ", get_result).c_str()));
+  if (get_result)
+    throw(DB_ERROR(lmdb_error(std::string("DB error attempting to fetch transaction index from hash ") + podToHex(ot->tx_hash) + ": ", get_result).c_str()));
 
   tx_index *tip = (tx_index *)val_h.mv_data;
   MDB_val_set(val_tx_id, tip->data.tx_id);
   MDB_val result;
   get_result = mdb_cursor_get(m_cur_txs, &val_tx_id, &result, MDB_SET);
-// if (get_result == MDB_NOTFOUND)
-//    throw(TX_DNE(std::string("tx with hash ").append(epee::string_tools::pod_to_hex(ot->tx_hash)).append(" not found in db").c_str()));
+ if (get_result == MDB_NOTFOUND)
+    throw(TX_DNE(std::string("tx with hash ").append(podToHex(ot->tx_hash)).append(" not found in db").c_str()));
   if (get_result)
     throw(DB_ERROR(lmdb_error("DB error attempting to fetch tx from hash", get_result).c_str()));
 
   CryptoNote::blobdata bd;
   bd.assign(reinterpret_cast<char*>(result.mv_data), result.mv_size);
 
-/*  CryptoNote::Transaction tx;
-//  if (!parse_and_validate_tx_from_blob(bd, tx))
-//    throw(DB_ERROR("Failed to parse tx from blob retrieved from the db"));
-*/
-//  const CryptoNote::TransactionOutput tx_output = tx.outputs[ot->local_index];
+  CryptoNote::Transaction tx;
+  if (!parse_and_validate_tx_from_blob(bd, tx))
+    throw(DB_ERROR("Failed to parse tx from blob retrieved from the db"));
+
+  const CryptoNote::TransactionOutput tx_output = tx.outputs[ot->local_index];
   od.unlock_time = tip->data.unlock_time;
   od.height = tip->data.block_id;
-//  od.pubkey = boost::get<CryptoNote::KeyOutput>(tx_output.target).key;
+  od.pubkey = boost::get<CryptoNote::KeyOutput>(tx_output.target).key;
 
   TXN_POSTFIX_RDONLY();
   return od;
@@ -2135,8 +2136,8 @@ bool BlockchainLMDB::for_blocks_range(const uint64_t& h1, const uint64_t& h2, st
     CryptoNote::blobdata bd;
     bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
     CryptoNote::Block b;
-  //  bool r = parse_and_validate_block_from_blob(bd, b);
-  //  if (!r) { return false; }
+    bool r = parse_and_validate_block_from_blob(bd, b);
+    if (!r) { return false; }
     Crypto::Hash hash;
     hash = get_block_hash(b);
     if (!f(height, hash, b)) {
@@ -2187,8 +2188,8 @@ bool BlockchainLMDB::for_all_transactions(std::function<bool(const Crypto::Hash&
     CryptoNote::Transaction tx;
     CryptoNote::blobdata bd;
     bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
-  //  if (!parse_and_validate_tx_from_blob(bd, tx))
-  //    throw(DB_ERROR("Failed to parse tx from blob retrieved from the db"));
+    if (!parse_and_validate_tx_from_blob(bd, tx))
+      throw(DB_ERROR("Failed to parse tx from blob retrieved from the db"));
     if (!f(hash, tx)) {
       fret = false;
       break;
@@ -2992,7 +2993,8 @@ void BlockchainLMDB::migrate_0_1()
     }
 
     MDB_dbi o_txs;
-    CryptoNote::BinaryArray bd;
+    CryptoNote::blobdata bd;
+    CryptoNote::BinaryArray ba;
     CryptoNote::Block b;
     MDB_val hk;
 
@@ -3065,28 +3067,28 @@ void BlockchainLMDB::migrate_0_1()
       } else if (result) {
         throw(DB_ERROR(lmdb_error("Failed to get a record from blocks: ", result).c_str()));
       }
-//      bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
-//      if (!parse_and_validate_block_from_blob(bd, b))
-//        throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
+      bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
+      if (!parse_and_validate_block_from_blob(bd, b))
+        throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
 
       add_transaction(CryptoNote::NULL_HASH, b.baseTransaction);
-/*      for (unsigned int j = 0; j<b.tx_hashes.size(); j++) {
+      for (unsigned int j = 0; j<b.transactionHashes.size(); j++) {
         CryptoNote::Transaction tx;
-        hk.mv_data = &b.txHashes[j];
+        hk.mv_data = &b.transactionHashes[j];
         result = mdb_cursor_get(c_txs, &hk, &v, MDB_SET);
         if (result)
           throw(DB_ERROR(lmdb_error("Failed to get record from txs: ", result).c_str()));
-//        bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
-//        if (!parse_and_validate_tx_from_blob(bd, tx))
-//          throw(DB_ERROR("Failed to parse tx from blob retrieved from the db"));
-        add_transaction(CryptoNote::NULL_HASH, tx, &b.txHashes[j]);
+        bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
+        if (!parse_and_validate_tx_from_blob(bd, tx))
+          throw(DB_ERROR("Failed to parse tx from blob retrieved from the db"));
+        add_transaction(CryptoNote::NULL_HASH, tx, &b.transactionHashes[j]);
         result = mdb_cursor_del(c_txs, 0);
         if (result)
           throw(DB_ERROR(lmdb_error("Failed to get record from txs: ", result).c_str()));
       }
       i++;
       m_height = i;
-    }*/
+    }
     result = mdb_txn_begin(m_env, NULL, 0, txn);
     if (result)
       throw(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
@@ -3101,7 +3103,7 @@ void BlockchainLMDB::migrate_0_1()
     lmdb_db_open(txn, "txs", MDB_INTEGERKEY, m_txs, "Failed to open db handle for txs");
 
     txn.commit();
-  } } while(0);
+  } while(0);
 
   uint32_t version = 1;
   v.mv_data = (void *)&version;

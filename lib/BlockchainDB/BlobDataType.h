@@ -151,20 +151,21 @@ namespace detail {
   bool t_serializable_object_to_blob(const t_object& to, CryptoNote::blobdata& b_blob)
   {
     std::stringstream ss;
-    binary_archive<false> ba(ss);
-    bool r = serial::serialize(ba, const_cast<t_object&>(to));
+    ss << b_blob;
+    BinaryArray ba = hex_to_bin(ss.str());
+//    bool r = serial::serialize(ba, const_cast<t_object&>(to));
     b_blob = ss.str();
-    return r;
+    bool r = b_blob.empty();
+    return !r;
   }
   //---------------------------------------------------------------
   template<class t_object>
   CryptoNote::BinaryArray t_serializable_object_to_blob(const t_object& to)
   {
-    CryptoNote::BinaryArray b;
+    CryptoNote::blobdata b;
     t_serializable_object_to_blob(to, b);
-    return b;
+    CryptoNote::BinaryArray ba = hex_to_bin(b);
+    return ba;
   }
-
-
 } // namespace CryptoNote
 

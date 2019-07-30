@@ -50,7 +50,34 @@ namespace CryptoNote {
     return out;
   }
   //----------------------------------------------------------------
-  std::string bin_to_hex(BinaryArray &input)
+  std::string bin_to_hex(const BinaryArray &input)
+  {
+   //should probably have this return bool so that we can handle errors on false
+    static const char characters[] = "0123456789abcdef";
+    std::string ret(input.size() * 2, 0);
+    char *buffer = const_cast<char *>(ret.data());
+
+    for (const auto &each_byte : input) {
+      *buffer++ = characters[each_byte >> 4];
+      *buffer++ = characters[each_byte & 0x0F];
+    }
+    return ret;
+  }
+  //----------------------------------------------------------------
+  BinaryArray hex_to_bin_nonconst(std::string &input)
+  {
+    CryptoNote::BinaryArray out;
+    size_t len = input.length();
+    for(size_t i = 0; i < len; i += 2) {
+      std::istringstream strm(input.substr(i, 2));
+      uint8_t x;
+      strm >> std::hex >> x;
+      out.push_back(x);
+    }
+    return out;
+  }
+  //----------------------------------------------------------------
+  std::string bin_to_hex_nonconst(BinaryArray &input)
   {
    //should probably have this return bool so that we can handle errors on false
     static const char characters[] = "0123456789abcdef";

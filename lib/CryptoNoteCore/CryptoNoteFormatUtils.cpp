@@ -646,4 +646,26 @@ bool is_valid_decomposed_amount(uint64_t amount) {
     bool r = m_core->handle_incoming_block_blob(ba, bvc, true, true);
     return r;
   }
+  //---------------------------------------------------------------
+  CryptoNote::BinaryArray block_to_blob(const CryptoNote::Block& b)
+  {
+    return t_serializable_object_to_blob(b);
+  }
+  //---------------------------------------------------------------
+  bool block_to_blob(const CryptoNote::Block& b, CryptoNote::blobdata& b_blob)
+  {
+    return t_serializable_object_to_blob(b, b_blob);
+  }
+  //---------------------------------------------------------------
+  CryptoNote::BinaryArray tx_to_blob(const CryptoNote::Transaction& tx)
+  {
+    return t_serializable_object_to_blob(tx);
+  }
+  //---------------------------------------------------------------
+  bool tx_to_blob(const CryptoNote::Transaction& tx, CryptoNote::blobdata& tx_blob)
+  {
+    return t_serializable_object_to_blob(tx, tx_blob);
+  }
+
+
 }

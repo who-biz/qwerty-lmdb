@@ -37,6 +37,8 @@
 namespace CryptoNote {
 
   BinaryArray hex_to_bin(const std::string &input);
-  std::string bin_to_hex(BinaryArray &input);
+  std::string bin_to_hex(const BinaryArray &input);
+  BinaryArray hex_to_bin_nonconst(std::string &input);
+  std::string bin_to_hex_nonconst(BinaryArray &input);
 
 } //namespace CryptoNote
