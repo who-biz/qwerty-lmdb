@@ -147,6 +147,7 @@ endif()
 set(QwertycoinTools_PaymentGateService_LIBS
     Boost::filesystem
     Boost::program_options
+    QwertycoinFramework::BlockchainDB
     QwertycoinFramework::Common
     QwertycoinFramework::CryptoNoteCore
     QwertycoinFramework::InProcessNode

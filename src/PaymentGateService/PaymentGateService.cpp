@@ -48,6 +48,7 @@
 #endif
 
 using namespace PaymentService;
+using namespace CryptoNote;
 
 void changeDirectory(const std::string& path) {
   if (chdir(path.c_str())) {
@@ -170,8 +171,7 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
   log(Logging::INFO) << "Starting Payment Gate with local node";
 
   CryptoNote::Currency currency = currencyBuilder.currency();
-  std::unique_ptr<BlockchainDB> db;
-  CryptoNote::core core(db.release(), currency, NULL, logger, false);
+  CryptoNote::core core(currency, NULL, logger, false);
 
   CryptoNote::CryptoNoteProtocolHandler protocol(currency, *dispatcher, core, NULL, logger);
   CryptoNote::NodeServer p2pNode(*dispatcher, protocol, logger);

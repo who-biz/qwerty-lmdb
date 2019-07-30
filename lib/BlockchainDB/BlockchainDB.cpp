@@ -42,16 +42,15 @@
 using namespace Common;
 using namespace Crypto;
 
-namespace CryptoNote {
-
 static const char *db_types[] = {
   "lmdb", NULL
 };
 
+namespace CryptoNote {
 
 const command_line::arg_descriptor<std::string> arg_db_sync_mode = {
   "db-sync-mode"
-, "Specify sync option, using format [safe|fast|fastest]:[sync|async]:[nblocks_per_sync]." 
+, "Specify sync option, using format [safe|fast|fastest]:[sync|async]:[nblocks_per_sync]."
 , "fast:async:1000"
 };
 const command_line::arg_descriptor<bool> arg_db_salvage  = {
@@ -59,7 +58,6 @@ const command_line::arg_descriptor<bool> arg_db_salvage  = {
 , "Try to salvage a blockchain database if it seems corrupted"
 , false
 };
-
 
 BlockchainDB* new_db(const std::string& db_type)
 {
@@ -255,4 +253,4 @@ void BlockchainDB::fixup()
   batch_stop();
 }
 
-} // namespace CryptoNote
+} //namespace CryptoNote

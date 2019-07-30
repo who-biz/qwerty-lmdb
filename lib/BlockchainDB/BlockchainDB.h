@@ -48,6 +48,7 @@
 #include "BlockchainDB/BlobDataType.h"
 #include "Structures.h"
 
+
 /** \file
  * CryptoNote Blockchain Database Interface
  *
@@ -103,7 +104,9 @@
  *   OUTPUT_EXISTS
  *   KEY_IMAGE_EXISTS
  */
+namespace CryptoNote {
 
+extern const command_line::arg_descriptor<std::string> arg_db_type;
 extern const command_line::arg_descriptor<std::string> arg_db_sync_mode;
 extern const command_line::arg_descriptor<bool, false> arg_db_salvage;
 
@@ -293,12 +296,9 @@ class KEY_IMAGE_EXISTS : public DB_EXCEPTION
  * a DB_EXCEPTION which adequately conveys the issue.
  */
 
-namespace CryptoNote {
-
 class BlockchainDB
 {
 
-friend class BlockchainLMDB;
 private:
   /*********************************************************************
    * private virtual members
@@ -1456,7 +1456,5 @@ public:
 BlockchainDB* new_db(const std::string& db_type);
 
 } //namespace CryptoNote
-
-
 
 #endif // BLOCKCHAINDB_H

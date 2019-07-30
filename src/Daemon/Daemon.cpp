@@ -26,6 +26,7 @@
 
 #include "DaemonCommandsHandler.h"
 
+#include "BlockchainDB/BlockchainDB.h"
 #include "BlockchainDB/DBTypes.h"
 #include "Common/SignalHandler.h"
 #include "Common/StringTools.h"
@@ -59,7 +60,6 @@ namespace po = boost::program_options;
 
 namespace
 {
-  const command_line::arg_descriptor<std::string> arg_db_type     = {"db-type", "Specify database type", ""};
   const command_line::arg_descriptor<std::string> arg_config_file = {"config-file", "Specify configuration file", std::string(CryptoNote::CRYPTONOTE_NAME) + ".conf"};
   const command_line::arg_descriptor<bool>        arg_os_version  = {"os-version", ""};
   const command_line::arg_descriptor<std::string> arg_log_file    = {"log-file", "", ""};
@@ -264,7 +264,7 @@ int main(int argc, char* argv[])
       return 1;
     }
     CryptoNote::Currency currency = currencyBuilder.currency();
-    CryptoNote::core ccore(db, currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
+    CryptoNote::core ccore(currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
 
 	bool disable_checkpoints = command_line::get_arg(vm, arg_disable_checkpoints);
 	if (!disable_checkpoints) {
