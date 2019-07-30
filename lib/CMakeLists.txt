@@ -853,7 +853,7 @@ if(BUILD_WITH_COVERAGE AND (${CMAKE_BUILD_TYPE} MATCHES Debug))
 
     # Enable code-coverage settings for each library
     foreach(lib ${QwertycoinFramework_LIBS})
-        target_link_libraries(${lib} PUBLIC codecov)
+        target_link_libraries(${lib} PUBLIC)
     endforeach()
 endif()
 
