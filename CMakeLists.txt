@@ -61,6 +61,7 @@ include(external/Threads)
 
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/lib")
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/external/db_drivers")
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/external/Backward")
 
 if(BUILD_WITH_TOOLS)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/src")
@@ -75,4 +76,13 @@ if(BUILD_WITH_TESTS)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/tests")
 endif()
 
+find_library(BFD_LIBRARY bfd)
+if(BFD_LIBRARY)
+  set(BFD_LIBRARY "${BFD_LIBRARY}")
+  message(STATUS "Found BFD_LIBRARY located at ${BFD_LIBRARY}")
+  include_directories(BFD_INCLUDE_DIR /usr/include)
+endif()
+if(NOT BFD_LIBRARY)
+  message(FATAL_ERROR "Could not find required libbfd from binutils package.")
+endif()
 

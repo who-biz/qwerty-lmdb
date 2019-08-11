@@ -56,6 +56,7 @@ set(QwertycoinTools_Daemon_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/Daemon/Daemon.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/Daemon/DaemonCommandsHandler.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/Daemon/DaemonCommandsHandler.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../external/Backward/backward.cpp"
 )
 
 if(WIN32)
@@ -63,6 +64,8 @@ if(WIN32)
         "${CMAKE_CURRENT_LIST_DIR}/BinaryInfo/daemon.rc"
     )
 endif()
+
+find_package(Backward)
 
 set(QwertycoinTools_Daemon_LIBS
     Boost::filesystem
@@ -79,8 +82,9 @@ set(QwertycoinTools_Daemon_LIBS
 
 add_executable(QwertycoinTools_Daemon ${QwertycoinTools_Daemon_SOURCES})
 add_executable(QwertycoinTools::Daemon ALIAS QwertycoinTools_Daemon)
+add_backward(QwertycoinTools_Daemon)
 target_include_directories(QwertycoinTools_Daemon PRIVATE ${QwertycoinTools_INCLUDE_DIRS})
-target_link_libraries(QwertycoinTools_Daemon PRIVATE ${QwertycoinTools_Daemon_LIBS})
+target_link_libraries(QwertycoinTools_Daemon PRIVATE ${QwertycoinTools_Daemon_LIBS} PUBLIC Backward::Backward)
 set_target_properties(QwertycoinTools_Daemon PROPERTIES OUTPUT_NAME "qwertycoind")
 
 # QwertycoinTools::Miner
