@@ -168,10 +168,12 @@ void PaymentGateService::runInProcess(Logging::LoggerRef& log) {
     }
   }
 
+  std::unique_ptr<BlockchainDB> db(new_db(Tools::getDefaultDbType()));
+
   log(Logging::INFO) << "Starting Payment Gate with local node";
 
   CryptoNote::Currency currency = currencyBuilder.currency();
-  CryptoNote::core core(currency, NULL, logger, false);
+  CryptoNote::core core(db.release(), currency, NULL, logger, false);
 
   CryptoNote::CryptoNoteProtocolHandler protocol(currency, *dispatcher, core, NULL, logger);
   CryptoNote::NodeServer p2pNode(*dispatcher, protocol, logger);

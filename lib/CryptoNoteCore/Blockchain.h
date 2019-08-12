@@ -86,8 +86,8 @@ public:
     virtual bool haveSpentKeyImages(const CryptoNote::Transaction& tx) override;
     virtual bool checkTransactionSize(size_t blobSize) override;
 
-    bool init() { return init(Tools::getDefaultDataDirectory(), true); }
-    bool init(const std::string& config_folder, bool load_existing);
+    bool init() { return init(Tools::getDefaultDataDirectory(), Tools::getDefaultDbType(), true); }
+    bool init(const std::string& config_folder, const std::string& db_type, bool load_existing);
     bool deinit();
 
     bool getLowerBound(uint64_t timestamp, uint64_t startOffset, uint32_t& height);
@@ -222,18 +222,18 @@ public:
 
     void safesyncmode(const bool onoff);
 
-    const BlockchainDB& get_db() const
+/*    const BlockchainDB& get_db() const
     {
-      return *m_db;
-    }
+      return(*m_db.release());
+    }*/
 
     BlockchainDB& get_db()
     {
-      return *m_db;
+      return(*m_db.release());
     }
 
 private:
-    BlockchainDB *m_db;
+    std::unique_ptr<BlockchainDB> m_db;
 
     struct MultisignatureOutputUsage {
       TransactionIndex transactionIndex;

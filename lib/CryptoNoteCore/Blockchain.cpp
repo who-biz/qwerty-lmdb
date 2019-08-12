@@ -321,9 +321,9 @@ private:
 };
 
 
-Blockchain::Blockchain(BlockchainDB* dbp,const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
+Blockchain::Blockchain(BlockchainDB* db,const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
 logger(logger, "Blockchain"),
-m_db(dbp),
+m_db(db),
 m_currency(currency),
 m_tx_pool(tx_pool),
 m_current_block_cumul_sz_limit(0),
@@ -427,7 +427,7 @@ uint32_t Blockchain::getCurrentBlockchainHeight() {
   return static_cast<uint32_t>(m_blocks.size());
 }
 
-bool Blockchain::init(const std::string& config_folder, bool load_existing) {
+bool Blockchain::init(const std::string& config_folder, const std::string& db_type, bool load_existing) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   if (!config_folder.empty() && !Tools::create_directories_if_necessary(config_folder)) {
     logger(ERROR, BRIGHT_RED) << "Failed to create data directory: " << m_config_folder;
@@ -435,6 +435,11 @@ bool Blockchain::init(const std::string& config_folder, bool load_existing) {
   }
 
   m_config_folder = config_folder;
+
+  std::unique_ptr<BlockchainDB> db(new_db(db_type));
+
+  if (db == nullptr) {
+    logger(ERROR, BRIGHT_RED) << "Attempted to init BlockchainDB with null DB, using BlockIndexes instead";
 
   if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, m_currency.blockIndexesFileName()), 1024)) {
     return false;
@@ -457,7 +462,8 @@ bool Blockchain::init(const std::string& config_folder, bool load_existing) {
     m_blocks.clear();
   }
 
-  if (m_blocks.empty()) {
+  if (!db->height())
+  {
     logger(INFO, BRIGHT_WHITE)
       << "Blockchain not loaded, generating genesis block.";
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
@@ -542,7 +548,7 @@ bool Blockchain::init(const std::string& config_folder, bool load_existing) {
     << " time ago, current difficulty: " << getDifficultyForNextBlock();
   return true;
 }
-
+}
 void Blockchain::rebuildCache() {
   std::chrono::steady_clock::time_point timePoint = std::chrono::steady_clock::now();
   m_blockIndex.clear();

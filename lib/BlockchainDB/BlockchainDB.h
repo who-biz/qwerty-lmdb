@@ -1396,7 +1396,7 @@ public:
    */
   void set_auto_remove_logs(bool auto_remove) { m_auto_remove_logs = auto_remove; }
 
-  bool m_open;  //!< Whether or not the BlockchainDB is open/ready for use
+  bool m_open = false;  //!< Whether or not the BlockchainDB is open/ready for use
 
 };  // class BlockchainDB
 

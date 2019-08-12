@@ -21,6 +21,7 @@
 #include <boost/program_options.hpp>
 #include <boost/serialization/variant.hpp>
 #include "CryptoNoteCore/CoreConfig.h"
+#include "BlockchainDB/BlockchainDB.h"
 
 #include "Common/CommandLine.h"
 #include "Common/ConsoleTools.h"
@@ -38,6 +39,7 @@
 #include <Logging/LoggerGroup.h>
 #include <Logging/ConsoleLogger.h>
 
+#include <memory>
 
 namespace concolor
 {
@@ -414,9 +416,10 @@ inline bool do_replay_events(std::vector<test_event_entry>& events, t_test_class
   Logging::ConsoleLogger logger;
   CryptoNote::CoreConfig coreConfig;
   coreConfig.init(vm);
+  std::unique_ptr<CryptoNote::BlockchainDB> db;
   CryptoNote::MinerConfig emptyMinerConfig;
   CryptoNote::cryptonote_protocol_stub pr; //TODO: stub only for this kind of test, make real validation of relayed objects
-  CryptoNote::core c(validator.currency(), &pr, logger, false);
+  CryptoNote::core c(db.release(), validator.currency(), &pr, logger, false);
   if (!c.init(coreConfig, emptyMinerConfig, false))
   {
     std::cout << concolor::magenta << "Failed to init core" << concolor::normal << std::endl;

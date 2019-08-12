@@ -77,11 +77,12 @@ private:
 };
 
 core::core(
+    BlockchainDB* db,
     const Currency &currency,
     i_cryptonote_protocol *pprotocol,
     Logging::ILogger &logger,
     bool blockchainIndexesEnabled)
-    : m_db(),
+    : m_db(db),
       m_currency(currency),
       logger(logger, "core"),
       m_mempool(currency, m_blockchain, *this, m_timeProvider, logger, blockchainIndexesEnabled),
@@ -187,13 +188,14 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
       {
         logger(ERROR, BRIGHT_RED) << "Found old-style blockchain.bin in " << old_files.string();
         logger(ERROR, BRIGHT_RED) << "Qwertycoin now uses a new format. Remove blockchain.bin to start syncing";
+        return false;
       }
     }
     catch (std::exception &e) { logger(ERROR, BRIGHT_RED) << "Exception caught in Core init: " << e.what(); }
 
     if (m_db_type == "lmdb")
     {
-      folder /= m_db_type;
+      folder /= "lmdb";
     }
       logger(INFO, WHITE) << "Loading blockchain from folder " << folder.string() << " ...";
 
@@ -261,6 +263,12 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
           if (*endptr == '\0')
             blocks_per_sync = bps;
         }
+
+        std::unique_ptr<BlockchainDB> db(new_db(m_db_type));
+        BlockchainDB* m_db = db.release();
+        m_db->open(filename, db_flags);
+        if(!m_db->m_open)
+          return false;
       }
       catch (const DB_ERROR& e)
       {
@@ -269,7 +277,16 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
       }
     }
 
-    r = m_blockchain.init(m_config_folder, load_existing);
+    std::unique_ptr<BlockchainDB> db(new_db("lmdb"));
+    if (db == NULL)
+    {
+      logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
+      return false;
+    }
+
+
+
+    r = m_blockchain.init(folder.string(), "lmdb", load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;

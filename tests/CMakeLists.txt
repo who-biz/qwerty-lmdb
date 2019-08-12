@@ -58,11 +58,14 @@ set(QwertycoinTests_CoreTests_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/CoreTests/double_spend.inl"
 )
 
+find_package(Backward)
+
 set(QwertycoinTests_CoreTests_LIBS
     Boost::date_time
     Boost::program_options
     Boost::serialization
     QwertycoinFramework::BlockchainDB
+    QwertycoinFramework::LMDB
     QwertycoinFramework::Common
     QwertycoinFramework::CryptoNoteCore
     QwertycoinFramework::InProcessNode
@@ -70,6 +73,9 @@ set(QwertycoinTests_CoreTests_LIBS
     QwertycoinFramework::Serialization
     QwertycoinFramework::System
     QwertycoinTests::TestGenerator
+    Backward::Backward
+    ${BFD_LIBRARY}
+    ${DWARF_LIBRARY}
 )
 
 add_executable(QwertycoinTests_CoreTests ${QwertycoinTests_CoreTests_SOURCES})

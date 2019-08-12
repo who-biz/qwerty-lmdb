@@ -349,7 +349,7 @@ std::string get_nix_version_display_string()
 
 std::string getDefaultDbType()
 {
- std::string ret = "";
+ std::string ret = "lmdb";
  return ret;
 }
 

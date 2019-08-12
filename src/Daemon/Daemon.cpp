@@ -261,8 +261,10 @@ int main(int argc, char* argv[])
       std::cout << "GENESIS_COINBASE_TX_HEX constant has an incorrect value. Please launch: " << CryptoNote::CRYPTONOTE_NAME << "d --" << arg_print_genesis_tx.name;
       return 1;
     }
+    std::unique_ptr<BlockchainDB> db(new_db(Tools::getDefaultDbType()));
     CryptoNote::Currency currency = currencyBuilder.currency();
-    CryptoNote::core ccore(currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
+    CryptoNote::BlockchainDB* m_db = db.release();
+    CryptoNote::core ccore(m_db, currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
 
 	bool disable_checkpoints = command_line::get_arg(vm, arg_disable_checkpoints);
 	if (!disable_checkpoints) {
@@ -331,6 +333,7 @@ int main(int argc, char* argv[])
     }
     logger(INFO) << "P2p server initialized OK";
 
+    m_db->is_open();
 
     //logger(INFO) << "Initializing core rpc server...";
     //if (!rpc_server.init(vm)) {
@@ -340,8 +343,25 @@ int main(int argc, char* argv[])
     // logger(INFO, BRIGHT_GREEN) << "Core rpc server initialized OK on port: " << rpc_server.get_binded_port();
 
     // initialize core here
+    bool load_existing = false;
+    boost::filesystem::path folder(coreConfig.configFolder);
+    r = Tools::getDefaultDbType() == "lmdb";
+    if (!r) {
+      if (boost::filesystem::exists(folder / "blockindexes.bin"))
+      load_existing = true;
+    }
+    else if (!r)
+    {
+      boost::filesystem::path db_folder = folder / "lmdb";
+      if (boost::filesystem::exists(db_folder / "data.mdb"))
+      {
+        load_existing = true;
+      }
+    }
+
+
     logger(INFO) << "Initializing core...";
-    if (!ccore.init(coreConfig, minerConfig, true)) {
+    if (!ccore.init(coreConfig, minerConfig, load_existing)) {
       logger(ERROR, BRIGHT_RED) << "Failed to initialize core";
       return 1;
     }

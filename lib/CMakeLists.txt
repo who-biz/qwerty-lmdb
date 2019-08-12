@@ -337,10 +337,12 @@ set(QwertycoinFramework_CryptoNoteCore_LIBS
     Boost::program_options
     Boost::thread
     sparsehash::sparsehash
+    QwertycoinFramework::BlockchainDB
     QwertycoinFramework::BlockchainExplorer
     QwertycoinFramework::Common
     QwertycoinFramework::Crypto
     QwertycoinFramework::Logging
+    QwertycoinFramework::LMDB
     QwertycoinFramework::Serialization
 )
 
