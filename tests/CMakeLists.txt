@@ -5,6 +5,8 @@ set(QwertycoinTests_INCLUDE_DIRS
 
 # QwertycoinTests
 
+find_package(Backward)
+
 add_custom_target(QwertycoinTests)
 add_dependencies(QwertycoinTests
     QwertycoinTests::CoreTests
@@ -56,9 +58,8 @@ set(QwertycoinTests_CoreTests_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/CoreTests/Upgrade.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/CoreTests/Upgrade.h"
     "${CMAKE_CURRENT_LIST_DIR}/CoreTests/double_spend.inl"
+    ${BACKWARD_ENABLE}
 )
-
-find_package(Backward)
 
 set(QwertycoinTests_CoreTests_LIBS
     Boost::date_time
@@ -75,7 +76,6 @@ set(QwertycoinTests_CoreTests_LIBS
     QwertycoinTests::TestGenerator
     Backward::Backward
     ${BFD_LIBRARY}
-    ${DWARF_LIBRARY}
 )
 
 add_executable(QwertycoinTests_CoreTests ${QwertycoinTests_CoreTests_SOURCES})
@@ -353,6 +353,7 @@ set(QwertycoinTests_UnitTests_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/TransfersObserver.h"
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/UnitTestsUtils.h"
     "${CMAKE_CURRENT_LIST_DIR}/UnitTests/main.cpp"
+    ${BACKWARD_ENABLE}
 )
 
 set(QwertycoinTests_UnitTests_LIBS
@@ -369,10 +370,11 @@ set(QwertycoinTests_UnitTests_LIBS
     QwertycoinTests::TestGenerator
 )
 
-add_executable(QwertycoinTests_UnitTests ${QwertycoinTests_UnitTests_SOURCES})
+add_executable(QwertycoinTests_UnitTests ${QwertycoinTests_UnitTests_SOURCES} ${BACKWARD_ENABLE})
 add_executable(QwertycoinTests::UnitTests ALIAS QwertycoinTests_UnitTests)
 target_include_directories(QwertycoinTests_UnitTests PRIVATE ${QwertycoinTests_INCLUDE_DIRS})
-target_link_libraries(QwertycoinTests_UnitTests PRIVATE ${QwertycoinTests_UnitTests_LIBS})
+target_link_libraries(QwertycoinTests_UnitTests PRIVATE ${QwertycoinTests_UnitTests_LIBS} PUBLIC Backward::Backward)
+add_backward(QwertycoinTests_UnitTests)
 set_target_properties(QwertycoinTests_UnitTests PROPERTIES OUTPUT_NAME "unit_tests")
 
 add_test(

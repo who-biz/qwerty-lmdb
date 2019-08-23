@@ -640,10 +640,11 @@ bool is_valid_decomposed_amount(uint64_t amount) {
   {
     std::stringstream ss;
     ss << b_blob;
-    BinaryArray ba = hex_to_bin(ss.str());
+    const BinaryArray ba = hex_to_bin(ss.str());
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
-    core* m_core;
-    bool r = m_core->handle_incoming_block_blob(ba, bvc, true, true);
+    Blockchain* m_blockchain;
+    bool r = fromBinaryArray(b, ba);
+//    r = m_blockchain->addNewBlock(bl, bvc);
     return r;
   }
   //---------------------------------------------------------------
