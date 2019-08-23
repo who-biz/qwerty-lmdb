@@ -222,18 +222,20 @@ public:
 
     void safesyncmode(const bool onoff);
 
-/*    const BlockchainDB& get_db() const
+    BlockchainDB* m_db;
+
+
+    const BlockchainDB& get_db() const
     {
-      return(*m_db.release());
-    }*/
+      return *m_db;
+    }
 
     BlockchainDB& get_db()
     {
-      return(*m_db.release());
+      return *m_db ;
     }
 
 private:
-    std::unique_ptr<BlockchainDB> m_db;
 
     struct MultisignatureOutputUsage {
       TransactionIndex transactionIndex;
@@ -304,6 +306,7 @@ private:
 
     friend class BlockCacheSerializer;
     friend class BlockchainIndicesSerializer;
+    HardFork *m_hardfork;
 
     Blocks m_blocks;
     CryptoNote::BlockIndex m_blockIndex;

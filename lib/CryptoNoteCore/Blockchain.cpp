@@ -324,6 +324,7 @@ private:
 Blockchain::Blockchain(BlockchainDB* db,const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
 logger(logger, "Blockchain"),
 m_db(db),
+m_hardfork(NULL),
 m_currency(currency),
 m_tx_pool(tx_pool),
 m_current_block_cumul_sz_limit(0),
@@ -438,29 +439,47 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
   std::unique_ptr<BlockchainDB> db(new_db(db_type));
 
-  if (db == nullptr) {
+  if (db == NULL) {
     logger(ERROR, BRIGHT_RED) << "Attempted to init BlockchainDB with null DB, using BlockIndexes instead";
   }
+  if (!db->is_open())
+  {
+   logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
+   return false;
+  }
+
+  if (m_hardfork == nullptr)
+  {
+    m_hardfork = new HardFork(*db, 1, 0);
+  }
+
+  m_hardfork->init();
+
+  m_db->set_hard_fork(m_hardfork);
 
   if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, m_currency.blockIndexesFileName()), 1024)) {
     return false;
   }
 
-  if (load_existing && !m_blocks.empty()) {
-    logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
-    BlockCacheSerializer loader(*this, get_block_hash(m_blocks.back().bl), logger.getLogger());
-    loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
+  if (db->get_db_name() != "lmdb")
+  {
 
-    if (!loader.loaded()) {
-      logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
-      rebuildCache();
-    }
+    if (load_existing && !m_blocks.empty()) {
+      logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
+      BlockCacheSerializer loader(*this, get_block_hash(m_blocks.back().bl), logger.getLogger());
+      loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
 
-    if (m_blockchainIndexesEnabled) {
-      loadBlockchainIndices();
+      if (!loader.loaded()) {
+        logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
+        rebuildCache();
+      }
+
+      if (m_blockchainIndexesEnabled) {
+        loadBlockchainIndices();
+      }
+    } else {
+      m_blocks.clear();
     }
-  } else {
-    m_blocks.clear();
   }
 
   if (!db->height())

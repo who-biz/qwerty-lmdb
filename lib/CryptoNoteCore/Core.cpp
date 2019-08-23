@@ -169,10 +169,20 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
         return false;
     }
 
+
     std::string m_db_type = config.dbType;
     std::string db_sync_mode = config.dbSyncMode;
 
     boost::filesystem::path folder(m_config_folder);
+
+
+    std::unique_ptr<BlockchainDB> db(new_db(m_db_type));
+
+
+    if(db == NULL) {
+      logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
+      return false;
+    }
 
     // make sure the data directory exists, and try to lock it
     bool z = boost::filesystem::exists(folder) || boost::filesystem::create_directories(folder);
@@ -193,16 +203,16 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
     }
     catch (std::exception &e) { logger(ERROR, BRIGHT_RED) << "Exception caught in Core init: " << e.what(); }
 
-    if (m_db_type == "lmdb")
+    if (db->get_db_name() == "lmdb")
     {
-      folder /= "lmdb";
+      folder /= db->get_db_name();
     }
       logger(INFO, WHITE) << "Loading blockchain from folder " << folder.string() << " ...";
 
+    const std::string filename = folder.string();
 
-    if (m_db_type == "lmdb")
+    if (db->get_db_name() == "lmdb")
     {
-      const std::string filename = folder.string();
       // default to fast:async:1
       blockchain_db_sync_mode sync_mode = db_default_sync;
       uint64_t blocks_per_sync = 1;
@@ -264,10 +274,8 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
             blocks_per_sync = bps;
         }
 
-        std::unique_ptr<BlockchainDB> db(new_db(m_db_type));
-        BlockchainDB* m_db = db.release();
-        m_db->open(filename, db_flags);
-        if(!m_db->m_open)
+        db->open(filename, db_flags);
+        if(!db->m_open)
           return false;
       }
       catch (const DB_ERROR& e)
@@ -277,16 +285,8 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
       }
     }
 
-    std::unique_ptr<BlockchainDB> db(new_db("lmdb"));
-    if (db == NULL)
-    {
-      logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
-      return false;
-    }
 
-
-
-    r = m_blockchain.init(folder.string(), "lmdb", load_existing);
+    r = m_blockchain.init(folder.string(), db->get_db_name(), load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;

@@ -348,7 +348,7 @@ int main(int argc, char* argv[])
     r = Tools::getDefaultDbType() == "lmdb";
     if (!r) {
       if (boost::filesystem::exists(folder / "blockindexes.bin"))
-      load_existing = true;
+        load_existing = true;
     }
     else if (!r)
     {
@@ -362,8 +362,6 @@ int main(int argc, char* argv[])
 
     logger(INFO) << "Initializing core...";
     if (!ccore.init(coreConfig, minerConfig, load_existing)) {
-      logger(ERROR, BRIGHT_RED) << "Failed to initialize core";
-      return 1;
     }
     logger(INFO) << "Core initialized OK";
 

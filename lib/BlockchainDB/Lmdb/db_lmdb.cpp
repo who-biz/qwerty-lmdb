@@ -61,6 +61,7 @@ using namespace CryptoNote;
 
 // Increase when the DB structure changes
 #define VERSION 1
+namespace {
 
 /*template <typename T>
 inline void throw0(const T &e)
@@ -193,8 +194,6 @@ const char* const LMDB_PROPERTIES = "properties";
 const char zerokey[8] = {0};
 const MDB_val zerokval = { sizeof(zerokey), (void *)zerokey };
 
-class BlockchainDB;
-
 const std::string lmdb_error(const std::string& error_string, int mdb_res)
 {
   const std::string full_string = error_string + mdb_strerror(mdb_res);
@@ -204,11 +203,10 @@ const std::string lmdb_error(const std::string& error_string, int mdb_res)
 inline void lmdb_db_open(MDB_txn* txn, const char* name, int flags, MDB_dbi& dbi, const std::string& error_string)
 {
   if (auto res = mdb_dbi_open(txn, name, flags, &dbi))
-    throw(DB_OPEN_FAILURE((lmdb_error(error_string + " : ", res) + std::string(" - you may want to start with --db-salvage")).c_str()));
+    throw(CryptoNote::DB_OPEN_FAILURE((lmdb_error(error_string + " : ", res) + std::string(" - you may want to start with --db-salvage")).c_str()));
 }
 
-inline int lmdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned int flags, MDB_txn **txn);
-
+} //anonymous namespace
 #define CURSOR(name) \
   if (!m_cur_ ## name) { \
     int result = mdb_cursor_open(*m_write_txn, m_ ## name, &m_cur_ ## name); \
@@ -1046,6 +1044,8 @@ void BlockchainLMDB::reset()
     throw(DB_ERROR(lmdb_error("Failed to drop m_block_info: ", result).c_str()));
   if (auto result = mdb_drop(txn, m_block_heights, 0))
     throw(DB_ERROR(lmdb_error("Failed to drop m_block_heights: ", result).c_str()));
+  if (auto result = mdb_drop(txn, m_txs, 0))
+    throw(DB_ERROR(lmdb_error("Failed to drop m_txs: ", result).c_str()));
   if (auto result = mdb_drop(txn, m_tx_indices, 0))
     throw(DB_ERROR(lmdb_error("Failed to drop m_tx_indices: ", result).c_str()));
   if (auto result = mdb_drop(txn, m_tx_outputs, 0))
@@ -1056,8 +1056,16 @@ void BlockchainLMDB::reset()
     throw(DB_ERROR(lmdb_error("Failed to drop m_output_amounts: ", result).c_str()));
   if (auto result = mdb_drop(txn, m_spent_keys, 0))
     throw(DB_ERROR(lmdb_error("Failed to drop m_spent_keys: ", result).c_str()));
+  (void)mdb_drop(txn, m_hf_starting_heights, 0); // this one is dropped in new code
+  if (auto result = mdb_drop(txn, m_hf_versions, 0))
+    throw(DB_ERROR(lmdb_error("Failed to drop m_hf_versions: ", result).c_str()));
   if (auto result = mdb_drop(txn, m_properties, 0))
     throw(DB_ERROR(lmdb_error("Failed to drop m_properties: ", result).c_str()));
+  // init with current version
+  MDB_val_copy<const char*> k("version");
+  MDB_val_copy<uint32_t> v(VERSION);
+  if (auto result = mdb_put(txn, m_properties, &k, &v, 0))
+    throw(DB_ERROR(lmdb_error("Failed to write version to database: ", result).c_str()));
 
   txn.commit();
   m_cum_size = 0;
@@ -2544,6 +2552,10 @@ std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> BlockchainLMDB::get
   return histogram;
 }
 
+void BlockchainLMDB::check_hard_fork_info()
+{
+}
+
 void BlockchainLMDB::drop_hard_fork_info()
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
@@ -2585,6 +2597,10 @@ uint8_t BlockchainLMDB::get_hard_fork_version(uint64_t height) const
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
 
+  if ( height == 0 ) {
+    const uint8_t version = 1;
+    return version; }
+
   TXN_PREFIX_RDONLY();
   RCURSOR(hf_versions);
 
@@ -2616,7 +2632,7 @@ void BlockchainLMDB::fixup()
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   // Always call parent as well
-  BlockchainLMDB::fixup();
+  BlockchainDB::fixup();
 }
 
 #define RENAME_DB(name) \
@@ -2879,17 +2895,26 @@ void BlockchainLMDB::migrate_0_1()
   } while(0);
 
   do {
+    MDB_dbi o_hfv;
 
     unsigned int flags;
     result = mdb_txn_begin(m_env, NULL, 0, txn);
     if (result)
       throw(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
+    result = mdb_dbi_flags(txn, m_hf_versions, &flags);
+    if (result)
+      throw(DB_ERROR(lmdb_error("Failed to retrieve hf_versions flags: ", result).c_str()));
     /* if the flags are what we expect, this table has already been migrated */
     if (flags & MDB_INTEGERKEY) {
       txn.abort();
       //Logger(INFO) << "  hf_versions already migrated";
       break;
     }
+    /* the hf_versions table name is the same but the old version and new version
+     * have incompatible DB flags. Create a new table with the right flags.
+     */
+    o_hfv = m_hf_versions;
+    lmdb_db_open(txn, "hf_versionr", MDB_INTEGERKEY | MDB_CREATE, m_hf_versions, "Failed to open db handle for hf_versionr");
 
     MDB_cursor *c_old, *c_cur;
     i = 0;
@@ -2903,8 +2928,15 @@ void BlockchainLMDB::migrate_0_1()
           if (result)
             throw(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
         }
+        result = mdb_cursor_open(txn, m_hf_versions, &c_cur);
+        if (result)
+          throw(DB_ERROR(lmdb_error("Failed to open a cursor for spent_keyr: ", result).c_str()));
+        result = mdb_cursor_open(txn, o_hfv, &c_old);
+        if (result)
+          throw(DB_ERROR(lmdb_error("Failed to open a cursor for spent_keys: ", result).c_str()));
         if (!i) {
           MDB_stat ms;
+          mdb_stat(txn, m_hf_versions, &ms);
           i = ms.ms_entries;
         }
       }
@@ -2913,12 +2945,27 @@ void BlockchainLMDB::migrate_0_1()
         txn.commit();
         break;
       }
+      else if (result)
+        throw(DB_ERROR(lmdb_error("Failed to get a record from hf_versions: ", result).c_str()));
+      result = mdb_cursor_put(c_cur, &k, &v, MDB_APPEND);
+      if (result)
+        throw(DB_ERROR(lmdb_error("Failed to put a record into hf_versionr: ", result).c_str()));
+      result = mdb_cursor_del(c_old, 0);
+      if (result)
+        throw(DB_ERROR(lmdb_error("Failed to delete a record from hf_versions: ", result).c_str()));
+      i++;
     }
 
     result = mdb_txn_begin(m_env, NULL, 0, txn);
     if (result)
       throw(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
     /* Delete the old table */
+    result = mdb_drop(txn, o_hfv, 1);
+    if (result)
+      throw(DB_ERROR(lmdb_error("Failed to delete old hf_versions table: ", result).c_str()));
+    RENAME_DB("hf_versionr");
+    mdb_dbi_close(m_env, m_hf_versions);
+    lmdb_db_open(txn, "hf_versions", MDB_INTEGERKEY, m_hf_versions, "Failed to open db handle for hf_versions");
 
     txn.commit();
   } while(0);
