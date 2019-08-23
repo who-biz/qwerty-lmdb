@@ -440,6 +440,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
   if (db == nullptr) {
     logger(ERROR, BRIGHT_RED) << "Attempted to init BlockchainDB with null DB, using BlockIndexes instead";
+  }
 
   if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, m_currency.blockIndexesFileName()), 1024)) {
     return false;
@@ -548,7 +549,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     << " time ago, current difficulty: " << getDifficultyForNextBlock();
   return true;
 }
-}
+
 void Blockchain::rebuildCache() {
   std::chrono::steady_clock::time_point timePoint = std::chrono::steady_clock::now();
   m_blockIndex.clear();
