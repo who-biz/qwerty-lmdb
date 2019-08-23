@@ -25,7 +25,7 @@
 
 namespace CryptoNote {
   Crypto::Hash BlockIndex::getBlockId(uint32_t height) const {
-    assert(height < m_container.size());
+//    assert(height < m_container.size());
 
     return m_container[static_cast<size_t>(height)];
   }
@@ -56,7 +56,7 @@ namespace CryptoNote {
   }
 
   std::vector<Crypto::Hash> BlockIndex::buildSparseChain(const Crypto::Hash& startBlockId) const {
-    assert(m_index.count(startBlockId) > 0);
+//    assert(m_index.count(startBlockId) > 0);
 
     uint32_t startBlockHeight;
     getBlockHeight(startBlockId, startBlockHeight);
@@ -75,7 +75,7 @@ namespace CryptoNote {
   }
 
   Crypto::Hash BlockIndex::getTailId() const {
-    assert(!m_container.empty());
+//    assert(!m_container.empty());
     return m_container.back();
   }
 

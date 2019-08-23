@@ -483,11 +483,11 @@ int CryptoNoteProtocolHandler::handle_request_chain(int command, NOTIFY_REQUEST_
     return 1;
   }
 
-  if (arg.block_ids.back() != m_core.getBlockIdByHeight(0)) {
-    logger(Logging::ERROR) << context << "Failed to handle NOTIFY_REQUEST_CHAIN. block_ids doesn't end with genesis block ID";
-    context.m_state = CryptoNoteConnectionContext::state_shutdown;
-    return 1;
-  }
+//  if (arg.block_ids.back() != m_core.getBlockIdByHeight(0)) {
+//    logger(Logging::ERROR) << context << "Failed to handle NOTIFY_REQUEST_CHAIN. block_ids doesn't end with genesis block ID";
+//    context.m_state = CryptoNoteConnectionContext::state_shutdown;
+//    return 1;
+//  }
 
   NOTIFY_RESPONSE_CHAIN_ENTRY::request r;
   r.m_block_ids = m_core.findBlockchainSupplement(arg.block_ids, BLOCKS_IDS_SYNCHRONIZING_DEFAULT_COUNT, r.total_height, r.start_height);

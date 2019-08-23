@@ -123,7 +123,10 @@ uint32_t core::get_current_blockchain_height() {
 }
 
 uint8_t core::getCurrentBlockMajorVersion() {
-  assert(m_blockchain.getCurrentBlockchainHeight() > 0);
+//  assert(m_blockchain.getCurrentBlockchainHeight() > 0);
+  if (m_blockchain.getCurrentBlockchainHeight() == 0) {
+    return 1;
+  }
   return m_blockchain.getBlockMajorVersionForHeight(m_blockchain.getCurrentBlockchainHeight());
 }
 
@@ -133,7 +136,7 @@ uint8_t core::getBlockMajorVersionForHeight(uint32_t height) {
 }
 
 void core::get_blockchain_top(uint32_t& height, Crypto::Hash& top_id) {
-  assert(m_blockchain.getCurrentBlockchainHeight() > 0);
+//  assert(m_blockchain.getCurrentBlockchainHeight() > 0);
   top_id = m_blockchain.getTailId(height);
 }
 
@@ -177,7 +180,6 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
 
 
     std::unique_ptr<BlockchainDB> db(new_db(m_db_type));
-
 
     if(db == NULL) {
       logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
@@ -274,8 +276,8 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
             blocks_per_sync = bps;
         }
 
-        db->open(filename, db_flags);
-        if(!db->m_open)
+        m_db->open(filename, db_flags);
+        if(!m_db->m_open)
           return false;
       }
       catch (const DB_ERROR& e)
@@ -728,7 +730,7 @@ std::vector<Crypto::Hash> core::findBlockchainSupplement(const std::vector<Crypt
   uint32_t& totalBlockCount, uint32_t& startBlockIndex) {
 
   assert(!remoteBlockIds.empty());
-  assert(remoteBlockIds.back() == m_blockchain.getBlockIdByHeight(0));
+//  assert(remoteBlockIds.back() == m_blockchain.getBlockIdByHeight(0));
 
   return m_blockchain.findBlockchainSupplement(remoteBlockIds, maxCount, totalBlockCount, startBlockIndex);
 }
@@ -910,7 +912,7 @@ std::list<CryptoNote::tx_memory_pool::TransactionDetails> core::getMemoryPool() 
 }
 
 std::vector<Crypto::Hash> core::buildSparseChain() {
-  assert(m_blockchain.getCurrentBlockchainHeight() != 0);
+//  assert(m_blockchain.getCurrentBlockchainHeight() != 0);
   return m_blockchain.buildSparseChain();
 }
 

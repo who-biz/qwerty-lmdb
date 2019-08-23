@@ -486,11 +486,18 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
   {
     logger(INFO, BRIGHT_WHITE)
       << "Blockchain not loaded, generating genesis block.";
-    block_verification_context bvc = boost::value_initialized<block_verification_context>();
+    Crypto::Hash firstBlockHash = get_block_hash(m_blocks[0].bl);
+    if (!(firstBlockHash == m_currency.genesisBlockHash())) {
+      logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
+        "Probably you set --testnet flag with data "
+        "dir with non-test blockchain or another "
+        "network.";
+      return false;
+/*    block_verification_context bvc = boost::value_initialized<block_verification_context>();
     pushBlock(m_currency.genesisBlock(), bvc);
     if (bvc.m_verification_failed) {
       logger(ERROR, BRIGHT_RED) << "Failed to add genesis block to blockchain";
-      return false;
+      return false;*/
     }
   } else {
     Crypto::Hash firstBlockHash = get_block_hash(m_blocks[0].bl);
@@ -659,10 +666,15 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
 }
 
 Crypto::Hash Blockchain::getTailId(uint32_t& height) {
-  assert(!m_blocks.empty());
+//  assert(!m_blocks.empty());
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  height = getCurrentBlockchainHeight() - 1;
-  return getTailId();
+ if (!m_blocks.empty()) {
+    height = getCurrentBlockchainHeight() - 1;
+    return getTailId();
+  } else {
+    height = 0;
+    return getTailId();
+  }
 }
 
 Crypto::Hash Blockchain::getTailId() {
@@ -672,7 +684,9 @@ Crypto::Hash Blockchain::getTailId() {
 
 std::vector<Crypto::Hash> Blockchain::buildSparseChain() {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  assert(m_blockIndex.size() != 0);
+  if (m_blockIndex.size() == 0) {
+    return doBuildSparseChain(m_currency.genesisBlockHash());
+  }
   return doBuildSparseChain(m_blockIndex.getTailId());
 }
 
@@ -683,14 +697,16 @@ std::vector<Crypto::Hash> Blockchain::buildSparseChain(const Crypto::Hash& start
 }
 
 std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& startBlockId) const {
-  assert(m_blockIndex.size() != 0);
+  bool r = m_blockIndex.size() == 0;
+  const Crypto::Hash hash = m_currency.genesisBlockHash();
+
 
   std::vector<Crypto::Hash> sparseChain;
 
   if (m_blockIndex.hasBlock(startBlockId)) {
-    sparseChain = m_blockIndex.buildSparseChain(startBlockId);
+    sparseChain = m_blockIndex.buildSparseChain(r ? hash : startBlockId);
   } else {
-    assert(m_alternative_chains.count(startBlockId) > 0);
+//    assert(m_alternative_chains.count(startBlockId) > 0);
 
     std::vector<Crypto::Hash> alternativeChain;
     Crypto::Hash blockchainAncestor;
@@ -703,8 +719,8 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
       sparseChain.emplace_back(alternativeChain[i - 1]);
     }
 
-    assert(!sparseChain.empty());
-    assert(m_blockIndex.hasBlock(blockchainAncestor));
+ //   assert(!sparseChain.empty());
+//    assert(m_blockIndex.hasBlock(blockchainAncestor));
     std::vector<Crypto::Hash> sparseMainChain = m_blockIndex.buildSparseChain(blockchainAncestor);
     sparseChain.reserve(sparseChain.size() + sparseMainChain.size());
     std::copy(sparseMainChain.begin(), sparseMainChain.end(), std::back_inserter(sparseChain));
@@ -715,7 +731,7 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
 
 Crypto::Hash Blockchain::getBlockIdByHeight(uint32_t height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  assert(height < m_blockIndex.size());
+//  assert(height < m_blockIndex.size());
   return m_blockIndex.getBlockId(height);
 }
 
@@ -1567,7 +1583,7 @@ bool Blockchain::getRandomOutsByAmount(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_
 
 uint32_t Blockchain::findBlockchainSupplement(const std::vector<Crypto::Hash>& qblock_ids) {
   assert(!qblock_ids.empty());
-  assert(qblock_ids.back() == m_blockIndex.getBlockId(0));
+//  assert(qblock_ids.back() == m_blockIndex.getBlockId(0));
 
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   uint32_t blockIndex;
@@ -1652,7 +1668,7 @@ std::vector<Crypto::Hash> Blockchain::findBlockchainSupplement(const std::vector
   uint32_t& totalBlockCount, uint32_t& startBlockIndex) {
 
   assert(!remoteBlockIds.empty());
-  assert(remoteBlockIds.back() == m_blockIndex.getBlockId(0));
+//  assert(remoteBlockIds.back() == m_blockIndex.getBlockId(0));
 
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   totalBlockCount = getCurrentBlockchainHeight();

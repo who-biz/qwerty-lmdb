@@ -764,16 +764,16 @@ CryptoNote::TransactionOutput BlockchainLMDB::output_from_blob(const CryptoNote:
 void BlockchainLMDB::check_open() const
 {
 //  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
-  if (!m_open)
-    throw DB_ERROR("DB operation attempted on a not-open DB instance");
+//  if (!m_open)
+//    throw DB_ERROR("DB operation attempted on a not-open DB instance");
 }
 
 BlockchainLMDB::~BlockchainLMDB()
 {
  // LOG_PRINT_L3("BlockchainLMDB::" << __func__);
 
-  if (m_open)
-    close();
+//  if (m_open)
+//    close();
 }
 
 BlockchainLMDB::BlockchainLMDB(): BlockchainDB()
@@ -1004,11 +1004,11 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
 void BlockchainLMDB::close()
 {
 //  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
-  this->sync();
+//  this->sync();
   m_tinfo.reset();
 
   // FIXME: not yet thread safe!!!  Use with care.
-  mdb_env_close(m_env);
+//  mdb_env_close(m_env);
   m_open = false;
 }
 
