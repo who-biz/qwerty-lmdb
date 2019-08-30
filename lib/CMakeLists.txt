@@ -13,7 +13,6 @@ set(QwertycoinFramework_INCLUDE_DIRS
     "${CMAKE_CURRENT_BINARY_DIR}"
     "${CMAKE_CURRENT_LIST_DIR}"
     "${CMAKE_CURRENT_LIST_DIR}/../include"
-    "${CMAKE_CURRENT_BINARY_DIR}/external/db_drivers/liblmdb"
 )
 
 if(MSVC)
@@ -39,7 +38,7 @@ set(QwertycoinFramework_INCLUDE_DIRS ${QwertycoinFramework_INCLUDE_DIRS} PARENT_
 
 set(QwertycoinFramework_LIBS
     QwertycoinFramework_BlockchainDB
-    QwertycoinFramework_LMDB
+#    QwertycoinFramework_LMDB
     QwertycoinFramework_BlockchainExplorer
     QwertycoinFramework_Common
     QwertycoinFramework_Crypto
@@ -64,6 +63,23 @@ add_custom_target(QwertycoinFramework)
 add_dependencies(QwertycoinFramework ${QwertycoinFramework_LIBS})
 
 # QwertycoinFramework::BlockchainDB
+set(QwertycoinFramework_LMDB_SOURCES
+   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/lmdb.h"
+   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/midl.c"
+   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/midl.h"
+   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb.c"
+)
+
+set(QwertycoinFramework_LMDB_LIBS
+    Threads::Threads
+    QwertycoinFramework::BlockchainDB)
+
+add_library(QwertycoinFramework_LMDB STATIC ${QwertycoinFramework_LMDB_SOURCES})
+add_library(QwertycoinFramework::LMDB ALIAS QwertycoinFramework_LMDB)
+target_include_directories(QwertycoinFramework_LMDB PRIVATE ${QwertycoinFramework_INCLUDE_DIRS})
+target_link_libraries(QwertycoinFramework_LMDB PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+
+# QwertycoinFramework::BlockchainDB
 
 set(QwertycoinFramework_BlockchainDB_SOURCES
    "${CMAKE_CURRENT_LIST_DIR}/BlockchainDB/BlobDataType.cpp"
@@ -77,32 +93,14 @@ set(QwertycoinFramework_BlockchainDB_SOURCES
 )
 
 set(QwertycoinFramework_BlockchainDB_LIBS
-    QwertycoinFramework::LMDB)
+    Threads::Threads
+    ${LMDB_LIBRARY})
 
 add_library(QwertycoinFramework_BlockchainDB STATIC ${QwertycoinFramework_BlockchainDB_SOURCES})
 add_library(QwertycoinFramework::BlockchainDB ALIAS QwertycoinFramework_BlockchainDB)
 target_include_directories(QwertycoinFramework_BlockchainDB PRIVATE ${QwertycoinFramework_INCLUDE_DIRS})
+target_link_libraries(QwertycoinFramework_BlockchainDB PRIVATE ${LMDB_LIBRARY})
 
-# QwertycoinFramework::BlockchainDB
-set(QwertycoinFramework_LMDB_SOURCES
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/lmdb.h"
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/midl.c"
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/midl.h"
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb.c"
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb_copy.c"
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb_drop.c"
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb_stat.c"
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb_load.c"
-   "${CMAKE_CURRENT_LIST_DIR}/../external/db_drivers/liblmdb/mdb_dump.c"
-)
-
-
-set(QwertycoinFramework_LMDB_LIBS
-    QwertycoinFramework::BlockchainDB)
-
-add_library(QwertycoinFramework_LMDB STATIC ${QwertycoinFramework_LMDB_SOURCES})
-add_library(QwertycoinFramework::LMDB ALIAS QwertycoinFramework_LMDB)
-target_include_directories(QwertycoinFramework_LMDB PRIVATE ${QwertycoinFramework_INCLUDE_DIRS})
 
 # QwertycoinFramework::BlockchainExplorer
 

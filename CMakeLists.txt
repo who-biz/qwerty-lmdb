@@ -59,9 +59,18 @@ include(external/MiniUPnP)
 include(external/sparsehash)
 include(external/Threads)
 
+
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/lib")
-add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/external/db_drivers")
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/external/Backward")
+
+include(ExternalProject)
+ExternalProject_Add(lmdb
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/db_drivers/liblmdb
+  BUILD_COMMAND make all
+  INSTALL_COMMAND chmod +x liblmdb.a
+  BUILD_IN_SOURCE 1
+)
+
 
 if(BUILD_WITH_TOOLS)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/src")

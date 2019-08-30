@@ -66,7 +66,7 @@ set(QwertycoinTests_CoreTests_LIBS
     Boost::program_options
     Boost::serialization
     QwertycoinFramework::BlockchainDB
-    QwertycoinFramework::LMDB
+    ${LMDB_LIBRARY}
     QwertycoinFramework::Common
     QwertycoinFramework::CryptoNoteCore
     QwertycoinFramework::InProcessNode
@@ -75,6 +75,7 @@ set(QwertycoinTests_CoreTests_LIBS
     QwertycoinFramework::System
     QwertycoinTests::TestGenerator
     Backward::Backward
+    Threads::Threads
     ${BFD_LIBRARY}
 )
 
@@ -363,7 +364,8 @@ set(QwertycoinTests_UnitTests_LIBS
     QwertycoinFramework::CryptoNoteProtocol
     QwertycoinFramework::Http
     QwertycoinFramework::InProcessNode
-    QwertycoinFramework::LMDB
+#    QwertycoinFramework::LMDB
+    ${LMDB_LIBRARY}
     QwertycoinFramework::Logging
     QwertycoinFramework::Rpc
     QwertycoinFramework::Wallet
