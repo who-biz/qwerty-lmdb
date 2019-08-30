@@ -45,9 +45,8 @@ static const struct {
   uint8_t version;
   uint64_t height;
   uint8_t threshold;
-  time_t time;
 } mainnet_hard_forks[] = {
-  {  1, 1,      0, 1504387246 },
+  {  1, 1,      0},
 };
 
 namespace {
@@ -464,7 +463,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     {
      m_hardfork = new HardFork(*m_db, 1, 0);
      for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
-      m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold, mainnet_hard_forks[n].time);
+      m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
      m_hardfork->init();
      m_db->set_hard_fork(m_hardfork);
     }

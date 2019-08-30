@@ -108,14 +108,6 @@
 namespace CryptoNote
 {
 
-/** a pair of <transaction hash, output index>, typedef for convenience */
-extern const command_line::arg_descriptor<std::string> arg_db_type;
-extern const command_line::arg_descriptor<std::string> arg_db_sync_mode;
-extern const command_line::arg_descriptor<bool, false> arg_db_salvage;
-
-/**
- * @brief a struct containing txpool per transaction metadata
- */
 
 #define DBF_SAFE       1
 #define DBF_FAST       2
@@ -508,11 +500,6 @@ public:
    * @brief An empty destructor.
    */
   virtual ~BlockchainDB() {};
-
-  /**
-   * @brief init command line options
-   */
-  static void init_options(boost::program_options::options_description& desc);
 
   /**
    * @brief reset profiling stats
