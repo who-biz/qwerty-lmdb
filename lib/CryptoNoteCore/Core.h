@@ -52,7 +52,8 @@ class core : public ICore,
 {
 public:
     core(
-        std::unique_ptr<BlockchainDB> db,
+        BlockchainDB* db,
+        HardFork* hf,
         const Currency &currency,
         i_cryptonote_protocol *pprotocol,
         Logging::ILogger &logger,

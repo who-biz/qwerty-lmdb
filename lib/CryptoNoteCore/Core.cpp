@@ -77,7 +77,8 @@ private:
 };
 
 core::core(
-    std::unique_ptr<BlockchainDB> db,
+    BlockchainDB* db,
+    HardFork* hf,
     const Currency &currency,
     i_cryptonote_protocol *pprotocol,
     Logging::ILogger &logger,
@@ -86,7 +87,7 @@ core::core(
       m_currency(currency),
       logger(logger, "core"),
       m_mempool(currency, m_blockchain, *this, m_timeProvider, logger, blockchainIndexesEnabled),
-      m_blockchain(db.release(), currency, m_mempool, logger, blockchainIndexesEnabled),
+      m_blockchain(db, hf, currency, m_mempool, logger, blockchainIndexesEnabled),
       m_miner(new miner(currency, *this, logger)),
       m_starter_message_showed(false)
 {

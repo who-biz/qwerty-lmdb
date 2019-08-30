@@ -178,7 +178,7 @@ public:
 
   virtual void unlock();
 
-  virtual bool block_exists(const Crypto::Hash& h, uint64_t *height = nullptr) const;
+  virtual bool block_exists(const Crypto::Hash& h, uint64_t *height = NULL) const;
 
   virtual uint64_t get_block_height(const Crypto::Hash& h) const;
 
@@ -244,9 +244,7 @@ public:
 
   virtual void add_txpool_tx(const CryptoNote::Transaction &tx, const txpool_tx_meta_t& meta);
   virtual void update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t& meta);
- // virtual uint64_t get_txpool_tx_count(bool include_unrelayed_txes = true) const;
   virtual uint64_t get_txpool_tx_count() const;
-
   virtual bool txpool_has_tx(const Crypto::Hash &txid) const;
   virtual void remove_txpool_tx(const Crypto::Hash& txid);
   virtual bool get_txpool_tx_meta(const Crypto::Hash& txid, txpool_tx_meta_t &meta) const;
@@ -297,6 +295,7 @@ public:
 
 private:
   void do_resize(uint64_t size_increase=0);
+
   bool need_resize(uint64_t threshold_size=0) const;
   void check_and_resize_for_batch(uint64_t batch_num_blocks, uint64_t batch_bytes);
   uint64_t get_estimated_batch_size(uint64_t batch_num_blocks, uint64_t batch_bytes) const;

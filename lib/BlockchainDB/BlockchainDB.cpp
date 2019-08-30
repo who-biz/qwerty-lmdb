@@ -47,7 +47,36 @@ static const char *db_types[] = {
 };
 
 namespace CryptoNote {
+bool blockchain_valid_db_type(const std::string& db_type)
+{
+  int i;
+  for (i=0; db_types[i]; i++)
+  {
+    if (db_types[i] == db_type)
+      return true;
+  }
+  return false;
+}
 
+std::string blockchain_db_types(const std::string& sep)
+{
+  int i;
+  std::string ret = "";
+  for (i=0; db_types[i]; i++)
+  {
+    if (i)
+      ret += sep;
+    ret += db_types[i];
+  }
+  return ret;
+}
+
+std::string arg_db_type_description = "Specify database type, available: " + CryptoNote::blockchain_db_types(", ");
+const command_line::arg_descriptor<std::string> arg_db_type = {
+  "db-type"
+, arg_db_type_description.c_str()
+, "lmdb"
+};
 const command_line::arg_descriptor<std::string> arg_db_sync_mode = {
   "db-sync-mode"
 , "Specify sync option, using format [safe|fast|fastest]:[sync|async]:[nblocks_per_sync]."
@@ -65,12 +94,12 @@ BlockchainDB* new_db(const std::string& db_type)
   {
     return new BlockchainLMDB();
   }
-  else
     return NULL;
 }
 
 void BlockchainDB::init_options(boost::program_options::options_description& desc)
 {
+  command_line::add_arg(desc, arg_db_type);
   command_line::add_arg(desc, arg_db_sync_mode);
   command_line::add_arg(desc, arg_db_salvage);
 }

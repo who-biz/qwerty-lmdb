@@ -104,11 +104,18 @@
  *   OUTPUT_EXISTS
  *   KEY_IMAGE_EXISTS
  */
-namespace CryptoNote {
 
+namespace CryptoNote
+{
+
+/** a pair of <transaction hash, output index>, typedef for convenience */
 extern const command_line::arg_descriptor<std::string> arg_db_type;
 extern const command_line::arg_descriptor<std::string> arg_db_sync_mode;
 extern const command_line::arg_descriptor<bool, false> arg_db_salvage;
+
+/**
+ * @brief a struct containing txpool per transaction metadata
+ */
 
 #define DBF_SAFE       1
 #define DBF_FAST       2
@@ -1407,6 +1414,17 @@ public:
   virtual bool for_all_outputs(uint64_t amount, const std::function<bool(uint64_t height)> &f) const = 0;
 
 
+
+  //
+  // Hard fork related storage
+  //
+
+  /**
+   * @brief sets which hardfork version a height is on
+   *
+   * @param height the height
+   * @param version the version
+   */
   virtual void set_hard_fork_version(uint64_t height, uint8_t version) = 0;
 
   /**

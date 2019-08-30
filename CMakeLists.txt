@@ -75,6 +75,7 @@ set(LMDB_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/db_drivers/liblmdb" CACHE
 
 
 include_directories(${LMDB_INCLUDE})
+include_directories(${CMAKE_CURRENT_LIST_DIR}/external/boost/archive)
 
 
 if(BUILD_WITH_TOOLS)

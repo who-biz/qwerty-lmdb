@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cmath>
 #include <boost/foreach.hpp>
+#include "Common/boost_serialization_helper.h"
 #include "Common/Math.h"
 #include "Common/int-util.h"
 #include "Common/ShuffleGenerator.h"
@@ -39,6 +40,15 @@
 
 using namespace Logging;
 using namespace Common;
+
+static const struct {
+  uint8_t version;
+  uint64_t height;
+  uint8_t threshold;
+  time_t time;
+} mainnet_hard_forks[] = {
+  {  1, 1,      0, 1504387246 },
+};
 
 namespace {
 
@@ -322,7 +332,7 @@ private:
 };
 
 
-Blockchain::Blockchain(BlockchainDB* db,const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
+Blockchain::Blockchain(BlockchainDB* db,  HardFork*& hf, const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
 logger(logger, "Blockchain"),
 m_db(db),
 m_hardfork(NULL),
@@ -438,23 +448,28 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
   m_config_folder = config_folder;
 
-  if (m_db == NULL) {
+  std::unique_ptr<BlockchainDB> db(new_db(db_type));
+
+  if (db == NULL) {
     logger(ERROR, BRIGHT_RED) << "Attempted to init BlockchainDB with null DB, using BlockIndexes instead";
   }
-  else if (!m_db->is_open())
+  if (!db->is_open())
   {
    logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
+  }
 
-    if (m_hardfork == NULL)
+  m_db = db.release();
+
+    if (m_hardfork == nullptr)
     {
      m_hardfork = new HardFork(*m_db, 1, 0);
+     for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
+      m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold, mainnet_hard_forks[n].time);
      m_hardfork->init();
      m_db->set_hard_fork(m_hardfork);
     }
-  }
 
 
-  if (m_db == NULL) {
     if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, m_currency.blockIndexesFileName()), 1024)) {
       return false;
 
@@ -467,7 +482,6 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
         logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
         rebuildCache();
       }
-    }
 
       if (m_blockchainIndexesEnabled) {
         loadBlockchainIndices();
@@ -477,8 +491,6 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     }
   }
 
-
-  std::unique_ptr<BlockchainDB> db(new_db(db_type));
 
   if (m_blocks.empty())
   {

@@ -49,21 +49,6 @@ namespace CryptoNote
   typedef std::string blobdata;
 
   //---------------------------------------------------------------
-/*  CryptoNote::BinaryArray tx_to_blob(const CryptoNote::Transaction& tx)
-  {
-    return t_serializable_object_to_blob(tx);
-  }
-/*  //---------------------------------------------------------------
-  void block_to_blob(const CryptoNote::Block& b, CryptoNote::blobdata& b_blob)
-  {
-    t_serializable_object_to_blob(b, b_blob);
-  }
-  //---------------------------------------------------------------
-  CryptoNote::blobdata block_to_blob(const CryptoNote::Block& b)
-  {
-    return t_serializable_object_to_blob(b);
-  }
-*/  //---------------------------------------------------------------
 
 } // namespace CryptoNote
 
