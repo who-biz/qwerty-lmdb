@@ -13,6 +13,7 @@ set(QwertycoinFramework_INCLUDE_DIRS
     "${CMAKE_CURRENT_BINARY_DIR}"
     "${CMAKE_CURRENT_LIST_DIR}"
     "${CMAKE_CURRENT_LIST_DIR}/../include"
+    "${LMDB_INCLUDE}"
 )
 
 if(MSVC)
@@ -57,6 +58,7 @@ set(QwertycoinFramework_LIBS
     QwertycoinFramework_System
     QwertycoinFramework_Transfers
     QwertycoinFramework_Wallet
+    ${LMDB_LIBRARY}
 )
 
 add_custom_target(QwertycoinFramework)
@@ -94,7 +96,8 @@ set(QwertycoinFramework_BlockchainDB_SOURCES
 
 set(QwertycoinFramework_BlockchainDB_LIBS
     Threads::Threads
-    ${LMDB_LIBRARY})
+    ${LMDB_LIBRARY}
+)
 
 add_library(QwertycoinFramework_BlockchainDB STATIC ${QwertycoinFramework_BlockchainDB_SOURCES})
 add_library(QwertycoinFramework::BlockchainDB ALIAS QwertycoinFramework_BlockchainDB)

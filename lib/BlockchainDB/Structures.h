@@ -1,3 +1,6 @@
+#ifndef STRUCTURES_H
+#define STRUCTURES_H
+
 #include "CryptoNoteCore/TransactionPool.h"
 
 #pragma once
@@ -20,7 +23,28 @@ struct tx_data_t
 };
 #pragma pack(pop)
 
-typedef std::pair<Crypto::Hash, uint64_t> tx_out_index;
-typedef CryptoNote::tx_memory_pool::TransactionDetails txpool_tx_meta_t;
+struct txpool_tx_meta_t
+{
+  Crypto::Hash max_used_block_id;
+  Crypto::Hash last_failed_id;
+  uint64_t blob_size;
+  uint64_t fee;
+  uint64_t max_used_block_height;
+  uint64_t last_failed_height;
+  uint64_t receive_time;
+  uint64_t last_relayed_time;
+  // 112 bytes
+  uint8_t kept_by_block;
+  uint8_t relayed;
+  uint8_t do_not_relay;
+  uint8_t double_spend_seen: 1;
+
+  uint8_t padding[76]; // till 192 bytes
+};
 }
 
+typedef std::pair<Crypto::Hash, uint64_t> tx_out_index;
+//typedef CryptoNote::tx_memory_pool::TransactionDetails txpool_tx_meta_t;
+
+
+#endif // STRUCTURES_H

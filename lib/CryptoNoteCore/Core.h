@@ -52,7 +52,7 @@ class core : public ICore,
 {
 public:
     core(
-        BlockchainDB* db,
+        std::unique_ptr<BlockchainDB> db,
         const Currency &currency,
         i_cryptonote_protocol *pprotocol,
         Logging::ILogger &logger,

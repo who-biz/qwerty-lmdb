@@ -263,8 +263,7 @@ int main(int argc, char* argv[])
     }
     std::unique_ptr<BlockchainDB> db(new_db(Tools::getDefaultDbType()));
     CryptoNote::Currency currency = currencyBuilder.currency();
-    CryptoNote::BlockchainDB* m_db = db.release();
-    CryptoNote::core ccore(m_db, currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
+    CryptoNote::core ccore(NULL, currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
 
 	bool disable_checkpoints = command_line::get_arg(vm, arg_disable_checkpoints);
 	if (!disable_checkpoints) {
@@ -333,8 +332,6 @@ int main(int argc, char* argv[])
     }
     logger(INFO) << "P2p server initialized OK";
 
-    m_db->is_open();
-
     //logger(INFO) << "Initializing core rpc server...";
     //if (!rpc_server.init(vm)) {
     //  logger(ERROR, BRIGHT_RED) << "Failed to initialize core rpc server.";
@@ -371,7 +368,7 @@ int main(int argc, char* argv[])
         uint32_t _index = 0;
         if (!Common::fromString(rollback_str, _index)) {
           std::cout << "wrong block index parameter" << ENDL;
-          return 1;
+          return 0;
         }
         logger(INFO, BRIGHT_YELLOW) << "Rollback blockchain to height " << _index;
         ccore.rollbackBlockchain(_index);

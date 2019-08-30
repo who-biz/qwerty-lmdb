@@ -323,7 +323,7 @@ private:
 
 Blockchain::Blockchain(BlockchainDB* db,const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
 logger(logger, "Blockchain"),
-m_db(db),
+m_db(),
 m_hardfork(NULL),
 m_currency(currency),
 m_tx_pool(tx_pool),
@@ -437,32 +437,26 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
   m_config_folder = config_folder;
 
-  std::unique_ptr<BlockchainDB> db(new_db(db_type));
-
-  if (db == NULL) {
+  if (m_db == NULL) {
     logger(ERROR, BRIGHT_RED) << "Attempted to init BlockchainDB with null DB, using BlockIndexes instead";
   }
-  if (!db->is_open())
+  else if (!m_db->is_open())
   {
    logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
-   return false;
   }
 
   if (m_hardfork == nullptr)
   {
-    m_hardfork = new HardFork(*db, 1, 0);
+    m_hardfork = new HardFork(*m_db, 1, 0);
   }
 
   m_hardfork->init();
 
   m_db->set_hard_fork(m_hardfork);
 
-  if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, m_currency.blockIndexesFileName()), 1024)) {
-    return false;
-  }
-
-  if (db->get_db_name() != "lmdb")
-  {
+  if (m_db == NULL) {
+    if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, m_currency.blockIndexesFileName()), 1024)) {
+      return false;
 
     if (load_existing && !m_blocks.empty()) {
       logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
@@ -473,6 +467,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
         logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
         rebuildCache();
       }
+    }
 
       if (m_blockchainIndexesEnabled) {
         loadBlockchainIndices();
@@ -482,22 +477,16 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     }
   }
 
-  if (!db->height())
+
+  if (!m_db->height() || m_blocks.empty())
   {
     logger(INFO, BRIGHT_WHITE)
       << "Blockchain not loaded, generating genesis block.";
-    Crypto::Hash firstBlockHash = get_block_hash(m_blocks[0].bl);
-    if (!(firstBlockHash == m_currency.genesisBlockHash())) {
-      logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
-        "Probably you set --testnet flag with data "
-        "dir with non-test blockchain or another "
-        "network.";
-      return false;
-/*    block_verification_context bvc = boost::value_initialized<block_verification_context>();
+    block_verification_context bvc = boost::value_initialized<block_verification_context>();
     pushBlock(m_currency.genesisBlock(), bvc);
     if (bvc.m_verification_failed) {
       logger(ERROR, BRIGHT_RED) << "Failed to add genesis block to blockchain";
-      return false;*/
+      return false;
     }
   } else {
     Crypto::Hash firstBlockHash = get_block_hash(m_blocks[0].bl);
@@ -668,13 +657,8 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
 Crypto::Hash Blockchain::getTailId(uint32_t& height) {
 //  assert(!m_blocks.empty());
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
- if (!m_blocks.empty()) {
-    height = getCurrentBlockchainHeight() - 1;
-    return getTailId();
-  } else {
-    height = 0;
-    return getTailId();
-  }
+  height = getCurrentBlockchainHeight() - 1;
+  return getTailId();
 }
 
 Crypto::Hash Blockchain::getTailId() {

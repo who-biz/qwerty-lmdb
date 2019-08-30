@@ -123,6 +123,15 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const CryptoNot
 }
   uint64_t tx_id = add_transaction_data(blk_hash, tx, tx_hash);
 
+  std::vector<uint64_t> amount_output_indices;
+
+  for (const auto& each : tx.outputs)
+  {
+      uint64_t i = 0;
+      amount_output_indices.push_back(add_output(tx_hash, each, ++i, tx.unlockTime));
+  }
+  add_tx_amount_output_indices(tx_id, amount_output_indices);
+
 }
 
 uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk
@@ -135,6 +144,8 @@ uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk
   // sanity
   if (blk.transactionHashes.size() != txs.size())
     throw std::runtime_error("Inconsistent tx/hashes sizes");
+
+  block_txn_start(false);
 
   Crypto::Hash blk_hash = get_block_hash(blk);
 
@@ -156,11 +167,14 @@ uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk
   // call out to subclass implementation to add the block & metadata
   add_block(blk, block_size, cumulative_difficulty, coins_generated, blk_hash);
 
- // ++num_calls;
+  m_hardfork->add(blk, prev_height);
+
+  block_txn_stop();
+
+  ++num_calls;
 
   return prev_height;
 }
-
 
 void BlockchainDB::set_hard_fork(HardFork* hf)
 {
@@ -247,6 +261,10 @@ void BlockchainDB::fixup()
     //Logger(INFO, WHITE) << "Database is opened read only - skipping fixup check";
     return;
   }
+
+  set_batch_transactions(true);
+  batch_start();
+  batch_stop();
 }
 
 } //namespace CryptoNote
