@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <memory>
 #include <cstdio>
 #include <cmath>
 #include <boost/foreach.hpp>
@@ -323,7 +324,7 @@ private:
 
 Blockchain::Blockchain(BlockchainDB* db,const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
 logger(logger, "Blockchain"),
-m_db(),
+m_db(db),
 m_hardfork(NULL),
 m_currency(currency),
 m_tx_pool(tx_pool),
@@ -443,16 +444,15 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
   else if (!m_db->is_open())
   {
    logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
+
+    if (m_hardfork == NULL)
+    {
+     m_hardfork = new HardFork(*m_db, 1, 0);
+     m_hardfork->init();
+     m_db->set_hard_fork(m_hardfork);
+    }
   }
 
-  if (m_hardfork == nullptr)
-  {
-    m_hardfork = new HardFork(*m_db, 1, 0);
-  }
-
-  m_hardfork->init();
-
-  m_db->set_hard_fork(m_hardfork);
 
   if (m_db == NULL) {
     if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, m_currency.blockIndexesFileName()), 1024)) {
@@ -478,7 +478,9 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
   }
 
 
-  if (!m_db->height() || m_blocks.empty())
+  std::unique_ptr<BlockchainDB> db(new_db(db_type));
+
+  if (m_blocks.empty())
   {
     logger(INFO, BRIGHT_WHITE)
       << "Blockchain not loaded, generating genesis block.";
