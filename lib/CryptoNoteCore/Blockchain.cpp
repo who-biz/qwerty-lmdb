@@ -438,7 +438,7 @@ uint32_t Blockchain::getCurrentBlockchainHeight() {
   return static_cast<uint32_t>(m_blocks.size());
 }
 
-bool Blockchain::init(const std::string& config_folder, const std::string& db_type, bool load_existing) {
+bool Blockchain::init(const std::string& config_folder, const std::string& db_type, const int& db_flags, bool load_existing) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   if (!config_folder.empty() && !Tools::create_directories_if_necessary(config_folder)) {
     logger(ERROR, BRIGHT_RED) << "Failed to create data directory: " << m_config_folder;
@@ -449,25 +449,29 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
   std::unique_ptr<BlockchainDB> db(new_db(db_type));
 
-  if (db == NULL) {
-    logger(ERROR, BRIGHT_RED) << "Attempted to init BlockchainDB with null DB, using BlockIndexes instead";
+  if (db_type == "") {
+    logger(ERROR, BRIGHT_RED) << " No DB type supplied, using BlockIndexes instead";
   }
-  if (!db->is_open())
+  else if (db_type == "lmdb")
   {
-   logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
-  }
+    db->open(config_folder, db_flags);
+    if (!db->m_open)
+      logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
 
-  m_db = db.release();
-
-    if (m_hardfork == nullptr)
+    if(db->is_open())
     {
-     m_hardfork = new HardFork(*m_db, 1, 0);
-     for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
-      m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
-     m_hardfork->init();
-     m_db->set_hard_fork(m_hardfork);
-    }
+      m_db = db.release();
 
+      if (m_hardfork == nullptr)
+      {
+        m_hardfork = new HardFork(*m_db, 1, 0);
+        for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
+          m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
+        m_hardfork->init();
+        m_db->set_hard_fork(m_hardfork);
+      }
+    }
+  }
 
     if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, m_currency.blockIndexesFileName()), 1024)) {
       return false;

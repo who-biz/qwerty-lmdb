@@ -173,25 +173,23 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
         return false;
     }
 
-
-    std::string m_db_type = config.dbType;
-    std::string db_sync_mode = config.dbSyncMode;
-
-    boost::filesystem::path folder(m_config_folder);
-
-
-    std::unique_ptr<BlockchainDB> db(new_db(m_db_type));
+    std::unique_ptr<BlockchainDB> db(new_db(config.dbType));
 
     if(db == NULL) {
       logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
       return false;
     }
 
+    boost::filesystem::path folder(m_config_folder);
+
     // make sure the data directory exists, and try to lock it
     bool z = boost::filesystem::exists(folder) || boost::filesystem::create_directories(folder);
     assert(z == true);
     if (!z)
       logger(ERROR, BRIGHT_RED) << "Failed to create directory!";
+
+    std::string m_db_type;
+    std::string db_sync_mode;
 
     // check for blockchain.bin
     try
@@ -202,6 +200,11 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
         logger(ERROR, BRIGHT_RED) << "Found old-style blockchain.bin in " << old_files.string();
         logger(ERROR, BRIGHT_RED) << "Qwertycoin now uses a new format. Remove blockchain.bin to start syncing";
         return false;
+      }
+      else
+      {
+        m_db_type = config.dbType;
+        db_sync_mode = config.dbSyncMode;
       }
     }
     catch (std::exception &e) { logger(ERROR, BRIGHT_RED) << "Exception caught in Core init: " << e.what(); }
@@ -214,16 +217,17 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
 
     const std::string filename = folder.string();
 
+    blockchain_db_sync_mode sync_mode = db_default_sync;
+    uint64_t blocks_per_sync = 1;
+
+    uint64_t db_flags = 0;
+
     if (db->get_db_name() == "lmdb")
     {
       // default to fast:async:1
-      blockchain_db_sync_mode sync_mode = db_default_sync;
-      uint64_t blocks_per_sync = 1;
 
       try
       {
-        uint64_t db_flags = 0;
-
         std::vector<std::string> options;
         boost::trim(db_sync_mode);
         boost::split(options, db_sync_mode, boost::is_any_of(" :"));
@@ -276,7 +280,6 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
           if (*endptr == '\0')
             blocks_per_sync = bps;
         }
-
         db->open(filename, db_flags);
         if(!db->m_open)
           return false;
@@ -289,7 +292,7 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
     }
 
 
-    r = m_blockchain.init(folder.string(), db->get_db_name(), load_existing);
+    r = m_blockchain.init(folder.string(), db->get_db_name(), db_flags, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;
