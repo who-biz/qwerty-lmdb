@@ -104,11 +104,10 @@
  *   OUTPUT_EXISTS
  *   KEY_IMAGE_EXISTS
  */
-namespace CryptoNote {
 
-extern const command_line::arg_descriptor<std::string> arg_db_type;
-extern const command_line::arg_descriptor<std::string> arg_db_sync_mode;
-extern const command_line::arg_descriptor<bool, false> arg_db_salvage;
+namespace CryptoNote
+{
+
 
 #define DBF_SAFE       1
 #define DBF_FAST       2
@@ -403,7 +402,7 @@ private:
    * @param unlock_time unlock time/height of the output
    * @return amount output index
    */
-  virtual uint64_t add_output(const Crypto::Hash& tx_hash, const CryptoNote::TransactionOutput& tx_output, const uint64_t& local_index, const uint64_t unlock_time) = 0;
+  virtual uint64_t add_output(const Crypto::Hash& tx_hash, const CryptoNote::TransactionOutput& tx_output, const uint64_t& index, const uint64_t& unlock_time) = 0;
 
   /**
    * @brief store amount output indices for a tx's outputs
@@ -491,7 +490,6 @@ protected:
 
   HardFork* m_hardfork;
 
-
 public:
 
   friend class BlockchainLMDB;
@@ -502,11 +500,6 @@ public:
    * @brief An empty destructor.
    */
   virtual ~BlockchainDB() {};
-
-  /**
-   * @brief init command line options
-   */
-  static void init_options(boost::program_options::options_description& desc);
 
   /**
    * @brief reset profiling stats
@@ -654,9 +647,64 @@ public:
    */
   virtual void unlock() = 0;
 
+  /**
+   * @brief tells the BlockchainDB to start a new "batch" of blocks
+   *
+   * If the subclass implements a batching method of caching blocks in RAM to
+   * be added to a backing store in groups, it should start a batch which will
+   * end either when <batch_num_blocks> has been added or batch_stop() has
+   * been called.  In either case, it should end the batch and write to its
+   * backing store.
+   *
+   * If a batch is already in-progress, this function must return false.
+   * If a batch was started by this call, it must return true.
+   *
+   * If any of this cannot be done, the subclass should throw the corresponding
+   * subclass of DB_EXCEPTION
+   *
+   * @param batch_num_blocks number of blocks to batch together
+   *
+   * @return true if we started the batch, false if already started
+   */
+  virtual bool batch_start(uint64_t batch_num_blocks=0, uint64_t batch_bytes=0) = 0;
+
+  /**
+   * @brief ends a batch transaction
+   *
+   * If the subclass implements batching, this function should store the
+   * batch it is currently on and mark it finished.
+   *
+   * If no batch is in-progress, this function should throw a DB_ERROR.
+   * This exception may change in the future if it is deemed necessary to
+   * have a more granular exception type for this scenario.
+   *
+   * If any of this cannot be done, the subclass should throw the corresponding
+   * subclass of DB_EXCEPTION
+   */
+  virtual void batch_stop() = 0;
+
+  /**
+   * @brief sets whether or not to batch transactions
+   *
+   * If the subclass implements batching, this function tells it to begin
+   * batching automatically.
+   *
+   * If the subclass implements batching and has a batch in-progress, a
+   * parameter of false should disable batching and call batch_stop() to
+   * store the current batch.
+   *
+   * If any of this cannot be done, the subclass should throw the corresponding
+   * subclass of DB_EXCEPTION
+   *
+   * @param bool batch whether or not to use batch transactions.
+   */
+  virtual void set_batch_transactions(bool) = 0;
+
   virtual void block_txn_start(bool readonly=false) = 0;
   virtual void block_txn_stop() = 0;
   virtual void block_txn_abort() = 0;
+
+  virtual void set_hard_fork(HardFork* hf);
 
   // adds a block with the given metadata to the top of the blockchain, returns the new height
   /**
@@ -928,9 +976,6 @@ public:
    * @return the current blockchain height
    */
   virtual uint64_t height() const = 0;
-
-
-  virtual void set_hard_fork(HardFork* hf);
 
 
   /**
@@ -1356,6 +1401,17 @@ public:
   virtual bool for_all_outputs(uint64_t amount, const std::function<bool(uint64_t height)> &f) const = 0;
 
 
+
+  //
+  // Hard fork related storage
+  //
+
+  /**
+   * @brief sets which hardfork version a height is on
+   *
+   * @param height the height
+   * @param version the version
+   */
   virtual void set_hard_fork_version(uint64_t height, uint8_t version) = 0;
 
   /**
@@ -1366,6 +1422,11 @@ public:
    * @return the version
    */
   virtual uint8_t get_hard_fork_version(uint64_t height) const = 0;
+
+  /**
+   * @brief verify hard fork info in database
+   */
+  virtual void check_hard_fork_info() = 0;
 
   /**
    * @brief delete hard fork info from database
@@ -1396,7 +1457,7 @@ public:
    */
   void set_auto_remove_logs(bool auto_remove) { m_auto_remove_logs = auto_remove; }
 
-  bool m_open = false;  //!< Whether or not the BlockchainDB is open/ready for use
+  bool m_open;  //!< Whether or not the BlockchainDB is open/ready for use
 
 };  // class BlockchainDB
 

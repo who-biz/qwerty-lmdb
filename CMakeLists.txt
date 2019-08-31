@@ -71,6 +71,12 @@ ExternalProject_Add(lmdb
   BUILD_IN_SOURCE 1
 )
 
+set(LMDB_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/db_drivers/liblmdb" CACHE STRING "LMDB Include path")
+
+
+include_directories(${LMDB_INCLUDE})
+include_directories(${CMAKE_CURRENT_LIST_DIR}/external/boost/archive)
+
 
 if(BUILD_WITH_TOOLS)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/src")

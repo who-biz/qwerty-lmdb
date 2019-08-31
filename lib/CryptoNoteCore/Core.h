@@ -53,6 +53,7 @@ class core : public ICore,
 public:
     core(
         BlockchainDB* db,
+        HardFork* hf,
         const Currency &currency,
         i_cryptonote_protocol *pprotocol,
         Logging::ILogger &logger,

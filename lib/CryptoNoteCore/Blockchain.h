@@ -21,7 +21,7 @@
 
 #include <atomic>
 
-#include "sparsehash/sparse_hash_set"
+#include "google/sparse_hash_set"
 #include "sparsehash/sparse_hash_map"
 
 #include "Common/ObserverManager.h"
@@ -69,6 +69,7 @@ class Blockchain : public CryptoNote::ITransactionValidator
 public:
     Blockchain(
         BlockchainDB* db,
+        HardFork*& hf,
         const Currency &currency,
         tx_memory_pool &tx_pool,
         Logging::ILogger &logger,

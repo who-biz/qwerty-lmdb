@@ -78,15 +78,16 @@ private:
 
 core::core(
     BlockchainDB* db,
+    HardFork* hf,
     const Currency &currency,
     i_cryptonote_protocol *pprotocol,
     Logging::ILogger &logger,
     bool blockchainIndexesEnabled)
-    : m_db(db),
+    : m_db(),
       m_currency(currency),
       logger(logger, "core"),
       m_mempool(currency, m_blockchain, *this, m_timeProvider, logger, blockchainIndexesEnabled),
-      m_blockchain(m_db, currency, m_mempool, logger, blockchainIndexesEnabled),
+      m_blockchain(db, hf, currency, m_mempool, logger, blockchainIndexesEnabled),
       m_miner(new miner(currency, *this, logger)),
       m_starter_message_showed(false)
 {
@@ -276,8 +277,8 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
             blocks_per_sync = bps;
         }
 
-        m_db->open(filename, db_flags);
-        if(!m_db->m_open)
+        db->open(filename, db_flags);
+        if(!db->m_open)
           return false;
       }
       catch (const DB_ERROR& e)

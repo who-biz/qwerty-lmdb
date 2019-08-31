@@ -28,11 +28,17 @@
 
 #include <atomic>
 
-#include <boost/thread/tss.hpp>
-#include "../external/db_drivers/liblmdb/lmdb.h"
-#include "BlockchainDB/Structures.h"
-#include "BlockchainDB/BlobDataType.h"
+#include <../../external/db_drivers/liblmdb/lmdb.h>
+
 #include "BlockchainDB/BlockchainDB.h"
+#include "BlockchainDB/BlobDataType.h"
+#include "BlockchainDB/Structures.h"
+#include <boost/thread/tss.hpp>
+
+#define ENABLE_AUTO_RESIZE
+
+namespace CryptoNote
+{
 
 typedef struct mdb_txn_cursors
 {
@@ -126,6 +132,7 @@ struct mdb_txn_safe
 
   mdb_threadinfo* m_tinfo;
   MDB_txn* m_txn;
+  bool m_batch_txn = false;
   bool m_check;
   static std::atomic<uint64_t> num_active_txns;
 
@@ -133,16 +140,25 @@ struct mdb_txn_safe
   static std::atomic_flag creation_gate;
 };
 
-namespace CryptoNote {
 
+// If m_batch_active is set, a batch transaction exists beyond this class, such
+// as a batch import with verification enabled, or possibly (later) a batch
+// network sync.
+//
+// For some of the lookup methods, such as get_block_timestamp(), tx_exists(),
+// and get_tx(), when m_batch_active is set, the lookup uses the batch
+// transaction. This isn't only because the transaction is available, but it's
+// necessary so that lookups include the database updates only present in the
+// current batch write.
+//
+// A regular network sync without batch writes is expected to open a new read
+// transaction, as those lookups are part of the validation done prior to the
+// write for block and tx data, so no write transaction is open at the time.
 class BlockchainLMDB : public BlockchainDB
 {
 public:
-
-  BlockchainLMDB();
-  virtual ~BlockchainLMDB();
-
-  friend class BlockchainDB;
+  BlockchainLMDB(bool batch_transactions=false);
+  ~BlockchainLMDB();
 
   virtual void open(const std::string& filename, const int mdb_flags=0);
 
@@ -162,7 +178,7 @@ public:
 
   virtual void unlock();
 
-  virtual bool block_exists(const Crypto::Hash& h, uint64_t *height = nullptr) const;
+  virtual bool block_exists(const Crypto::Hash& h, uint64_t *height = NULL) const;
 
   virtual uint64_t get_block_height(const Crypto::Hash& h) const;
 
@@ -228,9 +244,7 @@ public:
 
   virtual void add_txpool_tx(const CryptoNote::Transaction &tx, const txpool_tx_meta_t& meta);
   virtual void update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t& meta);
- // virtual uint64_t get_txpool_tx_count(bool include_unrelayed_txes = true) const;
   virtual uint64_t get_txpool_tx_count() const;
-
   virtual bool txpool_has_tx(const Crypto::Hash &txid) const;
   virtual void remove_txpool_tx(const Crypto::Hash& txid);
   virtual bool get_txpool_tx_meta(const Crypto::Hash& txid, txpool_tx_meta_t &meta) const;
@@ -252,6 +266,11 @@ public:
                             , const std::vector<CryptoNote::Transaction>& txs
                             );
 
+  virtual void set_batch_transactions(bool batch_transactions);
+  virtual bool batch_start(uint64_t batch_num_blocks=0, uint64_t batch_bytes=0);
+  virtual void batch_commit();
+  virtual void batch_stop();
+  virtual void batch_abort();
 
   virtual void block_txn_start(bool readonly);
   virtual void block_txn_stop();
@@ -275,6 +294,11 @@ public:
   std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> get_output_histogram(const std::vector<uint64_t> &amounts, bool unlocked, uint64_t recent_cutoff) const;
 
 private:
+  void do_resize(uint64_t size_increase=0);
+
+  bool need_resize(uint64_t threshold_size=0) const;
+  void check_and_resize_for_batch(uint64_t batch_num_blocks, uint64_t batch_bytes);
+  uint64_t get_estimated_batch_size(uint64_t batch_num_blocks, uint64_t batch_bytes) const;
 
   virtual void add_block( const CryptoNote::Block& blk
                 , const size_t& block_size
@@ -292,7 +316,7 @@ private:
   virtual uint64_t add_output(const Crypto::Hash& tx_hash,
       const CryptoNote::TransactionOutput& tx_output,
       const uint64_t& local_index,
-      const uint64_t unlock_time
+      const uint64_t& unlock_time
       );
 
   virtual void add_tx_amount_output_indices(const uint64_t tx_id,
@@ -309,9 +333,9 @@ private:
 
   uint64_t num_outputs() const;
 
-  virtual void check_hard_fork_info();
   virtual void set_hard_fork_version(uint64_t height, uint8_t version);
   virtual uint8_t get_hard_fork_version(uint64_t height) const;
+  virtual void check_hard_fork_info();
   virtual void drop_hard_fork_info();
 
   /**
@@ -345,10 +369,9 @@ private:
   // migrate from DB version 0 to 1
   void migrate_0_1();
 
+  void cleanup_batch();
 
 private:
-  bool m_open;
-
   MDB_env* m_env;
 
   MDB_dbi m_blocks;
@@ -376,13 +399,28 @@ private:
   mutable unsigned int m_cum_count;
   std::string m_folder;
   mdb_txn_safe* m_write_txn; // may point to either a short-lived txn or a batch txn
+  mdb_txn_safe* m_write_batch_txn; // persist batch txn outside of BlockchainLMDB
+  boost::thread::id m_writer;
+
+  bool m_batch_transactions; // support for batch transactions
+  bool m_batch_active; // whether batch transaction is in progress
 
   mdb_txn_cursors m_wcursors;
   mutable boost::thread_specific_ptr<mdb_threadinfo> m_tinfo;
 
+#if defined(__arm__)
+  // force a value so it can compile with 32-bit ARM
+  constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 31;
+#else
+#if defined(ENABLE_AUTO_RESIZE)
+  constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 30;
+#else
   constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 33;
+#endif
+#endif
 
-}; // class BlockchainLMDB
+  constexpr static float RESIZE_PERCENT = 0.8f;
+};
 
 } // namespace CryptoNote
 
