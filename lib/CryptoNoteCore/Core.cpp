@@ -173,13 +173,6 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
         return false;
     }
 
-    std::unique_ptr<BlockchainDB> db(new_db(config.dbType));
-
-    if(db == NULL) {
-      logger(ERROR, BRIGHT_RED) << "Attempted to use non-existent database type";
-      return false;
-    }
-
     boost::filesystem::path folder(m_config_folder);
 
     // make sure the data directory exists, and try to lock it
@@ -209,7 +202,9 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
     }
     catch (std::exception &e) { logger(ERROR, BRIGHT_RED) << "Exception caught in Core init: " << e.what(); }
 
-    if (db->get_db_name() == "lmdb")
+    std::unique_ptr<BlockchainDB> db(new_db(config.dbType));
+
+    if (config.dbType == "lmdb")
     {
       folder /= db->get_db_name();
     }
@@ -222,7 +217,7 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
 
     uint64_t db_flags = 0;
 
-    if (db->get_db_name() == "lmdb")
+    if (config.dbType == "lmdb")
     {
       // default to fast:async:1
 
@@ -292,7 +287,7 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
     }
 
 
-    r = m_blockchain.init(folder.string(), db->get_db_name(), db_flags, load_existing);
+    r = m_blockchain.init(folder.string(), config.dbType, db_flags, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;
