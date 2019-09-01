@@ -287,7 +287,7 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
     }
 
 
-    r = m_blockchain.init(folder.string(), config.dbType, db_flags, load_existing);
+    r = m_blockchain.init(db.release(), folder.string(), config.dbType, db_flags, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;
