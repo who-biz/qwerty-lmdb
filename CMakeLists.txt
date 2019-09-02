@@ -59,19 +59,23 @@ include(external/MiniUPnP)
 include(external/sparsehash)
 include(external/Threads)
 
+# Check whether we're on a 32-bit or 64-bit system
+math(EXPR BITS "8*${CMAKE_SIZEOF_VOID_P}")
+set(ARCH_WIDTH ${BITS} CACHE STRING "Width of architecture to build for")
+message(STATUS "Building for a ${ARCH_WIDTH}-bit system")
+
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/external/db_drivers")
 
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/lib")
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/external/Backward")
 
-include(ExternalProject)
-ExternalProject_Add(lmdb
-  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/db_drivers/liblmdb
-  BUILD_COMMAND make all
-  INSTALL_COMMAND chmod +x liblmdb.a
-  BUILD_IN_SOURCE 1
-)
-
-set(LMDB_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/db_drivers/liblmdb" CACHE STRING "LMDB Include path")
+#include(ExternalProject)
+#ExternalProject_Add(lmdb
+#  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/db_drivers/liblmdb
+#  BUILD_COMMAND make all
+#  INSTALL_COMMAND make install --prefix=${CMAKE_CURRENT_BINARY_DIR}/../lib
+#  BUILD_IN_SOURCE 1
+#)
 
 
 include_directories(${LMDB_INCLUDE})
