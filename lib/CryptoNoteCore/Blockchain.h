@@ -88,7 +88,7 @@ public:
     virtual bool checkTransactionSize(size_t blobSize) override;
 
     bool init() { return init(nullptr, Tools::getDefaultDataDirectory(), Tools::getDefaultDbType(), 0, true); }
-    bool init(BlockchainDB* m_db, const std::string& config_folder, const std::string& db_type, const int& db_flags, bool load_existing);
+    bool init(BlockchainDB* db, const std::string& config_folder, const std::string& db_type, const int& db_flags, bool load_existing);
     bool deinit();
 
     bool getLowerBound(uint64_t timestamp, uint64_t startOffset, uint32_t& height);
@@ -118,6 +118,7 @@ public:
     uint8_t getBlockMajorVersionForHeight(uint32_t height) const;
 	uint8_t blockMajorVersion;
     bool addNewBlock(const Block& bl_, block_verification_context& bvc);
+    bool add_new_block(const Block& b, block_verification_context& bvc);
     bool resetAndSetGenesisBlock(const Block& b);
     bool haveBlock(const Crypto::Hash& id);
     size_t getTotalTransactions();
@@ -369,7 +370,7 @@ private:
 
     bool storeBlockchainIndices();
     bool loadBlockchainIndices();
-
+    bool store_blockchain();
     bool loadTransactions(const Block& block, std::vector<Transaction>& transactions);
     void saveTransactions(const std::vector<Transaction>& transactions);
 

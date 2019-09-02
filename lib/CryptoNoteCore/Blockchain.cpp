@@ -83,6 +83,9 @@ class BlockchainIndicesSerializer;
 
 namespace CryptoNote {
 
+#define DB_TX_START if (Tools::getDefaultDbType() == "lmdb") { m_db->block_txn_start(true); }
+#define DB_TX_STOP if (Tools::getDefaultDbType() == "lmdb") { m_db->block_txn_stop(); }
+
 template<typename K, typename V, typename Hash>
 bool serialize(google::sparse_hash_map<K, V, Hash>& value, Common::StringView name, CryptoNote::ISerializer& serializer) {
   return serializeMap(value, name, serializer, [&value](size_t size) { value.resize(size); });
@@ -333,7 +336,7 @@ private:
 
 Blockchain::Blockchain(BlockchainDB* db,  HardFork*& hf, const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
 logger(logger, "Blockchain"),
-m_db(db),
+m_db(),
 m_hardfork(NULL),
 m_currency(currency),
 m_tx_pool(tx_pool),
@@ -438,7 +441,7 @@ uint32_t Blockchain::getCurrentBlockchainHeight() {
   return static_cast<uint32_t>(m_blocks.size());
 }
 
-bool Blockchain::init(BlockchainDB* m_db, const std::string& config_folder, const std::string& db_type, const int& db_flags, bool load_existing) {
+bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const std::string& db_type, const int& db_flags, bool load_existing) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   if (!config_folder.empty() && !Tools::create_directories_if_necessary(config_folder)) {
     logger(ERROR, BRIGHT_RED) << "Failed to create data directory: " << m_config_folder;
@@ -446,6 +449,7 @@ bool Blockchain::init(BlockchainDB* m_db, const std::string& config_folder, cons
   }
 
   m_config_folder = config_folder;
+  m_db = db;
 
   if (db_type == "")
   {
@@ -496,7 +500,7 @@ bool Blockchain::init(BlockchainDB* m_db, const std::string& config_folder, cons
   }
   else if (db_type == "lmdb")
   {
-    m_db->open(config_folder, db_flags);
+
     if (!m_db->m_open)
     {
       logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
@@ -508,8 +512,33 @@ bool Blockchain::init(BlockchainDB* m_db, const std::string& config_folder, cons
       for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
         m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
     }
+
     m_hardfork->init();
     m_db->set_hard_fork(m_hardfork);
+
+
+    if (!m_blocks.open(appendPath(config_folder, m_currency.blocksFileName()), appendPath(config_folder, parameters::CRYPTONOTE_BLOCKCHAINDATA_FILENAME), 1024))
+    {
+      return false;
+    }
+    if (m_db->height() && load_existing)
+    {
+      logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
+      BlockCacheSerializer loader(*this, get_block_hash(m_blocks.back().bl), logger.getLogger());
+      loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
+
+      if (!loader.loaded()) {
+        logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
+        rebuildCache();
+      }
+
+      if (m_blockchainIndexesEnabled) {
+        loadBlockchainIndices();
+      }
+    } else {
+      m_blocks.clear();
+    }
+
 
     if(!m_db->height())
     {
@@ -683,19 +712,20 @@ bool Blockchain::storeCache() {
 
 bool Blockchain::deinit() {
 
+   if (Tools::getDefaultDbType() == "lmdb")
+   {
+     try {
+       m_db->close();
+       logger(INFO, WHITE) << "Local blockchain read/write activity stopped successfully";
+     } catch (std::exception& e) {
+       logger(ERROR, BRIGHT_RED) << "There was an issue closing/storing the blockchain, shutting down now to prevent issues!";
+     }
 
-  try {
-    m_db->close();
-    logger(INFO, WHITE) << "Local blockchain read/write activity stopped successfully";
-  } catch (std::exception& e) {
-    logger(ERROR, BRIGHT_RED) << "There was an issue closing/storing the blockchain, shutting down now to prevent issues!";
-  }
-
-  delete m_hardfork;
-  m_hardfork = nullptr;
-  delete m_db;
-  m_db = nullptr;
-
+      delete m_hardfork;
+      m_hardfork = nullptr;
+      delete m_db;
+      m_db = nullptr;
+    }
   storeCache();
   if (m_blockchainIndexesEnabled) {
     storeBlockchainIndices();
@@ -1060,6 +1090,9 @@ bool Blockchain::switch_to_alternative_blockchain(std::list<blocks_ext_by_hash::
     disconnected_chain.push_front(b);
   }
 
+
+  DB_TX_START
+
   //connecting new alternative chain
   for (auto alt_ch_iter = alt_chain.begin(); alt_ch_iter != alt_chain.end(); alt_ch_iter++) {
     auto ch_ent = *alt_ch_iter;
@@ -1079,7 +1112,7 @@ bool Blockchain::switch_to_alternative_blockchain(std::list<blocks_ext_by_hash::
         m_orthanBlocksIndex.remove((*alt_ch_to_orph_iter)->second.bl);
         m_alternative_chains.erase(*alt_ch_to_orph_iter);
       }
-
+      DB_TX_STOP
       return false;
     }
   }
@@ -2096,6 +2129,7 @@ bool Blockchain::addNewBlock(const Block& bl_, block_verification_context& bvc) 
       return false;
     }
 
+    DB_TX_START
     //check that block refers to chain tail
     if (!(bl.previousBlockHash == getTailId())) {
       //chain switching or wrong block
@@ -2111,6 +2145,7 @@ bool Blockchain::addNewBlock(const Block& bl_, block_verification_context& bvc) 
         sendMessage(BlockchainMessage(NewBlockMessage(id)));
       }
     }
+    DB_TX_STOP
   }
 
   if (add_result && bvc.m_added_to_main_chain) {
@@ -2125,6 +2160,8 @@ const Blockchain::TransactionEntry& Blockchain::transactionByIndex(TransactionIn
 }
 
 bool Blockchain::pushBlock(const Block& blockData, block_verification_context& bvc) {
+
+  DB_TX_START
   std::vector<Transaction> transactions;
   if (!loadTransactions(blockData, transactions)) {
     bvc.m_verification_failed = true;
@@ -2135,13 +2172,14 @@ bool Blockchain::pushBlock(const Block& blockData, block_verification_context& b
     saveTransactions(transactions);
     return false;
   }
-
+  DB_TX_STOP
   return true;
 }
 
 bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction>& transactions, block_verification_context& bvc) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
 
+  DB_TX_START
   auto blockProcessingStart = std::chrono::steady_clock::now();
 
   Crypto::Hash blockHash = get_block_hash(blockData);
@@ -2306,6 +2344,8 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
 
   update_next_cumulative_size_limit();
 
+  DB_TX_STOP
+
   return true;
 }
 
@@ -2322,6 +2362,35 @@ bool Blockchain::pushBlock(BlockEntry& block) {
 
   return true;
 }
+
+bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc)
+{
+  Block bl = bl_;
+  Crypto::Hash id = getObjectHash(bl);
+  m_db->block_txn_start(true);
+  if(haveBlock(id))
+  {
+    logger(ERROR,BRIGHT_RED) << "block with id = " << id << " already exists";
+    bvc.m_already_exists = true;
+    m_db->block_txn_stop();
+    return false;
+  }
+
+  //check that block refers to chain tail
+  if(!(bl.previousBlockHash == getTailId()))
+  {
+    //chain switching or wrong block
+    bvc.m_added_to_main_chain = false;
+    m_db->block_txn_stop();
+    bool r = handle_alternative_block(bl, id, bvc);
+    return r;
+    //never relay alternative blocks
+  }
+
+  m_db->block_txn_stop();
+  return pushBlock(bl, bvc);
+}
+
 
 void Blockchain::popBlock() {
   if (m_blocks.empty()) {
@@ -2731,6 +2800,18 @@ bool Blockchain::storeBlockchainIndices() {
   }
 
   return true;
+}
+
+bool Blockchain::store_blockchain()
+{
+  std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  try {
+    m_db->sync();
+  } catch (const std::exception& e) {
+   logger(ERROR, BRIGHT_RED) << "Exception thrown at store_blockchain(): " << e.what() << " -- shutting down to prevent issues!";
+   return false;
+  }
+return true;
 }
 
 bool Blockchain::loadBlockchainIndices() {

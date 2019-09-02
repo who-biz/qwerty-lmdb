@@ -2466,8 +2466,10 @@ bool BlockchainLMDB::batch_start(uint64_t batch_num_blocks, uint64_t batch_bytes
 
 void BlockchainLMDB::batch_commit()
 {
+  if (! m_batch_transactions)
+    throw(DB_ERROR("batch transactions not enabled"));
   check_open();
-
+  m_write_txn->commit();
 
   m_write_txn = nullptr;
   delete m_write_batch_txn;
