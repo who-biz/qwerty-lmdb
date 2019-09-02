@@ -21,7 +21,7 @@
 
 #include <atomic>
 
-#include "google/sparse_hash_set"
+#include "sparsehash/sparse_hash_set"
 #include "sparsehash/sparse_hash_map"
 
 #include "Common/ObserverManager.h"
