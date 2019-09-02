@@ -2162,8 +2162,6 @@ tx_out_index BlockchainLMDB::get_output_tx_and_index(const uint64_t& amount, con
   std::vector<tx_out_index> indices;
   offsets.push_back(index);
   get_output_tx_and_index(amount, offsets, indices);
-  if (!indices.size())
-
   return indices[0];
 }
 
