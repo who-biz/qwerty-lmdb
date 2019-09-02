@@ -47,8 +47,8 @@ static uint8_t get_block_version(const CryptoNote::Block &b)
   return b.majorVersion;
 }
 
-HardFork::HardFork(BlockchainDB &db, uint8_t original_version, uint64_t original_version_till_height, uint64_t window_size, uint8_t default_threshold_percent):
-  db(db),
+HardFork::HardFork(BlockchainDB* m_db, uint8_t original_version, uint64_t original_version_till_height, uint64_t window_size, uint8_t default_threshold_percent):
+  db(*m_db),
   original_version(original_version),
   original_version_till_height(original_version_till_height),
   window_size(window_size),

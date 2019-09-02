@@ -156,7 +156,7 @@ template <typename T>
 class BlockchainDBTest : public testing::Test
 {
 protected:
-  BlockchainDBTest() : m_db( new T() ), m_hardfork(*m_db, 1, 0)
+  BlockchainDBTest() : m_db( new T() ), m_hardfork(m_db, 1, 0)
   {
     for (auto& i : t_blocks)
     {
