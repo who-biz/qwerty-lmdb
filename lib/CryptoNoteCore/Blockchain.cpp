@@ -535,22 +535,16 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
 
     if(db->height() < 1)
     {
+      DB_TX_START
       logger(INFO, BRIGHT_WHITE) << "Blockchain not loaded, generating genesis block.";
       block_verification_context bvc = boost::value_initialized<block_verification_context>();
       Block genesisBlock = m_currency.genesisBlock();
-      Crypto::Hash genesisHash = getObjectHash(genesisBlock);
-      uint64_t size = 0;
-      bool z = getBlockSize(genesisHash, size);
-      if (!z)
-        logger(ERROR, BRIGHT_RED) << "Failed to get genesis block size!";
-      const size_t genesisBlockSize = size;
-      std::vector<Transaction> txs;
-      z = loadTransactions(genesisBlock, txs);
-      db->add_block(genesisBlock, genesisBlockSize, 1, 0, txs);
+      add_new_block(genesisBlock, bvc);
       if (bvc.m_verification_failed) {
           logger(ERROR, BRIGHT_RED) << "Failed to add genesis block to blockchain";
         return false;
       }
+      DB_TX_STOP
     }
     else
     {
@@ -765,7 +759,11 @@ Crypto::Hash Blockchain::getTailId(uint32_t& height) {
 
 Crypto::Hash Blockchain::getTailId() {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  return m_blocks.empty() ? NULL_HASH : m_blockIndex.getTailId();
+  if (Tools::getDefaultDbType() != "lmdb") {
+    return (m_blocks.empty()) ? NULL_HASH : m_blockIndex.getTailId();
+  } else {
+    return (m_db->height() < 1) ? NULL_HASH : m_db->top_block_hash();
+  }
 }
 
 std::vector<Crypto::Hash> Blockchain::buildSparseChain() {
@@ -1117,6 +1115,7 @@ bool Blockchain::switch_to_alternative_blockchain(std::list<blocks_ext_by_hash::
       DB_TX_STOP
       return false;
     }
+   DB_TX_STOP
   }
 
   if (!discard_disconnected_chain) {
@@ -2388,9 +2387,8 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
     return r;
     //never relay alternative blocks
   }
-
   m_db->block_txn_stop();
-  return pushBlock(bl, bvc);
+  return add_new_block(bl, bvc);
 }
 
 
