@@ -161,9 +161,8 @@ protected:
     for (auto& i : t_blocks)
     {
       CryptoNote::Block bl;
-      const CryptoNote::blobdata ba = h2b(i);
 //      CryptoNote::BinaryArray ba = toBinaryArray(i);
-      bool r = parse_and_validate_block_from_blob(ba, bl);
+      bool r = parse_and_validate_block_from_blob(i, bl);
       m_blocks.push_back(bl);
     }
     for (auto& i : t_transactions)

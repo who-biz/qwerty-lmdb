@@ -168,9 +168,9 @@ bool is_valid_decomposed_amount(uint64_t amount);
 bool parse_and_validate_tx_from_blob(const CryptoNote::blobdata& tx_blob, CryptoNote::Transaction& tx, Crypto::Hash& tx_hash, Crypto::Hash& tx_prefix_hash);
 bool parse_and_validate_tx_from_blob(const CryptoNote::blobdata& tx_blob, CryptoNote::Transaction& tx);
 bool parse_and_validate_block_from_blob(const CryptoNote::blobdata& b_blob, CryptoNote::Block& tx);
-CryptoNote::BinaryArray block_to_blob(const CryptoNote::Block& b);
+CryptoNote::blobdata block_to_blob(const CryptoNote::Block& b);
 bool block_to_blob(const CryptoNote::Block& b, CryptoNote::blobdata& b_blob);
-CryptoNote::BinaryArray tx_to_blob(const CryptoNote::Transaction& tx);
+CryptoNote::blobdata tx_to_blob(const CryptoNote::Transaction& tx);
 bool tx_to_blob(const CryptoNote::Transaction& tx, CryptoNote::blobdata& tx_blob);
 
 }

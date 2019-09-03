@@ -41,7 +41,6 @@
 
 #include "Common/StringTools.h"
 #include "Serialization/BinarySerializationTools.h"
-#include "Common/hex_str.h"
 #include "binary_archive.h"
 
 namespace CryptoNote
@@ -145,27 +144,31 @@ namespace detail {
     bool r = do_serialize(ar, v);
     return r && check_stream_state(ar);
   }
-}
 
-  template<class t_object>
+  std::vector<uint8_t> fromHex(const std::string& string);
+  std::string toHex(const std::vector<uint8_t>& vec);
+
+/*  template<class t_object>
   bool t_serializable_object_to_blob(const t_object& to, CryptoNote::blobdata& b_blob)
   {
     std::stringstream ss;
     ss << b_blob;
     BinaryArray ba = hex_to_bin(ss.str());
-//    bool r = serial::serialize(ba, const_cast<t_object&>(to));
-    b_blob = ss.str();
-    bool r = b_blob.empty();
-    return !r;
-  }
+    toHex(ba);
+    bool r = serial::serialize(ba, const_cast<t_object&>(to));
+    b_blob = toHex(ba);
+    return r;
+  }*/
   //---------------------------------------------------------------
   template<class t_object>
-  CryptoNote::BinaryArray t_serializable_object_to_blob(const t_object& to)
+  CryptoNote::blobdata t_serializable_object_to_blob(const t_object& to)
   {
     CryptoNote::blobdata b;
-    t_serializable_object_to_blob(to, b);
-    CryptoNote::BinaryArray ba = hex_to_bin(b);
-    return ba;
+    BinaryArray ba;
+    loadFromBinary(to, ba);
+    b = toHex(ba);
+    return b;
   }
+}
 } // namespace CryptoNote
 
