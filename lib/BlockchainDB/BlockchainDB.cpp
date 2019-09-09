@@ -106,10 +106,9 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const CryptoNot
   uint64_t tx_id = add_transaction_data(blk_hash, tx, tx_hash);
 
   std::vector<uint64_t> amount_output_indices;
-
+  uint64_t i = 0;
   for (const auto& each : tx.outputs)
   {
-      uint64_t i = 0;
       amount_output_indices.push_back(add_output(tx_hash, each, ++i, tx.unlockTime));
   }
   add_tx_amount_output_indices(tx_id, amount_output_indices);

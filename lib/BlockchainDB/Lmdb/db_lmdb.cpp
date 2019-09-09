@@ -29,6 +29,7 @@
 #include "db_lmdb.h"
 
 #include <boost/filesystem.hpp>
+#include <boost/variant/get.hpp>
 #include <boost/format.hpp>
 #include <boost/current_function.hpp>
 #include <boost/thread.hpp>
@@ -40,8 +41,10 @@
 #include "Common/Util.h"
 #include "Common/FileMappedVector.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
+#include "CryptoNoteCore/TransactionUtils.h"
 #include "CryptoNoteCore/Blockchain.h"
 #include <Logging/LoggerRef.h>
+#include "CryptoNoteCore/TransactionUtils.h"
 #include "CryptoNoteCore/CryptoNoteTools.h"
 #include "CryptoNoteCore/Currency.h"
 #include "BlockchainDB/BlobDataType.h"
@@ -706,8 +709,6 @@ uint64_t BlockchainLMDB::add_output(const Crypto::Hash& tx_hash,
   CURSOR(output_txs)
   CURSOR(output_amounts)
 
-  if (tx_output.target.type() != typeid(CryptoNote::KeyOutput))
-    throw(DB_ERROR("Wrong output type: expected txout_to_key"));
 
   outtx ot = {m_num_outputs, tx_hash, local_index};
   MDB_val_set(vot, ot);
@@ -732,8 +733,16 @@ uint64_t BlockchainLMDB::add_output(const Crypto::Hash& tx_hash,
     throw(DB_ERROR(lmdb_error("Failed to get output amount in db transaction: ", result).c_str()));
   else
     ok.amount_index = 0;
+
+        if (tx_output.target.type() == typeid(KeyOutput)) {
+          ok.data.pubkey = boost::get<KeyOutput>(tx_output.target).key;
+        } else if (tx_output.target.type() == typeid(MultisignatureOutput)) {
+          throw(DB_ERROR(std::string("Transaction output should be of type KeyOutput!").c_str()));
+        }
+//    ok.data.pubkey = boost::get<MultisignatureOutput>(tx_output.target).key;
+    
+
   ok.output_id = m_num_outputs;
-  ok.data.pubkey = boost::get < CryptoNote::KeyOutput > (tx_output.target).key;
   ok.data.unlock_time = unlock_time;
   ok.data.height = m_height;
   data.mv_size = sizeof(outkey);
@@ -2094,12 +2103,14 @@ output_data_t BlockchainLMDB::get_output_key(const uint64_t& amount, const uint6
   MDB_val_set(k, amount);
   MDB_val_set(v, index);
   auto get_result = mdb_cursor_get(m_cur_output_amounts, &k, &v, MDB_GET_BOTH);
-  if (get_result)
+  if (get_result == MDB_NOTFOUND)
+    {} //throw1(OUTPUT_DNE("Attempting to get output pubkey by index, but key does not exist"));
+  else if (get_result)
     throw(DB_ERROR("Error attempting to retrieve an output pubkey from the db"));
 
   output_data_t ret;
     const outkey *okp = (const outkey *)v.mv_data;
-    ret = okp->data;
+    memcpy(&ret, &okp->data, sizeof(output_data_t));
   TXN_POSTFIX_RDONLY();
   return ret;
 }
@@ -2115,7 +2126,9 @@ tx_out_index BlockchainLMDB::get_output_tx_and_index_from_global(const uint64_t&
   MDB_val_set(v, output_id);
 
   auto get_result = mdb_cursor_get(m_cur_output_txs, (MDB_val *)&zerokval, &v, MDB_GET_BOTH);
-  if (get_result)
+  if (get_result == MDB_NOTFOUND)
+    {}//throw1(OUTPUT_DNE("output with given index not in db"));
+  else if (get_result)
     throw(DB_ERROR("DB error attempting to fetch output tx hash"));
 
   outtx *ot = (outtx *)v.mv_data;
@@ -2133,11 +2146,10 @@ tx_out_index BlockchainLMDB::get_output_tx_and_index(const uint64_t& amount, con
   offsets.push_back(index);
   get_output_tx_and_index(amount, offsets, indices);
   if (!indices.size())
-    {} //{} // throw1(OUTPUT_DNE("Attempting to get an output index by amount and amount index, but amount not found"));
+   {} // throw1(OUTPUT_DNE("Attempting to get an output index by amount and amount index, but amount not found"));
 
   return indices[0];
 }
-
 
 std::vector<uint64_t> BlockchainLMDB::get_tx_amount_output_indices(const uint64_t tx_id) const
 {
@@ -2256,9 +2268,11 @@ bool BlockchainLMDB::for_blocks_range(const uint64_t& h1, const uint64_t& h2, st
     bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
     CryptoNote::Block b;
     bool r = parse_and_validate_block_from_blob(bd, b);
-    if (!r) { return false; }
+    if (!r) { 
+      throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
+    }
     Crypto::Hash hash;
-    hash = get_block_hash(b);
+    if (!get_block_hash(b, hash));
     if (!f(height, hash, b)) {
       fret = false;
       break;
@@ -2464,11 +2478,11 @@ void BlockchainLMDB::batch_stop()
   if (! m_batch_transactions)
     throw(DB_ERROR("batch transactions not enabled"));
   if (! m_batch_active)
-    {} //{} // throw1(DB_ERROR("batch transaction not in progress"));
+    {} // throw1(DB_ERROR("batch transaction not in progress"));
   if (m_write_batch_txn == nullptr)
-    {} //{} // throw1(DB_ERROR("batch transaction not in progress"));
+    {} // throw1(DB_ERROR("batch transaction not in progress"));
   if (m_writer != boost::this_thread::get_id())
-    {} //{} // throw1(DB_ERROR("batch transaction owned by other thread"));
+    {} // throw1(DB_ERROR("batch transaction owned by other thread"));
   check_open();
  // LOG_PRINT_L3("batch transaction: committing...");
   try
@@ -2490,11 +2504,11 @@ void BlockchainLMDB::batch_abort()
   if (! m_batch_transactions)
     throw(DB_ERROR("batch transactions not enabled"));
   if (! m_batch_active)
-    {}//{} // throw1(DB_ERROR("batch transaction not in progress"));
+    {}// throw1(DB_ERROR("batch transaction not in progress"));
   if (m_write_batch_txn == nullptr)
-    {}//{} // throw1(DB_ERROR("batch transaction not in progress"));
+    {} // throw1(DB_ERROR("batch transaction not in progress"));
   if (m_writer != boost::this_thread::get_id())
-    {}//{} // throw1(DB_ERROR("batch transaction owned by other thread"));
+    {} // throw1(DB_ERROR("batch transaction owned by other thread"));
   check_open();
   // for destruction of batch transaction
   m_write_txn = nullptr;
@@ -2669,7 +2683,7 @@ uint64_t BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& b
 
   try
   {
-    BlockchainLMDB::add_block(blk, block_size, cumulative_difficulty, coins_generated, txs);
+    BlockchainDB::add_block(blk, block_size, cumulative_difficulty, coins_generated, txs);
   }
   catch (const DB_ERROR_TXN_START& e)
   {
@@ -2693,7 +2707,7 @@ void BlockchainLMDB::pop_block(CryptoNote::Block& blk, std::vector<CryptoNote::T
 
   try
   {
-    BlockchainLMDB::pop_block(blk, txs);
+    BlockchainDB::pop_block(blk, txs);
 	block_txn_stop();
   }
   catch (...)

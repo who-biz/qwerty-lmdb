@@ -68,7 +68,7 @@ class Blockchain : public CryptoNote::ITransactionValidator
 {
 public:
     Blockchain(
-        BlockchainDB* db,
+        BlockchainDB*& db,
         HardFork*& hf,
         const Currency &currency,
         tx_memory_pool &tx_pool,

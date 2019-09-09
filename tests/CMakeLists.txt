@@ -360,11 +360,11 @@ set(QwertycoinTests_UnitTests_SOURCES
 set(QwertycoinTests_UnitTests_LIBS
     GTest::main
     QwertycoinFramework::BlockchainDB
+    ${LMDB_LIBRARY}
     QwertycoinFramework::CryptoNoteCore
     QwertycoinFramework::CryptoNoteProtocol
     QwertycoinFramework::Http
     QwertycoinFramework::InProcessNode
-    ${LMDB_LIBRARY}
     QwertycoinFramework::Logging
     QwertycoinFramework::Rpc
     QwertycoinFramework::Wallet

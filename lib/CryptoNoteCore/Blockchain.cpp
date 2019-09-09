@@ -334,9 +334,9 @@ private:
 };
 
 
-Blockchain::Blockchain(BlockchainDB* db,  HardFork*& hf, const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
+Blockchain::Blockchain(BlockchainDB*& db,  HardFork*& hf, const Currency& currency, tx_memory_pool& tx_pool, ILogger& logger, bool blockchainIndexesEnabled) :
 logger(logger, "Blockchain"),
-m_db(db),
+m_db(),
 m_hardfork(NULL),
 m_currency(currency),
 m_tx_pool(tx_pool),
@@ -500,7 +500,7 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
   }
   else if (db_type == "lmdb")
   {
-    if (!db->is_open())
+    if (!m_db->is_open())
     {
       logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
     }
@@ -512,14 +512,14 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
         m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
     }
     m_hardfork->init();
-    db->set_hard_fork(m_hardfork);
+    m_db->set_hard_fork(m_hardfork);
 
 
 
-    if (db->height() && load_existing)
+    if ((m_db->height() >= 1) && load_existing)
     {
       logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
-      BlockCacheSerializer loader(*this, get_block_hash(db->get_top_block()), logger.getLogger());
+      BlockCacheSerializer loader(*this, get_block_hash(m_db->get_top_block()), logger.getLogger());
       loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
 
       if (!loader.loaded()) {
@@ -533,7 +533,7 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
     } else {
     }
 
-    if(db->height() < 1)
+    if(m_db->height() < 1)
     {
       DB_TX_START
       logger(INFO, BRIGHT_WHITE) << "Blockchain not loaded, generating genesis block.";
@@ -558,6 +558,8 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
       }
     }
   }
+
+if (db_type != "lmdb") {
 
   uint32_t lastValidCheckpointHeight = 0;
   if (!checkCheckpoints(lastValidCheckpointHeight)) {
@@ -610,11 +612,13 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
     logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector";
     return false;
   }
+}
 
 
   if (db_type == "lmdb")
   {
-    uint64_t top_block_timestamp = db->get_top_block_timestamp();
+    DB_TX_START
+    uint64_t top_block_timestamp = m_db->get_top_block_timestamp();
     uint64_t timestamp_diff = time(NULL) - top_block_timestamp;
 
     if (!top_block_timestamp) {
@@ -622,14 +626,14 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
     }
 
     logger(INFO, BRIGHT_GREEN)
-      << "Blockchain initialized. last block: " << std::to_string(db->height()) << ", "
+      << "Blockchain initialized. last block: " << std::to_string(m_db->height()-1) << ", "
       << Common::timeIntervalToString(timestamp_diff)
       << " time ago, current difficulty: " << getDifficultyForNextBlock();
 
-    m_db->block_txn_stop();
+    DB_TX_STOP
     update_next_cumulative_size_limit();
   }
-  else if (db_type == "")
+  else
   {
     update_next_cumulative_size_limit();
 
@@ -2368,12 +2372,12 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
 {
   Block bl = bl_;
   Crypto::Hash id = getObjectHash(bl);
-  m_db->block_txn_start(true);
+  DB_TX_START
   if(haveBlock(id))
   {
     logger(ERROR,BRIGHT_RED) << "block with id = " << id << " already exists";
     bvc.m_already_exists = true;
-    m_db->block_txn_stop();
+    DB_TX_STOP
     return false;
   }
 
@@ -2382,17 +2386,20 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
   {
     //chain switching or wrong block
     bvc.m_added_to_main_chain = false;
-    m_db->block_txn_stop();
     bool r = handle_alternative_block(bl, id, bvc);
+    DB_TX_STOP
     return r;
     //never relay alternative blocks
   }
-  m_db->block_txn_stop();
+  DB_TX_STOP
   return add_new_block(bl, bvc);
 }
 
 
 void Blockchain::popBlock() {
+
+  DB_TX_START
+
   if (m_blocks.empty()) {
     logger(ERROR, BRIGHT_RED) <<
       "Attempt to pop block from empty blockchain.";
@@ -2407,6 +2414,8 @@ void Blockchain::popBlock() {
   saveTransactions(transactions);
   removeLastBlock();
 
+  DB_TX_STOP
+
   m_upgradeDetectorV2.blockPopped();
   m_upgradeDetectorV3.blockPopped();
   m_upgradeDetectorV4.blockPopped();
@@ -2415,6 +2424,9 @@ void Blockchain::popBlock() {
 }
 
 bool Blockchain::pushTransaction(BlockEntry& block, const Crypto::Hash& transactionHash, TransactionIndex transactionIndex) {
+
+  DB_TX_START
+
   auto result = m_transactionMap.insert(std::make_pair(transactionHash, transactionIndex));
   if (!result.second) {
     logger(ERROR, BRIGHT_RED) <<
@@ -2470,6 +2482,8 @@ bool Blockchain::pushTransaction(BlockEntry& block, const Crypto::Hash& transact
   }
 
   m_paymentIdIndex.add(transaction.tx);
+
+  DB_TX_STOP
 
   return true;
 }

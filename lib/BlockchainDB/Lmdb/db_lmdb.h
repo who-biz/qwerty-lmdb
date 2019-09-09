@@ -34,6 +34,7 @@
 #include "BlockchainDB/BlobDataType.h"
 #include "BlockchainDB/Structures.h"
 #include <boost/thread/tss.hpp>
+#include <boost/variant.hpp>
 
 #define ENABLE_AUTO_RESIZE
 
@@ -187,6 +188,8 @@ public:
   virtual CryptoNote::blobdata get_block_blob(const Crypto::Hash& h) const;
 
   virtual CryptoNote::blobdata get_block_blob_from_height(const uint64_t& height) const;
+
+//  virtual TransactionTypes::OutputType getTransactionOutputType(boost::variant<CryptoNote::KeyOutput, CryptoNote::MultisignatureOutput> const & target) const;
 
   virtual uint64_t get_block_timestamp(const uint64_t& height) const;
 

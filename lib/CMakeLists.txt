@@ -78,6 +78,7 @@ set(QwertycoinFramework_BlockchainDB_SOURCES
 
 set(QwertycoinFramework_BlockchainDB_LIBS
     Threads::Threads
+    QwertycoinFramework_CryptoNoteCore
     ${LMDB_LIBRARY}
 )
 
@@ -322,6 +323,7 @@ set(QwertycoinFramework_CryptoNoteCore_LIBS
     Boost::thread
     sparsehash::sparsehash
     QwertycoinFramework::BlockchainDB
+    ${LMDB_LIBRARY}
     QwertycoinFramework::BlockchainExplorer
     QwertycoinFramework::Common
     QwertycoinFramework::Crypto
@@ -524,6 +526,8 @@ set(QwertycoinFramework_PaymentGate_SOURCES
 )
 
 set(QwertycoinFramework_PaymentGate_LIBS
+    QwertycoinFramework::BlockchainDB
+    ${LMDB_LIBRARY}
     QwertycoinFramework::JsonRpcServer
     QwertycoinFramework::NodeRpcProxy
     QwertycoinFramework::System
