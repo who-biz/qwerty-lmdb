@@ -409,6 +409,181 @@ bool Blockchain::checkTransactionInputs(const CryptoNote::Transaction& tx, Block
   return true;
 }
 
+template <class visitor_t>
+bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visitor_t &vis, const Crypto::Hash &tx_prefix_hash, uint32_t* pmax_related_block_height) const
+{
+
+  // verify that the input has key offsets (that it exists properly, really)
+  if(!tx_in_to_key.outputIndexes.size())
+    return false;
+
+  // cryptonote_format_utils uses relative offsets for indexing to the global
+  // outputs list.  that is to say that absolute offset #2 is absolute offset
+  // #1 plus relative offset #2.
+  // TODO: Investigate if this is necessary / why this is done.
+  std::vector<uint32_t> absolute_offsets = relative_output_offsets_to_absolute(tx_in_to_key.outputIndexes);
+  std::vector<output_data_t> outputs;
+
+  bool found = false;
+  auto it = m_scan_table.find(tx_prefix_hash);
+  if (it != m_scan_table.end())
+  {
+    auto its = it->second.find(tx_in_to_key.keyImage);
+    if (its != it->second.end())
+    {
+      outputs = its->second;
+      found = true;
+    }
+  }
+ 
+  if (!found)
+  {
+    try
+    {
+      std::vector<uint64_t> off;
+      for (const auto& each : absolute_offsets)
+      {
+        uint64_t conv = each;
+        off.push_back(conv);
+      }
+      m_db->get_output_key(tx_in_to_key.amount, off, outputs);
+      if (absolute_offsets.size() != outputs.size())
+      {
+        logger(ERROR, BRIGHT_RED) << "Output does not exist! amount = " << std::to_string(tx_in_to_key.amount);
+        return false;
+      }
+    }
+    catch (...)
+    {
+      logger(ERROR, BRIGHT_RED) << "Output does not exist! amount = " << std::to_string(tx_in_to_key.amount);
+      return false;
+    }
+  }
+  else
+  {
+    // check for partial results and add the rest if needed;
+    if (outputs.size() < absolute_offsets.size() && outputs.size() > 0)
+    {
+      logger(INFO, WHITE) << "Additional outputs needed: " << std::to_string(absolute_offsets.size() - outputs.size());
+      std::vector < uint64_t > add_offsets;
+      std::vector<output_data_t> add_outputs;
+      for (size_t i = outputs.size(); i < absolute_offsets.size(); i++)
+        add_offsets.push_back(absolute_offsets[i]);
+      try
+      {
+        m_db->get_output_key(tx_in_to_key.amount, add_offsets, add_outputs, true);
+        if (add_offsets.size() != add_outputs.size())
+        {
+          logger(ERROR, BRIGHT_RED) << "Output does not exist! amount = " << std::to_string(tx_in_to_key.amount);
+          return false;
+        }
+      }
+      catch (...)
+      {
+        logger(ERROR, BRIGHT_RED) << "Output does not exist! amount = " << std::to_string(tx_in_to_key.amount);
+        return false;
+      }
+      outputs.insert(outputs.end(), add_outputs.begin(), add_outputs.end());
+    }
+  }
+
+  size_t count = 0;
+  for (const uint64_t& i : absolute_offsets)
+  {
+    try
+    {
+      output_data_t output_index;
+      try
+      {
+        // get tx hash and output index for output
+        if (count < outputs.size())
+          output_index = outputs.at(count);
+        else
+          output_index = m_db->get_output_key(tx_in_to_key.amount, i);
+
+        // call to the passed boost visitor to grab the public key for the output
+        if (!vis.handle_output(output_index.unlock_time, output_index.pubkey))
+        {
+          logger(ERROR, BRIGHT_RED) << "Failed to handle_output for output no = " << std::to_string(count) << ", with absolute offset " << std::to_string(i);
+          return false;
+        }
+      }
+      catch (...)
+      {
+        logger(ERROR, BRIGHT_RED) <<"Output does not exist! amount = " << std::to_string(tx_in_to_key.amount) << ", absolute_offset = " << std::to_string(i);
+        return false;
+      }
+      // if on last output and pmax_related_block_height not null pointer
+      if(++count == absolute_offsets.size() && pmax_related_block_height)
+      {
+        // set *pmax_related_block_height to tx block height for this output
+        auto h = output_index.height;
+        if(*pmax_related_block_height < h)
+        {
+          *pmax_related_block_height = h;
+        }
+      }
+
+    }
+    catch (const OUTPUT_DNE& e)
+    {
+      logger(ERROR, BRIGHT_RED) << "Output does not exist: " << e.what();
+      return false;
+    }
+    catch (const TX_DNE& e)
+    {
+      logger(ERROR, BRIGHT_RED) << "Transaction does not exist: " << e.what();
+      return false;
+    }
+
+  }
+
+  return true;
+}
+
+/*bool Blockchain::check_tx_input(size_t tx_version, const KeyInput& txin, const Crypto::Hash& tx_prefix_hash, const std::vector<Crypto::Signature>& sig, std::vector<Crypto::PublicKey> &output_keys, uint64_t* pmax_related_block_height)
+{
+
+  struct outputs_visitor
+  {
+    std::vector<Crypto::PublicKey>& m_output_keys;
+    Blockchain& m_bch;
+    outputs_visitor(std::vector<Crypto::PublicKey>& output_keys, const Blockchain& bch) :
+      m_output_keys(output_keys), m_bch(bch)
+    {
+    }
+    bool handle_output(uint64_t unlock_time, const Crypto::PublicKey pubkey)
+    {
+      //check tx unlock time
+      if (!m_bch.is_tx_spendtime_unlocked(unlock_time))
+      {
+        logger(ERROR, BRIGHT_RED) << "One of outputs for one of inputs has wrong tx.unlock_time = " << std::to_string(unlock_time);
+        return false;
+      }
+
+      m_output_keys.push_back(pubkey);
+      return true;
+    }
+  };
+
+  output_keys.clear();
+
+  // collect output keys
+  outputs_visitor vi(output_keys, *this);
+  if (!scan_outputkeys_for_indexes(txin, vi, tx_prefix_hash, pmax_related_block_height))
+  {
+    logger(ERROR, BRIGHT_RED) << "Failed to get output keys for tx with amount = " << print_money(txin.amount) << " and count indexes " << std::to_string(txin.outputIndexes.size());
+    return false;
+  }
+
+  if(txin.outputIndexes.size() != output_keys.size())
+  {
+    logger(ERROR, BRIGHT_RED) << "Output keys for tx with amount = " << std::to_string(txin.amount) << " and count indexes " << std::to_string(txin.outputIndexes.size()) << " returned wrong keys count " << std::to_string(output_keys.size());
+    return false;
+  }
+  return true;
+}
+*/
 bool Blockchain::haveSpentKeyImages(const CryptoNote::Transaction& tx) {
   return this->haveTransactionKeyImagesAsSpent(tx);
 }
@@ -533,7 +708,7 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
     } else {
     }
 
-    if(m_db->height() < 1)
+    if(!load_existing)
     {
       DB_TX_START
       logger(INFO, BRIGHT_WHITE) << "Blockchain not loaded, generating genesis block.";
@@ -700,13 +875,21 @@ void Blockchain::rebuildCache() {
 bool Blockchain::storeCache() {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
 
-  logger(INFO, BRIGHT_WHITE) << "Saving blockchain at height " << m_blocks.size() - 1 << "...";
-  BlockCacheSerializer ser(*this, getTailId(), logger.getLogger());
-  if (!ser.save(appendPath(m_config_folder, m_currency.blocksCacheFileName()))) {
-    logger(ERROR, BRIGHT_RED) << "Failed to save blockchain cache";
-    return false;
+  if (Tools::getDefaultDbType() != "lmdb") {
+    logger(INFO, BRIGHT_WHITE) << "Saving blockchain at height " << m_blocks.size() - 1 << "...";
+    BlockCacheSerializer ser(*this, getTailId(), logger.getLogger());
+    if (!ser.save(appendPath(m_config_folder, m_currency.blocksCacheFileName()))) {
+      logger(ERROR, BRIGHT_RED) << "Failed to save blockchain cache";
+      return false;
+    }
+  } else {
+    logger(INFO, BRIGHT_WHITE) << "Saving blockchain to DB at height " << m_db->height() << "...";
+    BlockCacheSerializer ser(*this, getTailId(), logger.getLogger());
+    if (!ser.save(appendPath(m_config_folder, m_currency.blocksCacheFileName()))) {
+      logger(ERROR, BRIGHT_RED) << "Failed to save blockchain cache";
+      return false;
+    }    
   }
-
   return true;
 }
 
@@ -755,10 +938,21 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
 }
 
 Crypto::Hash Blockchain::getTailId(uint32_t& height) {
-//  assert(!m_blocks.empty());
-  std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  height = getCurrentBlockchainHeight() - 1;
-  return getTailId();
+  if (Tools::getDefaultDbType() != "lmdb") {
+    std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+    if (getCurrentBlockchainHeight()) {
+      height = getCurrentBlockchainHeight() - 1;
+      return getTailId();
+    }
+  } else {
+    std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+    if (m_db->height()) {
+      height = m_db->height() - 1;
+      return m_db->top_block_hash();
+    }
+  }
+  height = 0;
+  return NULL_HASH;  
 }
 
 Crypto::Hash Blockchain::getTailId() {
@@ -819,18 +1013,37 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
 
 Crypto::Hash Blockchain::getBlockIdByHeight(uint32_t height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-//  assert(height < m_blockIndex.size());
-  return m_blockIndex.getBlockId(height);
+  if (Tools::getDefaultDbType() != "lmdb") {
+    assert(height < m_blockIndex.size());
+    return m_blockIndex.getBlockId(height);
+  }
+  else {
+    assert(height < m_db->height());
+    try {
+      return m_db->get_block_hash_from_height(height);
+    } catch (const std::exception& e) {
+      logger(ERROR, BRIGHT_RED) << "Something went wrong fetching block hash by height: " << e.what();
+    }
+  }
+  return NULL_HASH;
 }
 
 bool Blockchain::getBlockByHash(const Crypto::Hash& blockHash, Block& b) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
 
   uint32_t height = 0;
-
-  if (m_blockIndex.getBlockHeight(blockHash, height)) {
-    b = m_blocks[height].bl;
-    return true;
+  if (Tools::getDefaultDbType() != "lmdb") {
+    if (m_blockIndex.getBlockHeight(blockHash, height)) {
+      b = m_blocks[height].bl;
+      return true;
+    }
+  } else {
+    try {
+      b = m_db->get_block(blockHash);
+      return true;
+    } catch (const std::exception& e) {
+      logger(ERROR, BRIGHT_RED) << "Something went wrong fetching block by hash: " << e.what();
+    }
   }
 
   logger(WARNING) << blockHash;
@@ -846,7 +1059,13 @@ bool Blockchain::getBlockByHash(const Crypto::Hash& blockHash, Block& b) {
 
 bool Blockchain::getBlockHeight(const Crypto::Hash& blockId, uint32_t& blockHeight) {
   std::lock_guard<decltype(m_blockchain_lock)> lock(m_blockchain_lock);
-  return m_blockIndex.getBlockHeight(blockId, blockHeight);
+  if (Tools::getDefaultDbType() != "lmdb") {
+    return m_blockIndex.getBlockHeight(blockId, blockHeight);
+  } else {
+    blockHeight = m_db->get_block_height(blockId);
+    return true;
+  }
+  return false;
 }
 
 difficulty_type Blockchain::getDifficultyForNextBlock() {
@@ -1921,31 +2140,75 @@ bool Blockchain::is_tx_spendtime_unlocked(uint64_t unlock_time) {
 bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_prefix_hash, const std::vector<Crypto::Signature>& sig, uint32_t* pmax_related_block_height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
 
-  struct outputs_visitor {
-    std::vector<const Crypto::PublicKey *>& m_results_collector;
-    Blockchain& m_bch;
-    LoggerRef logger;
-    outputs_visitor(std::vector<const Crypto::PublicKey *>& results_collector, Blockchain& bch, ILogger& logger) :m_results_collector(results_collector), m_bch(bch), logger(logger, "outputs_visitor") {
-    }
+  std::vector<const Crypto::PublicKey *> output_keys;
 
-    bool handle_output(const Transaction& tx, const TransactionOutput& out, size_t transactionOutputIndex) {
-      //check tx unlock time
-      if (!m_bch.is_tx_spendtime_unlocked(tx.unlockTime)) {
-        logger(INFO, BRIGHT_WHITE) <<
-          "One of outputs for one of inputs have wrong tx.unlockTime = " << tx.unlockTime;
-        return false;
+  if (Tools::getDefaultDbType() != "lmdb") {
+    struct outputs_visitor {
+      std::vector<const Crypto::PublicKey *>& m_results_collector;
+      Blockchain& m_bch;
+      LoggerRef logger;
+      outputs_visitor(std::vector<const Crypto::PublicKey *>& results_collector, Blockchain& bch, ILogger& logger) :m_results_collector(results_collector), m_bch(bch), logger(logger, "outputs_visitor") {
       }
 
-      if (out.target.type() != typeid(KeyOutput)) {
-        logger(INFO, BRIGHT_WHITE) <<
-          "Output have wrong type id, which=" << out.target.which();
-        return false;
+      bool handle_output(const Transaction& tx, const TransactionOutput& out, size_t transactionOutputIndex) {
+
+        //check tx unlock time
+        if (!m_bch.is_tx_spendtime_unlocked(tx.unlockTime)) {
+          logger(INFO, BRIGHT_WHITE) <<
+            "One of outputs for one of inputs have wrong tx.unlockTime = " << tx.unlockTime;
+          return false;
+        }
+
+        if (out.target.type() != typeid(KeyOutput)) {
+          logger(INFO, BRIGHT_WHITE) <<
+            "Output have wrong type id, which=" << out.target.which();
+          return false;
+        }
+
+        m_results_collector.push_back(&boost::get<KeyOutput>(out.target).key);
+        return true;
+      }
+    };
+
+    outputs_visitor vi(output_keys, *this, logger.getLogger());
+    if (!scanOutputKeysForIndexes(txin, vi, pmax_related_block_height)) {
+      logger(INFO, BRIGHT_WHITE) <<
+        "Failed to get output keys for tx with amount = " << m_currency.formatAmount(txin.amount) <<
+        " and count indexes " << txin.outputIndexes.size();
+      return false;
+    }
+
+  } else {
+      struct outputs_visitor {
+        std::vector<const Crypto::PublicKey *>& m_results_collector;
+        Blockchain& m_bch;
+        LoggerRef logger;
+        outputs_visitor(std::vector<const Crypto::PublicKey *>& results_collector, Blockchain& bch, ILogger& logger) :m_results_collector(results_collector), m_bch(bch), logger(logger, "outputs_visitor") {
       }
 
-      m_results_collector.push_back(&boost::get<KeyOutput>(out.target).key);
-      return true;
+      bool handle_output(uint64_t unlock_time, const Crypto::PublicKey &pubkey)
+      {
+        //check tx unlock time
+        if (!m_bch.is_tx_spendtime_unlocked(unlock_time))
+        {
+          logger(ERROR, BRIGHT_RED) << "One of outputs for one of inputs has wrong tx.unlock_time = " << std::to_string(unlock_time);
+          return false;
+        }
+
+        m_results_collector.push_back(&pubkey);
+        return true;
+      }
+    };
+    outputs_visitor vi(output_keys, *this, logger.getLogger());
+    if (!scan_outputkeys_for_indexes(txin, vi, tx_prefix_hash, pmax_related_block_height))
+    {
+      logger(INFO, BRIGHT_WHITE) <<
+        "Failed to get output keys for tx with amount = " << m_currency.formatAmount(txin.amount) <<
+        " and count indexes " << txin.outputIndexes.size();
+      return false;
     }
-  };
+
+  }
 
   // additional key_image check, fix discovered by Monero Lab and suggested by "fluffypony" (bitcointalk.org)
   static const Crypto::KeyImage I = { { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
@@ -1953,16 +2216,6 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
   if (!(scalarmultKey(txin.keyImage, L) == I)) {
 	 logger(ERROR) << "Transaction uses key image not in the valid domain";
 	 return false;
-  }
-
-  //check ring signature
-  std::vector<const Crypto::PublicKey *> output_keys;
-  outputs_visitor vi(output_keys, *this, logger.getLogger());
-  if (!scanOutputKeysForIndexes(txin, vi, pmax_related_block_height)) {
-    logger(INFO, BRIGHT_WHITE) <<
-      "Failed to get output keys for tx with amount = " << m_currency.formatAmount(txin.amount) <<
-      " and count indexes " << txin.outputIndexes.size();
-    return false;
   }
 
   if (txin.outputIndexes.size() != output_keys.size()) {

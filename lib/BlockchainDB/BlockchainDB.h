@@ -1149,7 +1149,7 @@ public:
    *
    * @return the requested output data
    */
-  virtual output_data_t get_output_key(const uint64_t& amount, const uint64_t& index) = 0;
+  virtual output_data_t get_output_key(const uint64_t& amount, const uint32_t& index) = 0;
 
   /**
    * @brief get some of an output's data
@@ -1166,7 +1166,7 @@ public:
    *
    * @return the requested output data
    */
-  virtual output_data_t get_output_key(const uint64_t& global_index) const = 0;
+  virtual output_data_t get_output_key(const uint32_t& global_index) const = 0;
 
   /**
    * @brief gets an output's tx hash and index
@@ -1192,7 +1192,7 @@ public:
    *
    * @return the tx hash and output index
    */
-  virtual tx_out_index get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const = 0;
+  virtual tx_out_index get_output_tx_and_index(const uint64_t& amount, const uint32_t& index) const = 0;
 
   /**
    * @brief gets some outputs' tx hashes and indices
@@ -1205,7 +1205,7 @@ public:
    * @param offsets a list of amount-specific output indices
    * @param indices return-by-reference a list of tx hashes and output indices (as pairs)
    */
-  virtual void get_output_tx_and_index(const uint64_t& amount, const std::vector<uint64_t> &offsets, std::vector<tx_out_index> &indices) const = 0;
+  virtual void get_output_tx_and_index(const uint64_t& amount, const std::vector<uint32_t> &offsets, std::vector<tx_out_index> &indices) const = 0;
 
   /**
    * @brief gets outputs' data

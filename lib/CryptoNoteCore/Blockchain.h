@@ -133,6 +133,10 @@ public:
     bool getTransactionOutputGlobalIndexes(const Crypto::Hash& tx_id, std::vector<uint32_t>& indexs);
     bool get_out_by_msig_gindex(uint64_t amount, uint64_t gindex, MultisignatureOutput& out);
     bool checkTransactionInputs(const Transaction& tx, uint32_t& pmax_used_block_height, Crypto::Hash& max_used_block_id, BlockInfo* tail = 0);
+
+    template<class visitor_t>
+    inline bool scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visitor_t &vis, const Crypto::Hash &tx_prefix_hash, uint32_t* pmax_related_block_height) const;
+
     uint64_t getCurrentCumulativeBlocksizeLimit();
     uint64_t blockDifficulty(size_t i);
     uint64_t blockCumulativeDifficulty(size_t i);
@@ -325,6 +329,8 @@ private:
     GeneratedTransactionsIndex m_generatedTransactionsIndex;
     OrphanBlocksIndex m_orthanBlocksIndex;
     bool m_blockchainIndexesEnabled;
+
+    std::unordered_map<Crypto::Hash, std::unordered_map<Crypto::KeyImage, std::vector<output_data_t>>> m_scan_table;
 
     IntrusiveLinkedList<MessageQueue<BlockchainMessage>> m_messageQueueList;
 

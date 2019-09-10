@@ -71,6 +71,11 @@ struct serializer{
     return true;
   }
   template<typename A>
+  static bool serialize(Archive &ar, T &v, boost::false_type, boost::false_type, A a) {
+    ar.serialize_blob(&v, sizeof(v));
+    return true;
+  }
+  template<typename A>
   static bool serialize(Archive &ar, T &v, boost::true_type, boost::false_type, A a) {
     ar.serialize_int(v);
     return true;
@@ -148,17 +153,17 @@ namespace detail {
   std::vector<uint8_t> fromHex(const std::string& string);
   std::string toHex(const std::vector<uint8_t>& vec);
 
-/*  template<class t_object>
+  template<class t_object>
   bool t_serializable_object_to_blob(const t_object& to, CryptoNote::blobdata& b_blob)
   {
     std::stringstream ss;
-    ss << b_blob;
-    BinaryArray ba = hex_to_bin(ss.str());
-    toHex(ba);
+    binary_archive<false> ba(ss);
+//    BinaryArray ba = fromHex(ss.str());
+//    toHex(ba);
     bool r = serial::serialize(ba, const_cast<t_object&>(to));
-    b_blob = toHex(ba);
+    b_blob = ss.str();
     return r;
-  }*/
+  }
   //---------------------------------------------------------------
   template<class t_object>
   CryptoNote::blobdata t_serializable_object_to_blob(const t_object& to)

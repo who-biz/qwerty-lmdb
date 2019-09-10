@@ -863,12 +863,12 @@ void BlockchainLMDB::remove_spent_key(const Crypto::KeyImage& k_image)
         throw(DB_ERROR(lmdb_error("Error adding removal of key image to db transaction", result).c_str()));
   }
 }
-/*
+
 CryptoNote::blobdata BlockchainLMDB::output_to_blob(const CryptoNote::TransactionOutput& output) const
 {
   //LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   CryptoNote::blobdata b;
-  if (!t_serializable_object_to_blob(output, b))
+  if(!CryptoNote::serial::t_serializable_object_to_blob(output, b))
     throw(DB_ERROR("Error serializing output to blob"));
   return b;
 }
@@ -878,14 +878,13 @@ CryptoNote::TransactionOutput BlockchainLMDB::output_from_blob(const CryptoNote:
   //LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   std::stringstream ss;
   ss << blob;
-  BinaryArray ba = hex_to_bin(ss.str());
+  binary_archive<false> ba(ss);
   TransactionOutput o;
   if (!serial::serialize(ba, o))
     throw(DB_ERROR("Error deserializing tx output blob"));
-
   return o;
 }
-*/
+
 void BlockchainLMDB::check_open() const
 {
 //  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
@@ -2047,7 +2046,7 @@ uint64_t BlockchainLMDB::get_num_outputs(const uint64_t& amount) const
 }
 
 // This is a lot harder now that we've removed the output_keys index
-output_data_t BlockchainLMDB::get_output_key(const uint64_t &global_index) const
+output_data_t BlockchainLMDB::get_output_key(const uint32_t &global_index) const
 {
 //  LOG_PRINT_L3("BlockchainLMDB::" << __func__ << " (unused version - does nothing)");
   check_open();
@@ -2092,7 +2091,7 @@ output_data_t BlockchainLMDB::get_output_key(const uint64_t &global_index) const
   return od;
 }
 
-output_data_t BlockchainLMDB::get_output_key(const uint64_t& amount, const uint64_t& index)
+output_data_t BlockchainLMDB::get_output_key(const uint64_t& amount, const uint32_t& index)
 {
  // LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   check_open();
@@ -2138,10 +2137,10 @@ tx_out_index BlockchainLMDB::get_output_tx_and_index_from_global(const uint64_t&
   return ret;
 }
 
-tx_out_index BlockchainLMDB::get_output_tx_and_index(const uint64_t& amount, const uint64_t& index) const
+tx_out_index BlockchainLMDB::get_output_tx_and_index(const uint64_t& amount, const uint32_t& index) const
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
-  std::vector < uint64_t > offsets;
+  std::vector < uint32_t > offsets;
   std::vector<tx_out_index> indices;
   offsets.push_back(index);
   get_output_tx_and_index(amount, offsets, indices);
@@ -2755,7 +2754,7 @@ void BlockchainLMDB::get_output_key(const uint64_t &amount, const std::vector<ui
   RCURSOR(output_amounts);
 
   MDB_val_set(k, amount);
-  for (const uint64_t &index : offsets)
+  for (const auto &index : offsets)
   {
     MDB_val_set(v, index);
 
@@ -2783,7 +2782,7 @@ void BlockchainLMDB::get_output_key(const uint64_t &amount, const std::vector<ui
 
 }
 
-void BlockchainLMDB::get_output_tx_and_index(const uint64_t& amount, const std::vector<uint64_t> &offsets, std::vector<tx_out_index> &indices) const
+void BlockchainLMDB::get_output_tx_and_index(const uint64_t& amount, const std::vector<uint32_t> &offsets, std::vector<tx_out_index> &indices) const
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
@@ -2795,7 +2794,7 @@ void BlockchainLMDB::get_output_tx_and_index(const uint64_t& amount, const std::
   RCURSOR(output_amounts);
 
   MDB_val_set(k, amount);
-  for (const uint64_t &index : offsets)
+  for (const auto &index : offsets)
   {
     MDB_val_set(v, index);
 
