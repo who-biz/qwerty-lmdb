@@ -626,7 +626,6 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
   m_config_folder = config_folder;
   std::unique_ptr<BlockchainDB> db(new_db(db_type));
-  m_db = db.release();
 
   if (db_type == "")
   {
@@ -697,14 +696,11 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
     }
 
-    if (m_hardfork == nullptr)
-    {
       m_hardfork = new HardFork(db, 1, 0);
       for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
         m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
-    }
 
-    m_hardfork->init();
+//    m_hardfork->init();
     m_db->set_hard_fork(m_hardfork);
 
     if (m_db->height() >= 1)
@@ -961,21 +957,19 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
 }
 
 Crypto::Hash Blockchain::getTailId(uint32_t& height) {
+  std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   if (Tools::getDefaultDbType() != "lmdb") {
-    std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
     if (getCurrentBlockchainHeight()) {
       height = getCurrentBlockchainHeight() - 1;
       return getTailId();
     }
   } else {
-    std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
     if (m_db->height() >= 1) {
       height = m_db->height() - 1;
-      return m_db->top_block_hash();
+      return m_db->get_block_hash_from_height(height);
     }
   }
-  height = 0;
-  return NULL_HASH;  
+  return NULL_HASH;
 }
 
 Crypto::Hash Blockchain::getTailId() {
@@ -2442,18 +2436,15 @@ const Blockchain::TransactionEntry& Blockchain::transactionByIndex(TransactionIn
 
 bool Blockchain::pushBlock(const Block& blockData, block_verification_context& bvc) {
 
-  DB_TX_START
   std::vector<Transaction> transactions;
   if (!loadTransactions(blockData, transactions)) {
     bvc.m_verification_failed = true;
     return false;
   }
-
-  if (!pushBlock(blockData, transactions, bvc)) {
-    saveTransactions(transactions);
-    return false;
-  }
-  DB_TX_STOP
+    if (!pushBlock(blockData, transactions, bvc)) {
+      saveTransactions(transactions);
+      return false;
+    }
   return true;
 }
 
@@ -2599,7 +2590,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
         return false;
       }
     } else {
-     if(!m_db->get_block_size(block.height)) {
+      if (!checkCumulativeBlockSize(blockHash, cumulative_block_size, block.height)) {
        bvc.m_verification_failed = true;
        DB_TX_STOP
        return false;
