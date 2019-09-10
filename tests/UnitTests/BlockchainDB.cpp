@@ -161,8 +161,9 @@ protected:
     for (auto& i : t_blocks)
     {
       CryptoNote::Block bl;
+      blobdata bd = h2b(i);
 //      CryptoNote::BinaryArray ba = toBinaryArray(i);
-      bool r = parse_and_validate_block_from_blob(i, bl);
+      parse_and_validate_block_from_blob(bd, bl);
       m_blocks.push_back(bl);
     }
     for (auto& i : t_transactions)
@@ -266,6 +267,7 @@ TYPED_TEST(BlockchainDBTest, AddBlock)
   // make sure open does not throw
   ASSERT_NO_THROW(this->m_db->open(dirPath));
   this->get_filenames();
+  this->init_hardfork();
 
   // adding a block with no parent in the blockchain should throw.
   // note: this shouldn't be possible, but is a good (and cheap) failsafe.
@@ -311,6 +313,7 @@ TYPED_TEST(BlockchainDBTest, RetrieveBlockData)
   // make sure open does not throw
   ASSERT_NO_THROW(this->m_db->open(dirPath));
   this->get_filenames();
+  this->init_hardfork();
 
   ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]));
 
