@@ -263,7 +263,7 @@ int main(int argc, char* argv[])
     }
     std::unique_ptr<BlockchainDB> db(new_db(Tools::getDefaultDbType()));
     CryptoNote::Currency currency = currencyBuilder.currency();
-    CryptoNote::core ccore(db.release(), nullptr, currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
+    CryptoNote::core ccore(db, nullptr, currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
 
 	bool disable_checkpoints = command_line::get_arg(vm, arg_disable_checkpoints);
 	if (!disable_checkpoints) {

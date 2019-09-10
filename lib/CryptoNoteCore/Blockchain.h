@@ -78,7 +78,7 @@ class Blockchain : public CryptoNote::ITransactionValidator
 {
 public:
     Blockchain(
-        BlockchainDB*& db,
+        std::unique_ptr<BlockchainDB>& db,
         HardFork*& hf,
         const Currency &currency,
         tx_memory_pool &tx_pool,
@@ -97,8 +97,8 @@ public:
     virtual bool haveSpentKeyImages(const CryptoNote::Transaction& tx) override;
     virtual bool checkTransactionSize(size_t blobSize) override;
 
-    bool init() { return init(nullptr, Tools::getDefaultDataDirectory(), Tools::getDefaultDbType(), 0, true); }
-    bool init(BlockchainDB* db, const std::string& config_folder, const std::string& db_type, const int& db_flags, bool load_existing);
+    bool init() { return init(Tools::getDefaultDataDirectory(), Tools::getDefaultDbType(), 0, true); }
+    bool init(const std::string& config_folder, const std::string& db_type, const int& db_flags, bool load_existing);
     bool deinit();
 
     bool getLowerBound(uint64_t timestamp, uint64_t startOffset, uint32_t& height);

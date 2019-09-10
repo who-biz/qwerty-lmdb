@@ -45,61 +45,62 @@
 
 namespace CryptoNote
 {
-typedef std::string blobdata;
+  typedef std::string blobdata;
 
-namespace serial {
+  namespace serial {
 
-template <class T>
-struct is_blob_type { typedef boost::false_type type; };
+  template <class T>
+  struct is_blob_type { typedef boost::false_type type; };
 
-template <class T>
-struct is_basic_type { typedef boost::false_type type; };
+  template <class T>
+  struct is_basic_type { typedef boost::false_type type; };
 
-template<typename F, typename S>
-struct is_basic_type<std::pair<F,S>> { typedef boost::true_type type; };
-template<>
-struct is_basic_type<std::string> { typedef boost::true_type type; };
+  template<typename F, typename S>
+  struct is_basic_type<std::pair<F,S>> { typedef boost::true_type type; };
 
-template <class Archive, class T>
-struct serializer{
-  static bool serialize(Archive &ar, T &v) {
-    return serialize(ar, v, typename boost::is_integral<T>::type(), typename is_blob_type<T>::type(), typename is_basic_type<T>::type());
+  template<>
+  struct is_basic_type<std::string> { typedef boost::true_type type; };
+
+  template <class Archive, class T>
+  struct serializer{
+    static bool serialize(Archive &ar, T &v) {
+      return serialize(ar, v, typename boost::is_integral<T>::type(), typename is_blob_type<T>::type(), typename is_basic_type<T>::type());
+    }
+    template<typename A>
+    static bool serialize(Archive &ar, T &v, boost::false_type, boost::true_type, A a) {
+      ar.serialize_blob(&v, sizeof(v));
+      return true;
+    }
+    template<typename A>
+    static bool serialize(Archive &ar, T &v, boost::false_type, boost::false_type, A a) {
+      ar.serialize_blob(&v, sizeof(v));
+      return true;
+    }
+    template<typename A>
+    static bool serialize(Archive &ar, T &v, boost::true_type, boost::false_type, A a) {
+      ar.serialize_int(v);
+      return true;
+    }
+    static bool serialize(Archive &ar, T &v, boost::false_type, boost::false_type, boost::true_type) {
+      return do_serialize(ar, v);
+    }
+    static void serialize_custom(Archive &ar, T &v, boost::true_type) {
+     }
+  };
+
+  template <class Archive, class T>
+  inline bool do_serialize(Archive &ar, T &v)
+  {
+    return serializer<Archive, T>::serialize(ar, v);
   }
-  template<typename A>
-  static bool serialize(Archive &ar, T &v, boost::false_type, boost::true_type, A a) {
+  template <class Archive>
+  inline bool do_serialize(Archive &ar, bool &v)
+  {
     ar.serialize_blob(&v, sizeof(v));
     return true;
   }
-  template<typename A>
-  static bool serialize(Archive &ar, T &v, boost::false_type, boost::false_type, A a) {
-    ar.serialize_blob(&v, sizeof(v));
-    return true;
-  }
-  template<typename A>
-  static bool serialize(Archive &ar, T &v, boost::true_type, boost::false_type, A a) {
-    ar.serialize_int(v);
-    return true;
-  }
-  static bool serialize(Archive &ar, T &v, boost::false_type, boost::false_type, boost::true_type) {
-    return do_serialize(ar, v);
-  }
-  static void serialize_custom(Archive &ar, T &v, boost::true_type) {
-  }
-};
 
-template <class Archive, class T>
-inline bool do_serialize(Archive &ar, T &v)
-{
-  return serializer<Archive, T>::serialize(ar, v);
-}
-template <class Archive>
-inline bool do_serialize(Archive &ar, bool &v)
-{
-  ar.serialize_blob(&v, sizeof(v));
-  return true;
-}
-
-namespace detail {
+  namespace detail {
     /*! \fn do_check_stream_state
      *
      * \brief self explanatory
@@ -127,7 +128,42 @@ namespace detail {
         }
       return result;
     }
-  }
+    template <typename Archive, class T>
+    bool serialize_container_element(Archive& ar, T& e)
+    {
+      return do_serialize(ar, e);
+    }
+
+    template <typename Archive>
+    bool serialize_container_element(Archive& ar, uint32_t& e)
+    {
+      ar.serialize_varint(e);
+      return true;
+    }
+
+    template <typename Archive>
+    bool serialize_container_element(Archive& ar, uint64_t& e)
+    {
+      ar.serialize_varint(e);
+      return true;
+    }
+
+    template <typename C>
+    void do_reserve(C &c, size_t N) {}
+
+    template <typename T>
+    void do_reserve(std::vector<T> &c, size_t N)
+    {
+      c.reserve(N);
+    }
+
+    template <typename T>
+    void do_add(std::vector<T> &c, T &&e)
+    {
+      c.emplace_back(std::move(e));
+    }
+
+  } // namespace detail
 
   /*! \fn check_stream_state
    *
@@ -150,6 +186,91 @@ namespace detail {
     return r && check_stream_state(ar);
   }
 
+  template <template <bool> class Archive>
+  inline bool do_serialize(Archive<false>& ar, std::string& str)
+  {
+    size_t size = 0;
+    ar.serialize_varint(size);
+    if (ar.remaining_bytes() < size)
+    {
+      ar.stream().setstate(std::ios::failbit);
+      return false;
+    }
+
+    std::unique_ptr<std::string::value_type[]> buf(new std::string::value_type[size]);
+    ar.serialize_blob(buf.get(), size);
+    str.erase();
+    str.append(buf.get(), size);
+    return true;
+  }
+
+
+  template <template <bool> class Archive>
+  inline bool do_serialize(Archive<true>& ar, std::string& str)
+  {
+    size_t size = str.size();
+    ar.serialize_varint(size);
+    ar.serialize_blob(const_cast<std::string::value_type*>(str.c_str()), size);
+    return true;
+  }
+
+  template <template <bool> class Archive, typename C>
+  bool do_serialize_container(Archive<false> &ar, C &v)
+  {
+    size_t cnt;
+    ar.begin_array(cnt);
+    if (!ar.stream().good())
+      return false;
+    v.clear();
+
+    // very basic sanity check
+    if (ar.remaining_bytes() < cnt) {
+      ar.stream().setstate(std::ios::failbit);
+      return false;
+    }
+
+    detail::do_reserve(v, cnt);
+
+    for (size_t i = 0; i < cnt; i++) {
+      if (i > 0)
+        ar.delimit_array();
+      typename C::value_type e;
+      if (!detail::serialize_container_element(ar, e))
+        return false;
+      detail::do_add(v, std::move(e));
+      if (!ar.stream().good())
+        return false;
+    }
+    ar.end_array();
+    return true;
+  }
+
+  template <template <bool> class Archive, typename C>
+  bool do_serialize_container(Archive<true> &ar, C &v)
+  {
+    size_t cnt = v.size();
+    ar.begin_array(cnt);
+    for (auto i = v.begin(); i != v.end(); ++i)
+    {
+      if (!ar.stream().good())
+        return false;
+      if (i != v.begin())
+        ar.delimit_array();
+      if(!detail::serialize_container_element(ar, const_cast<typename C::value_type&>(*i)))
+        return false;
+      if (!ar.stream().good())
+        return false;
+    }
+    ar.end_array();
+    return true;
+  }
+
+  template <template <bool> class Archive, class T>
+    bool do_serialize(Archive<false> &ar, std::vector<T> &v) { return do_serialize_container(ar, v); }
+  template <template <bool> class Archive, class T>
+    bool do_serialize(Archive<true> &ar, std::vector<T> &v) { return do_serialize_container(ar, v); }
+
+
   std::vector<uint8_t> fromHex(const std::string& string);
   std::string toHex(const std::vector<uint8_t>& vec);
 
@@ -160,7 +281,7 @@ namespace detail {
     binary_archive<false> ba(ss);
 //    BinaryArray ba = fromHex(ss.str());
 //    toHex(ba);
-    bool r = serial::serialize(ba, const_cast<t_object&>(to));
+    bool r = serialize(ba, const_cast<t_object&>(to));
     b_blob = ss.str();
     return r;
   }
@@ -174,6 +295,6 @@ namespace detail {
     b = toHex(ba);
     return b;
   }
-}
+} // namespace serial
 } // namespace CryptoNote
 

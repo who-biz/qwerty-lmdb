@@ -157,7 +157,7 @@ template <typename T>
 class BlockchainDBTest : public testing::Test
 {
 protected:
-  BlockchainDBTest() : m_db( new T() ), m_hardfork(*m_db, 1, 0)
+  BlockchainDBTest() : m_db( new T() ), m_hardfork(m_db, 1, 0)
   {
     for (auto& i : t_blocks)
     {
@@ -182,10 +182,9 @@ protected:
   }
 
   ~BlockchainDBTest() {
-    delete m_db;
   }
 
-  BlockchainDB* m_db;
+  std::unique_ptr<BlockchainDB> m_db;
   HardFork m_hardfork;
   std::string m_prefix;
   std::vector<Block> m_blocks;

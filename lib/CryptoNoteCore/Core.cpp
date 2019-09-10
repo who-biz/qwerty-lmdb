@@ -77,7 +77,7 @@ private:
 };
 
 core::core(
-    BlockchainDB* db,
+    std::unique_ptr<BlockchainDB>& db,
     HardFork* hf,
     const Currency &currency,
     i_cryptonote_protocol *pprotocol,
@@ -210,12 +210,12 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
     }
       logger(INFO, WHITE) << "Loading blockchain from folder " << folder.string() << " ...";
 
-    const std::string filename = folder.string();
-
     blockchain_db_sync_mode sync_mode = db_default_sync;
     uint64_t blocks_per_sync = 1;
 
     uint64_t db_flags = 0;
+
+    const std::string filename = folder.string();
 
     if (config.dbType == "lmdb")
     {
@@ -275,9 +275,6 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
           if (*endptr == '\0')
             blocks_per_sync = bps;
         }
-        db->open(filename, db_flags);
-        if(!db->m_open)
-          return false;
       }
       catch (const DB_ERROR& e)
       {
@@ -287,7 +284,7 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
     }
 
 
-    r = m_blockchain.init(db.release(), folder.string(), config.dbType, db_flags, load_existing);
+    r = m_blockchain.init(folder.string(), config.dbType, db_flags, load_existing);
     if (!(r)) {
         logger(ERROR, BRIGHT_RED) << "Failed to initialize blockchain storage";
         return false;
