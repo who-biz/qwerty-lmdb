@@ -44,7 +44,4 @@ struct txpool_tx_meta_t
 }
 
 typedef std::pair<Crypto::Hash, uint64_t> tx_out_index;
-//typedef CryptoNote::tx_memory_pool::TransactionDetails txpool_tx_meta_t;
-
-
 #endif // STRUCTURES_H

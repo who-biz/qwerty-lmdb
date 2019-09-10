@@ -39,8 +39,7 @@
 #include "BlockchainDB.h"
 #include "BlockchainDB/Lmdb/db_lmdb.h"
 
-using namespace Common;
-using namespace Crypto;
+using Common::podToHex;
 
 static const char *db_types[] = {
   "lmdb", NULL
@@ -106,13 +105,15 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const CryptoNot
   uint64_t tx_id = add_transaction_data(blk_hash, tx, tx_hash);
 
   std::vector<uint64_t> amount_output_indices;
-  uint64_t i = 0;
-  for (const auto& each : tx.outputs)
+
+  // iterate tx.vout using indices instead of C++11 foreach syntax because
+  // we need the index
+  for (uint64_t i = 0; i < tx.outputs.size(); ++i)
   {
-      amount_output_indices.push_back(add_output(tx_hash, each, ++i, tx.unlockTime));
+      CryptoNote::TransactionOutput vout = tx.outputs[i];
+      amount_output_indices.push_back(add_output(tx_hash, vout, i, tx.unlockTime));
   }
   add_tx_amount_output_indices(tx_id, amount_output_indices);
-
 }
 
 uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk

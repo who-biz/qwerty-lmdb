@@ -38,6 +38,7 @@
 #include <random>
 
 #include "Common/StringTools.h"
+#include "Common/file_io_utils.h"
 #include "Common/Util.h"
 #include "Common/FileMappedVector.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
@@ -523,7 +524,7 @@ void BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& block
   if (mdb_cursor_get(m_cur_block_heights, (MDB_val *)&zerokval, &val_h, MDB_GET_BOTH) == 0)
     {} // throw1(BLOCK_EXISTS("Attempting to add block that's already in the db"));
 
-  if (m_height > 0)
+  if (m_height >= 1)
   {
     MDB_val_set(parent_key, blk.previousBlockHash);
     int result = mdb_cursor_get(m_cur_block_heights, (MDB_val *)&zerokval, &parent_key, MDB_GET_BOTH);
@@ -579,8 +580,10 @@ void BlockchainLMDB::remove_block()
   check_open();
   uint64_t m_height = height();
 
-  if (m_height == 0)
+  if (m_height < 1) {
     throw(BLOCK_DNE ("Attempting to remove block from an empty blockchain"));
+    return;
+  }
 
   mdb_txn_cursors *m_cursors = &m_wcursors;
   CURSOR(block_info)
@@ -1653,7 +1656,7 @@ uint64_t BlockchainLMDB::get_top_block_timestamp() const
   uint64_t m_height = height();
 
   // if no blocks, return 0
-  if (m_height == 0)
+  if (m_height < 1)
   {
     return 0;
   }
@@ -1717,7 +1720,7 @@ CryptoNote::difficulty_type BlockchainLMDB::get_block_difficulty(const uint64_t&
 
   diff1 = get_block_cumulative_difficulty(height);
 
-  if (height != 0)
+  if (height >= 1)
     diff2 = get_block_cumulative_difficulty(height-1);
   return (diff1-diff2);
 }
@@ -1801,7 +1804,7 @@ Crypto::Hash BlockchainLMDB::top_block_hash() const
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
   uint64_t m_height = height();
-  if (m_height != 0)
+  if (m_height >= 0)
   {
     return get_block_hash_from_height(m_height - 1);
   }
@@ -1815,7 +1818,7 @@ CryptoNote::Block BlockchainLMDB::get_top_block() const
   check_open();
   uint64_t m_height = height();
 
-  if (m_height != 0)
+  if (m_height >= 1)
   {
     return get_block_from_height(m_height - 1);
   }

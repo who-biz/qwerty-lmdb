@@ -24,6 +24,16 @@
 #include "sparsehash/sparse_hash_set"
 #include "sparsehash/sparse_hash_map"
 
+#include <boost/asio/io_service.hpp>
+#include <boost/serialization/serialization.hpp>
+#include <boost/serialization/version.hpp>
+#include <boost/serialization/list.hpp>
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/global_fun.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+
+
 #include "Common/ObserverManager.h"
 #include "Common/Util.h"
 #include "CryptoNoteCore/BlockIndex.h"
@@ -313,6 +323,10 @@ private:
     friend class BlockCacheSerializer;
     friend class BlockchainIndicesSerializer;
     HardFork *m_hardfork;
+
+    boost::asio::io_service m_async_service;
+    boost::thread_group m_async_pool;
+    std::unique_ptr<boost::asio::io_service::work> m_async_work_idle;
 
     Blocks m_blocks;
     CryptoNote::BlockIndex m_blockIndex;

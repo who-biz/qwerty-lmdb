@@ -28,27 +28,12 @@
 // 
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#include <vector>
-#include <deque>
-#include <list>
-#include <set>
-#include <unordered_set>
 #include <string>
-#include <boost/type_traits/is_integral.hpp>
-#include <boost/type_traits/integral_constant.hpp>
-
-#include "Common/StringTools.h"
-#include "Serialization/BinarySerializationTools.h"
-#include "CryptoNoteCore/CryptoNoteFormatUtils.h"
-#include "Common/hex_str.h"
-#include "binary_archive.h"
 
 namespace CryptoNote
 {
 
   typedef std::string blobdata;
-
-  //---------------------------------------------------------------
 
 } // namespace CryptoNote
 

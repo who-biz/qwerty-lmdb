@@ -27,6 +27,7 @@
 #include <cmath>
 #include <boost/foreach.hpp>
 #include "Common/boost_serialization_helper.h"
+#include "cryptonote_boost_serialization.h"
 #include "Common/Math.h"
 #include "Common/int-util.h"
 #include "Common/ShuffleGenerator.h"
@@ -673,7 +674,11 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
       }
     }
   }
-  else if (db_type == "lmdb")
+
+    m_async_work_idle = std::unique_ptr < boost::asio::io_service::work > (new boost::asio::io_service::work(m_async_service));
+    m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
+
+  if (db_type == "lmdb")
   {
     if (!m_db->is_open())
     {
@@ -682,134 +687,114 @@ bool Blockchain::init(BlockchainDB* db, const std::string& config_folder, const 
 
     if (m_hardfork == nullptr)
     {
-      m_hardfork = new HardFork(db, 1, 0);
+      m_hardfork = new HardFork(*db, 1, 0);
       for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
         m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
     }
+ 
     m_hardfork->init();
     m_db->set_hard_fork(m_hardfork);
 
-
-
-    if ((m_db->height() >= 1) && load_existing)
+    if (m_db->height() >= 1)
     {
       logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
       BlockCacheSerializer loader(*this, get_block_hash(m_db->get_top_block()), logger.getLogger());
       loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
 
-      if (!loader.loaded()) {
-        logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
-        rebuildCache();
-      }
-
       if (m_blockchainIndexesEnabled) {
         loadBlockchainIndices();
       }
-    } else {
     }
 
-    if(!load_existing)
+    if(!load_existing)    
     {
+      logger(WARNING, BRIGHT_YELLOW) << "Building internal structures...";
+      rebuildCache();
+
       DB_TX_START
       logger(INFO, BRIGHT_WHITE) << "Blockchain not loaded, generating genesis block.";
       block_verification_context bvc = boost::value_initialized<block_verification_context>();
       Block genesisBlock = m_currency.genesisBlock();
-      add_new_block(genesisBlock, bvc);
+      uint64_t coins = 0;
+      std::vector<Transaction> transactions;
+      for (const auto& each : genesisBlock.transactionHashes)
+      {
+        Transaction tx = m_db->get_tx(each);
+        transactions.push_back(tx);
+      }
+      bool r = getAlreadyGeneratedCoins(m_currency.genesisBlockHash(), coins);
+      m_db->add_block(genesisBlock, 0, 0, coins, transactions);
       if (bvc.m_verification_failed) {
           logger(ERROR, BRIGHT_RED) << "Failed to add genesis block to blockchain";
+        DB_TX_STOP
         return false;
       }
-      DB_TX_STOP
-    }
-    else
-    {
+
+    } else {
       Crypto::Hash firstBlockHash = get_block_hash(m_db->get_block_from_height(0));
       if (!(firstBlockHash == m_currency.genesisBlockHash())) {
          logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
            "Probably you set --testnet flag with data "
            "dir with non-test blockchain or another "
            "network.";
-          return false;
+      DB_TX_STOP
+      return false;
       }
     }
-  }
+  } else {
 
-if (db_type != "lmdb") {
-
-  uint32_t lastValidCheckpointHeight = 0;
-  if (!checkCheckpoints(lastValidCheckpointHeight)) {
-  logger(WARNING, BRIGHT_YELLOW) << "Invalid checkpoint found. Rollback blockchain to height=" << lastValidCheckpointHeight;
-    rollbackBlockchainTo(lastValidCheckpointHeight);
-  }
-
-  if (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init()) {
-    logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector. Trying self healing procedure.";
-    //return false;
-  }
-
-  bool reinitUpgradeDetectors = false;
-  if (!checkUpgradeHeight(m_upgradeDetectorV2)) {
-    uint32_t upgradeHeight = m_upgradeDetectorV2.upgradeHeight();
-    assert(upgradeHeight != UpgradeDetectorBase::UNDEF_HEIGHT);
-    logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
-      " expected=" << static_cast<int>(m_upgradeDetectorV2.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
-    rollbackBlockchainTo(upgradeHeight);
-    reinitUpgradeDetectors = true;
-  } else if (!checkUpgradeHeight(m_upgradeDetectorV3)) {
-    uint32_t upgradeHeight = m_upgradeDetectorV3.upgradeHeight();
-    logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
-      " expected=" << static_cast<int>(m_upgradeDetectorV3.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
-    rollbackBlockchainTo(upgradeHeight);
-    reinitUpgradeDetectors = true;
-  } else if (!checkUpgradeHeight(m_upgradeDetectorV4)) {
-    uint32_t upgradeHeight = m_upgradeDetectorV4.upgradeHeight();
-    logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
-      " expected=" << static_cast<int>(m_upgradeDetectorV4.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
-    rollbackBlockchainTo(upgradeHeight);
-    reinitUpgradeDetectors = true;
-	}
-  else if (!checkUpgradeHeight(m_upgradeDetectorV5)) {
-    uint32_t upgradeHeight = m_upgradeDetectorV5.upgradeHeight();
-    logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
-      " expected=" << static_cast<int>(m_upgradeDetectorV5.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
-    rollbackBlockchainTo(upgradeHeight);
-    reinitUpgradeDetectors = true;
-  }
-  else if (!checkUpgradeHeight(m_upgradeDetectorV6)) {
-    uint32_t upgradeHeight = m_upgradeDetectorV6.upgradeHeight();
-    logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
-      " expected=" << static_cast<int>(m_upgradeDetectorV6.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
-    rollbackBlockchainTo(upgradeHeight);
-    reinitUpgradeDetectors = true;
-  }
-
-  if (reinitUpgradeDetectors && (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init())) {
-    logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector";
-    return false;
-  }
-}
-
-
-  if (db_type == "lmdb")
-  {
-    DB_TX_START
-    uint64_t top_block_timestamp = m_db->get_top_block_timestamp();
-    uint64_t timestamp_diff = time(NULL) - top_block_timestamp;
-
-    if (!top_block_timestamp) {
-      timestamp_diff = time(NULL) - 1341378000;
+    uint32_t lastValidCheckpointHeight = 0;
+    if (!checkCheckpoints(lastValidCheckpointHeight)) {
+    logger(WARNING, BRIGHT_YELLOW) << "Invalid checkpoint found. Rollback blockchain to height=" << lastValidCheckpointHeight;
+      rollbackBlockchainTo(lastValidCheckpointHeight);
     }
 
-    logger(INFO, BRIGHT_GREEN)
-      << "Blockchain initialized. last block: " << std::to_string(m_db->height()-1) << ", "
-      << Common::timeIntervalToString(timestamp_diff)
-      << " time ago, current difficulty: " << getDifficultyForNextBlock();
+    if (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init()) {
+      logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector. Trying self healing procedure.";
+      //return false;
+    }
 
-    DB_TX_STOP
-    update_next_cumulative_size_limit();
-  }
-  else
-  {
+    bool reinitUpgradeDetectors = false;
+    if (!checkUpgradeHeight(m_upgradeDetectorV2)) {
+      uint32_t upgradeHeight = m_upgradeDetectorV2.upgradeHeight();
+      assert(upgradeHeight != UpgradeDetectorBase::UNDEF_HEIGHT);
+      logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
+        " expected=" << static_cast<int>(m_upgradeDetectorV2.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
+      rollbackBlockchainTo(upgradeHeight);
+      reinitUpgradeDetectors = true;
+    } else if (!checkUpgradeHeight(m_upgradeDetectorV3)) {
+      uint32_t upgradeHeight = m_upgradeDetectorV3.upgradeHeight();
+      logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
+        " expected=" << static_cast<int>(m_upgradeDetectorV3.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
+      rollbackBlockchainTo(upgradeHeight);
+      reinitUpgradeDetectors = true;
+    } else if (!checkUpgradeHeight(m_upgradeDetectorV4)) {
+      uint32_t upgradeHeight = m_upgradeDetectorV4.upgradeHeight();
+      logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
+        " expected=" << static_cast<int>(m_upgradeDetectorV4.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
+      rollbackBlockchainTo(upgradeHeight);
+      reinitUpgradeDetectors = true;
+  	}
+    else if (!checkUpgradeHeight(m_upgradeDetectorV5)) {
+      uint32_t upgradeHeight = m_upgradeDetectorV5.upgradeHeight();
+      logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
+        " expected=" << static_cast<int>(m_upgradeDetectorV5.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
+      rollbackBlockchainTo(upgradeHeight);
+      reinitUpgradeDetectors = true;
+    }
+    else if (!checkUpgradeHeight(m_upgradeDetectorV6)) {
+      uint32_t upgradeHeight = m_upgradeDetectorV6.upgradeHeight();
+      logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>(m_blocks[upgradeHeight + 1].bl.majorVersion) <<
+        " expected=" << static_cast<int>(m_upgradeDetectorV6.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
+      rollbackBlockchainTo(upgradeHeight);
+      reinitUpgradeDetectors = true;
+    }
+
+    if (reinitUpgradeDetectors && (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init())) {
+      logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector";
+      return false;
+    }
+
     update_next_cumulative_size_limit();
 
     uint64_t timestamp_diff = time(NULL) - m_blocks.back().bl.timestamp;
@@ -821,7 +806,27 @@ if (db_type != "lmdb") {
       << "Blockchain initialized. last block: " << m_blocks.size() - 1 << ", "
       << Common::timeIntervalToString(timestamp_diff)
       << " time ago, current difficulty: " << getDifficultyForNextBlock();
-  }
+      
+ }
+ 
+   if (db_type == "lmdb")
+   {
+     DB_TX_START
+     uint64_t top_block_timestamp = m_db->get_top_block_timestamp();
+     uint64_t timestamp_diff = time(NULL) - top_block_timestamp;
+
+     if (!top_block_timestamp) {
+       timestamp_diff = time(NULL) - 1341378000;
+     }
+
+     logger(INFO, BRIGHT_GREEN)
+       << "Blockchain initialized. last block: " << std::to_string(m_db->height()-1) << ", "
+       << Common::timeIntervalToString(timestamp_diff)
+       << " time ago, current difficulty: " << getDifficultyForNextBlock();
+
+     DB_TX_STOP
+     update_next_cumulative_size_limit();
+   }
   return true;
 }
 
@@ -897,6 +902,11 @@ bool Blockchain::deinit() {
 
    if (Tools::getDefaultDbType() == "lmdb")
    {
+
+     m_async_work_idle.reset();
+     m_async_pool.join_all();
+     m_async_service.stop();
+
      try {
        m_db->close();
        logger(INFO, WHITE) << "Local blockchain read/write activity stopped successfully";
@@ -946,7 +956,7 @@ Crypto::Hash Blockchain::getTailId(uint32_t& height) {
     }
   } else {
     std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-    if (m_db->height()) {
+    if (m_db->height() >= 1) {
       height = m_db->height() - 1;
       return m_db->top_block_hash();
     }
@@ -2609,8 +2619,10 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
 
 bool Blockchain::pushBlock(BlockEntry& block) {
   Crypto::Hash blockHash = get_block_hash(block.bl);
-
-  m_blocks.push_back(block);
+  if (Tools::getDefaultDbType() != "lmdb") {
+    m_blocks.push_back(block);
+  } else { }
+        
   m_blockIndex.push(blockHash);
 
   m_timestampIndex.add(block.bl.timestamp, blockHash);
@@ -2645,7 +2657,7 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
     //never relay alternative blocks
   }
   DB_TX_STOP
-  return add_new_block(bl, bvc);
+  return pushBlock(bl, bvc);
 }
 
 
@@ -2653,19 +2665,33 @@ void Blockchain::popBlock() {
 
   DB_TX_START
 
-  if (m_blocks.empty()) {
-    logger(ERROR, BRIGHT_RED) <<
-      "Attempt to pop block from empty blockchain.";
-    return;
-  }
+  if (Tools::getDefaultDbType() != "lmdb") {
+    if (m_blocks.empty()) {
+      logger(ERROR, BRIGHT_RED) <<
+        "Attempt to pop block from empty blockchain.";
+      return;
+    }
 
-  std::vector<Transaction> transactions(m_blocks.back().transactions.size() - 1);
-  for (size_t i = 0; i < m_blocks.back().transactions.size() - 1; ++i) {
-    transactions[i] = m_blocks.back().transactions[1 + i].tx;
-  }
-
-  saveTransactions(transactions);
-  removeLastBlock();
+    std::vector<Transaction> transactions(m_blocks.back().transactions.size() - 1);
+    for (size_t i = 0; i < m_blocks.back().transactions.size() - 1; ++i) {
+      transactions[i] = m_blocks.back().transactions[1 + i].tx;
+    saveTransactions(transactions);
+    removeLastBlock();
+    }
+  } else {
+    if (m_db->height() < 1) {
+      logger(ERROR, BRIGHT_RED) <<
+        "Attempt to pop block from empty blockchain.";
+      return;
+    }
+    CryptoNote::Block bl = m_db->get_top_block();
+    std::vector<Transaction> txs;
+    for (const auto& h : bl.transactionHashes) {
+     Transaction tx = m_db->get_tx(h);
+     txs.push_back(tx);
+    }
+    m_db->pop_block(bl, txs);
+  }  
 
   DB_TX_STOP
 

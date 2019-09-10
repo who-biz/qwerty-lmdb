@@ -641,18 +641,18 @@ bool is_valid_decomposed_amount(uint64_t amount) {
     return r;
   }
   //---------------------------------------------------------------
-/*  bool parse_and_validate_block_from_blob(const blobdata& b_blob, Block& b)
+  bool parse_and_validate_block_from_blob(const blobdata& b_blob, Block& b)
   {
     std::stringstream ss;
     ss << b_blob;
-    binary_archive<false> ba(ss);
-    bool r = serial::serialize(b, b_blob);
+    binary_archive<true> ba(ss);
+    bool r = serial::serialize(ba, b);
     if(!r) return false;
     return true;
   }
-*/
 
-  bool parse_and_validate_block_from_blob(const blobdata& b_blob, Block& b)
+
+/*  bool parse_and_validate_block_from_blob(const blobdata& b_blob, Block& b)
   {
     std::stringstream ss;
     ss << b_blob;
@@ -662,7 +662,7 @@ bool is_valid_decomposed_amount(uint64_t amount) {
     bool r = fromBinaryArray(b, ba);
     return r;
   }
-  //---------------------------------------------------------------
+*/  //---------------------------------------------------------------
   CryptoNote::blobdata block_to_blob(const CryptoNote::Block& b)
   {
     blobdata bd;    

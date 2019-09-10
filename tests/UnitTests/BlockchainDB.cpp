@@ -36,6 +36,7 @@
 #include "gtest/gtest.h"
 
 #include "Common/StringTools.h"
+#include "Common/file_io_utils.h"
 #include "BlockchainDB/Lmdb/db_lmdb.h"
 #include "BlockchainDB/BlobDataType.h"
 #include "BlockchainDB/Structures.h"
@@ -156,7 +157,7 @@ template <typename T>
 class BlockchainDBTest : public testing::Test
 {
 protected:
-  BlockchainDBTest() : m_db( new T() ), m_hardfork(m_db, 1, 0)
+  BlockchainDBTest() : m_db( new T() ), m_hardfork(*m_db, 1, 0)
   {
     for (auto& i : t_blocks)
     {
@@ -182,7 +183,6 @@ protected:
 
   ~BlockchainDBTest() {
     delete m_db;
-    remove_files();
   }
 
   BlockchainDB* m_db;
