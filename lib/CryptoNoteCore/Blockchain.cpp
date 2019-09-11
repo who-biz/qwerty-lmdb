@@ -923,6 +923,10 @@ bool Blockchain::deinit() {
      m_async_pool.join_all();
      m_async_service.stop();
 
+      storeCache();
+  if (m_blockchainIndexesEnabled) {
+    storeBlockchainIndices();
+  }
      try {
        m_db->close();
        logger(INFO, WHITE) << "Local blockchain read/write activity stopped successfully";
@@ -934,12 +938,8 @@ bool Blockchain::deinit() {
       m_hardfork = nullptr;
       delete m_db;
       m_db = nullptr;
-   } else {
-      storeCache();
-    }
-  if (m_blockchainIndexesEnabled) {
-    storeBlockchainIndices();
-  }
+   }
+
   assert(m_messageQueueList.empty());
   return true;
 }
@@ -987,9 +987,9 @@ Crypto::Hash Blockchain::getTailId(uint32_t& height) {
 Crypto::Hash Blockchain::getTailId() {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   if (Tools::getDefaultDbType() != "lmdb") {
-    return (m_blocks.empty()) ? NULL_HASH : m_blockIndex.getTailId();
+    return  m_blockIndex.getTailId();
   } else {
-    return (m_db->height() < 1) ? NULL_HASH : m_db->top_block_hash();
+    return m_db->top_block_hash();
   }
 }
 
