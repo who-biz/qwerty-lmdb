@@ -833,7 +833,14 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     pause_mining();
   }
 
-  m_blockchain.addNewBlock(b, bvc);
+  /*  std::vector<Transaction> transactions;
+    for (const auto& each : b.transactionHashes)
+    {
+      Transaction tx = m_db->get_tx(each);
+      transactions.push_back(tx);
+    }
+*/
+  m_blockchain.pushBlock(b, bvc);
 
   if (control_miner) {
     update_block_template_and_resume_mining();

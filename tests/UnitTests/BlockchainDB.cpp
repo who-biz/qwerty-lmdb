@@ -157,7 +157,7 @@ template <typename T>
 class BlockchainDBTest : public testing::Test
 {
 protected:
-  BlockchainDBTest() : m_db( new T() ), m_hardfork(m_db, 1, 0)
+  BlockchainDBTest() : m_db( new T() ), m_hardfork(m_db.release(), 1, 0)
   {
     for (auto& i : t_blocks)
     {
@@ -185,21 +185,23 @@ protected:
   }
 
   std::unique_ptr<BlockchainDB> m_db;
+  BlockchainDB* db =  m_db.release();
   HardFork m_hardfork;
   std::string m_prefix;
   std::vector<Block> m_blocks;
   std::vector<std::vector<Transaction> > m_txs;
   std::vector<std::string> m_filenames;
 
-  void init_hardfork()
+
+/*  void init_hardfork()
   {
     m_hardfork.init();
-    m_db->set_hard_fork(&m_hardfork);
+    db->set_hard_fork(&m_hardfork);
   }
-
+*/
   void get_filenames()
   {
-    m_filenames = m_db->get_filenames();
+    m_filenames = db->get_filenames();
     for (auto& f : m_filenames)
     {
       std::cerr << "File created by test: " << f << std::endl;
@@ -246,13 +248,13 @@ TYPED_TEST(BlockchainDBTest, OpenAndClose)
   this->set_prefix(dirPath);
 
   // make sure open does not throw
-  ASSERT_NO_THROW(this->m_db->open(dirPath));
+  ASSERT_NO_THROW(this->db->open(dirPath));
   this->get_filenames();
 
   // make sure open when already open DOES throw
-  ASSERT_THROW(this->m_db->open(dirPath), DB_OPEN_FAILURE);
+  ASSERT_THROW(this->db->open(dirPath), DB_OPEN_FAILURE);
 
-  ASSERT_NO_THROW(this->m_db->close());
+  ASSERT_NO_THROW(this->db->close());
 }
 
 TYPED_TEST(BlockchainDBTest, AddBlock)
@@ -264,9 +266,9 @@ TYPED_TEST(BlockchainDBTest, AddBlock)
   this->set_prefix(dirPath);
 
   // make sure open does not throw
-  ASSERT_NO_THROW(this->m_db->open(dirPath));
+  ASSERT_NO_THROW(this->db->open(dirPath));
   this->get_filenames();
-  this->init_hardfork();
+ // this->init_hardfork();
 
   // adding a block with no parent in the blockchain should throw.
   // note: this shouldn't be possible, but is a good (and cheap) failsafe.
@@ -274,29 +276,29 @@ TYPED_TEST(BlockchainDBTest, AddBlock)
   // TODO: need at least one more block to make this reasonable, as the
   // BlockchainDB implementation should not check for parent if
   // no blocks have been added yet (because genesis has no parent).
-  //ASSERT_THROW(this->m_db->add_block(this->m_blocks[1], t_sizes[1], t_diffs[1], t_coins[1], this->m_txs[1]), BLOCK_PARENT_DNE);
+  //ASSERT_THROW(this->db->add_block(this->m_blocks[1], t_sizes[1], t_diffs[1], t_coins[1], this->m_txs[1]), BLOCK_PARENT_DNE);
 
-  ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]));
-  ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[1], t_sizes[1], t_diffs[1], t_coins[1], this->m_txs[1]));
+  ASSERT_NO_THROW(this->db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]));
+  ASSERT_NO_THROW(this->db->add_block(this->m_blocks[1], t_sizes[1], t_diffs[1], t_coins[1], this->m_txs[1]));
 
   Block b;
-  ASSERT_TRUE(this->m_db->block_exists(get_block_hash(this->m_blocks[0])));
-  ASSERT_NO_THROW(b = this->m_db->get_block(get_block_hash(this->m_blocks[0])));
+  ASSERT_TRUE(this->db->block_exists(get_block_hash(this->m_blocks[0])));
+  ASSERT_NO_THROW(b = this->db->get_block(get_block_hash(this->m_blocks[0])));
 
   ASSERT_TRUE(compare_blocks(this->m_blocks[0], b));
 
-  ASSERT_NO_THROW(b = this->m_db->get_block_from_height(0));
+  ASSERT_NO_THROW(b = this->db->get_block_from_height(0));
 
   ASSERT_TRUE(compare_blocks(this->m_blocks[0], b));
 
   // assert that we can't add the same block twice
-  ASSERT_THROW(this->m_db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]), TX_EXISTS);
+  ASSERT_THROW(this->db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]), TX_EXISTS);
 
   for (auto& h : this->m_blocks[0].transactionHashes)
   {
     Transaction tx;
-    ASSERT_TRUE(this->m_db->tx_exists(h));
-    ASSERT_NO_THROW(tx = this->m_db->get_tx(h));
+    ASSERT_TRUE(this->db->tx_exists(h));
+    ASSERT_NO_THROW(tx = this->db->get_tx(h));
 
     ASSERT_HASH_EQ(h, getObjectHash(tx));
   }
@@ -310,31 +312,31 @@ TYPED_TEST(BlockchainDBTest, RetrieveBlockData)
   this->set_prefix(dirPath);
 
   // make sure open does not throw
-  ASSERT_NO_THROW(this->m_db->open(dirPath));
+  ASSERT_NO_THROW(this->db->open(dirPath));
   this->get_filenames();
-  this->init_hardfork();
+//  this->init_hardfork();
 
-  ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]));
+  ASSERT_NO_THROW(this->db->add_block(this->m_blocks[0], t_sizes[0], t_diffs[0], t_coins[0], this->m_txs[0]));
 
-  ASSERT_EQ(t_sizes[0], this->m_db->get_block_size(0));
-  ASSERT_EQ(t_diffs[0], this->m_db->get_block_cumulative_difficulty(0));
-  ASSERT_EQ(t_diffs[0], this->m_db->get_block_difficulty(0));
-  ASSERT_EQ(t_coins[0], this->m_db->get_block_already_generated_coins(0));
+  ASSERT_EQ(t_sizes[0], this->db->get_block_size(0));
+  ASSERT_EQ(t_diffs[0], this->db->get_block_cumulative_difficulty(0));
+  ASSERT_EQ(t_diffs[0], this->db->get_block_difficulty(0));
+  ASSERT_EQ(t_coins[0], this->db->get_block_already_generated_coins(0));
 
-  ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[1], t_sizes[1], t_diffs[1], t_coins[1], this->m_txs[1]));
-  ASSERT_EQ(t_diffs[1] - t_diffs[0], this->m_db->get_block_difficulty(1));
+  ASSERT_NO_THROW(this->db->add_block(this->m_blocks[1], t_sizes[1], t_diffs[1], t_coins[1], this->m_txs[1]));
+  ASSERT_EQ(t_diffs[1] - t_diffs[0], this->db->get_block_difficulty(1));
 
-  ASSERT_HASH_EQ(get_block_hash(this->m_blocks[0]), this->m_db->get_block_hash_from_height(0));
+  ASSERT_HASH_EQ(get_block_hash(this->m_blocks[0]), this->db->get_block_hash_from_height(0));
 
   std::vector<Block> blks;
-  ASSERT_NO_THROW(blks = this->m_db->get_blocks_range(0, 1));
+  ASSERT_NO_THROW(blks = this->db->get_blocks_range(0, 1));
   ASSERT_EQ(2, blks.size());
 
   ASSERT_HASH_EQ(get_block_hash(this->m_blocks[0]), get_block_hash(blks[0]));
   ASSERT_HASH_EQ(get_block_hash(this->m_blocks[1]), get_block_hash(blks[1]));
 
   std::vector<Crypto::Hash> hashes;
-  ASSERT_NO_THROW(hashes = this->m_db->get_hashes_range(0, 1));
+  ASSERT_NO_THROW(hashes = this->db->get_hashes_range(0, 1));
   ASSERT_EQ(2, hashes.size());
 
   ASSERT_HASH_EQ(get_block_hash(this->m_blocks[0]), hashes[0]);

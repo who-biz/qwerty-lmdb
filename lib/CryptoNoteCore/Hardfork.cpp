@@ -47,8 +47,8 @@ static uint8_t get_block_version(const CryptoNote::Block &b)
   return b.majorVersion;
 }
 
-HardFork::HardFork(std::unique_ptr<BlockchainDB>& m_db, uint8_t original_version, uint64_t original_version_till_height, uint64_t window_size, uint8_t default_threshold_percent):
-  db(m_db.release()),
+HardFork::HardFork(BlockchainDB* db, uint8_t original_version, uint64_t original_version_till_height, uint64_t window_size, uint8_t default_threshold_percent):
+  m_db(db),
   original_version(original_version),
   original_version_till_height(original_version_till_height),
   window_size(window_size),
@@ -126,7 +126,7 @@ bool HardFork::add(uint8_t block_version, uint8_t voting_version, uint64_t heigh
   if (!do_check(block_version, voting_version))
     return false;
 
-  db->set_hard_fork_version(height, heights[current_fork_index].version);
+  m_db->set_hard_fork_version(height, heights[current_fork_index].version);
 
   voting_version = get_effective_version(voting_version);
 
@@ -167,16 +167,18 @@ void HardFork::init()
   current_fork_index = 0;
 
   // restore state from DB
-  uint64_t height = db->height();
-  if (height > window_size)
-    height -= window_size - 1;
-  else
-    height = 1;
+//  uint64_t height = m_db->height();
+//  if (height > window_size)
+//    height -= window_size - 1;
+//  else
+    uint64_t height = 1;
+
+  m_db = db.release();
 
   bool populate = false;
   try
   {
-    db->get_hard_fork_version(0);
+    m_db->get_hard_fork_version(1);
   }
   catch (...) { populate = true; }
   if (populate) {
@@ -187,7 +189,7 @@ void HardFork::init()
   if (populate) {
     reorganize_from_chain_height(height);
     // reorg will not touch the genesis block, use this as a flag for populating done
-    db->set_hard_fork_version(0, original_version);
+    m_db->set_hard_fork_version(0, original_version);
   }
   else {
     rescan_from_chain_height(height);
@@ -200,14 +202,14 @@ uint8_t HardFork::get_block_version(uint64_t height) const
   if (height <= original_version_till_height)
     return original_version;
 
-  const CryptoNote::Block &block = db->get_block_from_height(height);
+  const CryptoNote::Block &block = m_db->get_block_from_height(height);
   return ::get_block_version(block);
 }
 
 bool HardFork::reorganize_from_block_height(uint64_t height)
 {
   //CRITICAL_REGION_LOCAL(lock);
-  if (height >= db->height())
+  if (height >= m_db->height())
     return false;
 
   versions.clear();
@@ -215,12 +217,12 @@ bool HardFork::reorganize_from_block_height(uint64_t height)
   for (size_t n = 0; n < 255; ++n)
     last_versions[n] = 0;
   const uint64_t rescan_height = height >= (window_size - 1) ? height - (window_size  -1) : 0;
-  const uint8_t start_version = height == 0 ? original_version : db->get_hard_fork_version(height);
+  const uint8_t start_version = height == 0 ? original_version : m_db->get_hard_fork_version(height);
   while (current_fork_index > 0 && heights[current_fork_index].version > start_version) {
     --current_fork_index;
   }
   for (uint64_t h = rescan_height; h <= height; ++h) {
-    CryptoNote::Block b = db->get_block_from_height(h);
+    CryptoNote::Block b = m_db->get_block_from_height(h);
     const uint8_t v = get_effective_version(get_block_vote(b));
     last_versions[v]++;
     versions.push_back(v);
@@ -231,9 +233,9 @@ bool HardFork::reorganize_from_block_height(uint64_t height)
     current_fork_index = voted;
   }
 
-  const uint64_t bc_height = db->height();
+  const uint64_t bc_height = m_db->height();
   for (uint64_t h = height + 1; h < bc_height; ++h) {
-    add(db->get_block_from_height(h), h);
+    add(m_db->get_block_from_height(h), h);
   }
 
   return true;
@@ -249,9 +251,9 @@ bool HardFork::reorganize_from_chain_height(uint64_t height)
 bool HardFork::rescan_from_block_height(uint64_t height)
 {
   //CRITICAL_REGION_LOCAL(lock);
-  db->block_txn_start(true);
-  if (height >= db->height()) {
-    db->block_txn_stop();
+  m_db->block_txn_start(true);
+  if (height >= m_db->height()) {
+    m_db->block_txn_stop();
     return false;
   }
 
@@ -259,24 +261,24 @@ bool HardFork::rescan_from_block_height(uint64_t height)
 
   for (size_t n = 0; n < 255; ++n)
     last_versions[n] = 0;
-  for (uint64_t h = height; h < db->height(); ++h) {
-    CryptoNote::Block b = db->get_block_from_height(h);
+  for (uint64_t h = height; h < m_db->height(); ++h) {
+    CryptoNote::Block b = m_db->get_block_from_height(h);
     const uint8_t v = get_effective_version(get_block_vote(b));
     last_versions[v]++;
     versions.push_back(v);
   }
 
-  uint8_t lastv = db->get_hard_fork_version(db->height() - 1);
+  uint8_t lastv = m_db->get_hard_fork_version(m_db->height() - 1);
   current_fork_index = 0;
   while (current_fork_index + 1 < heights.size() && heights[current_fork_index].version != lastv)
     ++current_fork_index;
 
-  uint8_t voted = get_voted_fork_index(db->height());
+  uint8_t voted = get_voted_fork_index(m_db->height());
   if (voted > current_fork_index) {
     current_fork_index = voted;
   }
 
-  db->block_txn_stop();
+  m_db->block_txn_stop();
 
   return true;
 }
@@ -322,20 +324,20 @@ HardFork::State HardFork::get_state(uint64_t height) const
 
 HardFork::State HardFork::get_state() const
 {
-  return get_state(db->height());
+  return get_state(m_db->height());
 }
 
 uint8_t HardFork::get(uint64_t height) const
 {
   //CRITICAL_REGION_LOCAL(lock);
-  if (height > db->height()) {
+  if (height > m_db->height()) {
     assert(false);
     return 255;
   }
-  if (height == db->height()) {
+  if (height == m_db->height()) {
     return get_current_version();
   }
-  return db->get_hard_fork_version(height);
+  return m_db->get_hard_fork_version(height);
 }
 
 uint8_t HardFork::get_current_version() const
@@ -377,7 +379,7 @@ uint64_t HardFork::get_earliest_ideal_height_for_version(uint8_t version) const
 uint8_t HardFork::get_next_version() const
 {
   //CRITICAL_REGION_LOCAL(lock);
-  uint64_t height = db->height();
+  uint64_t height = m_db->height();
   for (auto i = heights.rbegin(); i != heights.rend(); ++i) {
     if (height >= i->height) {
       return (i == heights.rbegin() ? i : (i - 1))->version;

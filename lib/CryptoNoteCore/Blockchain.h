@@ -85,6 +85,8 @@ public:
         Logging::ILogger &logger,
         bool blockchainIndexesEnabled
     );
+    bool pushBlock(const Block& blockData, block_verification_context& bvc);
+    bool pushBlock(const Block& blockData, const std::vector<Transaction>& transactions, block_verification_context& bvc);
 
     void set_user_options(uint64_t maxthreads, uint64_t blocks_per_sync, blockchain_db_sync_mode sync_mode, bool fast_sync);
 
@@ -129,6 +131,7 @@ public:
 	uint8_t blockMajorVersion;
     bool addNewBlock(const Block& bl_, block_verification_context& bvc);
     bool add_new_block(const Block& b, block_verification_context& bvc);
+    bool cleanup_handle_incoming_blocks(bool force_sync);
     bool resetAndSetGenesisBlock(const Block& b);
     bool haveBlock(const Crypto::Hash& id);
     size_t getTotalTransactions();
@@ -239,7 +242,8 @@ public:
     void safesyncmode(const bool onoff);
 
     BlockchainDB* m_db;
-
+    uint64_t m_sync_counter;
+    uint64_t m_db_blocks_per_sync;
 
     const BlockchainDB& get_db() const
     {
@@ -376,8 +380,6 @@ private:
     bool checkTransactionInputs(const Transaction& tx, const Crypto::Hash& tx_prefix_hash, uint32_t* pmax_used_block_height = NULL);
     bool checkTransactionInputs(const Transaction& tx, uint32_t* pmax_used_block_height = NULL);
     const TransactionEntry& transactionByIndex(TransactionIndex index);
-    bool pushBlock(const Block& blockData, block_verification_context& bvc);
-    bool pushBlock(const Block& blockData, const std::vector<Transaction>& transactions, block_verification_context& bvc);
     bool pushBlock(BlockEntry& block);
     void popBlock();
     bool pushTransaction(BlockEntry& block, const Crypto::Hash& transactionHash, TransactionIndex transactionIndex);

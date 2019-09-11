@@ -57,7 +57,7 @@ namespace CryptoNote
      * @param window_size the size of the window in blocks to consider for version voting
      * @param default_threshold_percent the size of the majority in percents
      */
-    HardFork(std::unique_ptr<BlockchainDB>& m_db, uint8_t original_version = 1, uint64_t original_version_till_height = DEFAULT_ORIGINAL_VERSION_TILL_HEIGHT,  uint64_t window_size = DEFAULT_WINDOW_SIZE, uint8_t default_threshold_percent = DEFAULT_THRESHOLD_PERCENT);
+    HardFork(BlockchainDB* db, uint8_t original_version = 1, uint64_t original_version_till_height = DEFAULT_ORIGINAL_VERSION_TILL_HEIGHT,  uint64_t window_size = DEFAULT_WINDOW_SIZE, uint8_t default_threshold_percent = DEFAULT_THRESHOLD_PERCENT);
 
     /**
      * @brief add a new hardfork height
@@ -222,7 +222,8 @@ namespace CryptoNote
 
   private:
 
-    BlockchainDB *db;
+    std::unique_ptr<BlockchainDB> db;
+    BlockchainDB *m_db;
 
     uint64_t window_size;
     uint8_t default_threshold_percent;
