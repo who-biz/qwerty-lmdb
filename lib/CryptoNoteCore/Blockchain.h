@@ -74,6 +74,15 @@ enum blockchain_db_sync_mode
   db_nosync
 };
 
+    struct block_extended_info
+    {
+      Block   bl; //!< the block
+      uint64_t height; //!< the height of the block in the blockchain
+      size_t block_cumulative_size; //!< the size (in bytes) of the block
+      difficulty_type cumulative_difficulty; //!< the accumulated difficulty after that block
+      uint64_t already_generated_coins; //!< the total coins minted after that block
+    };
+
 class Blockchain : public CryptoNote::ITransactionValidator
 {
 public:
@@ -320,6 +329,7 @@ private:
     std::atomic<bool> m_is_in_checkpoint_zone;
 
     typedef SwappedVector<BlockEntry> Blocks;
+    typedef SwappedVector<block_extended_info> blocks;
     typedef std::unordered_map<Crypto::Hash, uint32_t> BlockMap;
     typedef std::unordered_map<Crypto::Hash, TransactionIndex> TransactionMap;
     typedef BasicUpgradeDetector<Blocks> UpgradeDetector;
@@ -389,6 +399,8 @@ private:
     bool checkCheckpoints(uint32_t& lastValidCheckpointHeight);
     void removeLastBlock();
     bool checkUpgradeHeight(const UpgradeDetector& upgradeDetector);
+
+    bool handle_block_to_main_chain(const Block& bl, const Crypto::Hash& id, block_verification_context& bvc);
 
     bool storeBlockchainIndices();
     bool loadBlockchainIndices();

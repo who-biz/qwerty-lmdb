@@ -973,15 +973,13 @@ Crypto::Hash Blockchain::getTailId(uint32_t& height) {
   if (Tools::getDefaultDbType() != "lmdb") {
     if (getCurrentBlockchainHeight()) {
       height = getCurrentBlockchainHeight() - 1;
-      return getTailId();
     }
   } else {
     if (m_db->height() >= 1) {
       height = m_db->height() - 1;
-      return m_db->get_block_hash_from_height(height);
     }
   }
-  return m_currency.genesisBlockHash();
+  return getTailId();
 }
 
 Crypto::Hash Blockchain::getTailId() {
