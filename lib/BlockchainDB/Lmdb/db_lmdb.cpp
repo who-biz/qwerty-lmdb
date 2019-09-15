@@ -1568,9 +1568,7 @@ CryptoNote::blobdata BlockchainLMDB::get_block_blob(const Crypto::Hash& h) const
   check_open();
   uint64_t height = get_block_height(h);
   CryptoNote::blobdata bd;
-  if (height >= 1) {
-    bd = get_block_blob_from_height(get_block_height(h));
-  }
+  bd = get_block_blob_from_height(get_block_height(h));
   return bd;
 }
 
