@@ -162,8 +162,7 @@ protected:
     for (auto& i : t_blocks)
     {
       CryptoNote::Block bl;
-      blobdata bd = h2b(i);
-//      CryptoNote::BinaryArray ba = toBinaryArray(i);
+      blobdata bd = i;
       parse_and_validate_block_from_blob(bd, bl);
       m_blocks.push_back(bl);
     }

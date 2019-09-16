@@ -37,6 +37,7 @@
 #include <CryptoNoteCore/CryptoNoteFormatUtils.h>
 #include <CryptoNoteCore/CryptoNoteStatInfo.h>
 #include <CryptoNoteCore/CryptoNoteTools.h>
+#include <CryptoNoteCore/Blockchain.h>
 #include <CryptoNoteCore/IBlock.h>
 #include <CryptoNoteCore/Miner.h>
 #include <CryptoNoteCore/TransactionExtra.h>
@@ -224,6 +225,7 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
       try
       {
         std::vector<std::string> options;
+        db_sync_mode = Tools::getDefaultDbSyncMode();
         boost::trim(db_sync_mode);
         boost::split(options, db_sync_mode, boost::is_any_of(" :"));
 
@@ -282,7 +284,6 @@ bool core::init(const CoreConfig& config, const MinerConfig& minerConfig, bool l
         return false;
       }
     }
-
 
     r = m_blockchain.init(folder.string(), config.dbType, db_flags, load_existing);
     if (!(r)) {
@@ -833,13 +834,6 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     pause_mining();
   }
 
-  /*  std::vector<Transaction> transactions;
-    for (const auto& each : b.transactionHashes)
-    {
-      Transaction tx = m_db->get_tx(each);
-      transactions.push_back(tx);
-    }
-*/
   m_blockchain.pushBlock(b, bvc);
 
   if (control_miner) {
@@ -875,6 +869,19 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
 
   return true;
 }
+
+  bool core::cleanup_handle_incoming_blocks(bool force_sync)
+  {
+    LockedBlockchainStorage lbs(m_blockchain);
+
+    bool success = false;
+    try {
+      success = lbs->cleanup_handle_incoming_blocks(force_sync);
+    }
+    catch (...) {}
+    return success;
+  }
+
 
 Crypto::Hash core::get_tail_id() {
   return m_blockchain.getTailId();
@@ -1780,4 +1787,39 @@ void core::rollbackBlockchain(uint32_t height) {
   m_blockchain.rollbackBlockchainTo(height);
 }
 
+bool core::handleBlockFound(Block& b)
+{
+  LockedBlockchainStorage lbs(m_blockchain); 
+   block_verification_context bvc = boost::value_initialized<block_verification_context>();
+    m_miner->pause();
+    std::list<block_complete_entry> blocks;
+    try
+    {
+      BlockFullInfo item;
+
+      item.block_id = get_block_hash(b);
+
+      std::list<Transaction> txs;
+      std::list<Crypto::Hash> missedTxs;
+      block_complete_entry& completeEntry = item;
+
+      completeEntry.block = asString(toBinaryArray(b));
+      for (auto& tx : txs) {
+        completeEntry.txs.push_back(asString(toBinaryArray(tx)));
+      }
+
+    }
+    catch (const std::exception &e)
+    {
+      m_miner->resume();
+    }
+    m_blockchain.prepare_handle_incoming_blocks(blocks);
+    lbs->add_new_block(b, bvc);
+    m_blockchain.cleanup_handle_incoming_blocks(true);
+    update_miner_block_template();
+    m_miner->resume();
+    if (bvc.m_verification_failed)
+      logger(ERROR,BRIGHT_RED) << "Error: mined block failed verification!";
+    return bvc.m_added_to_main_chain;
+  }
 }

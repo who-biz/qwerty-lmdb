@@ -200,7 +200,7 @@ void BlockchainDB::remove_transaction(const Crypto::Hash& tx_hash)
 
 CryptoNote::Block BlockchainDB::get_block_from_height(const uint64_t& height) const
 {
-  CryptoNote::blobdata bd = get_block_blob_from_height(height);
+  CryptoNote::blobdata bd = get_block_blob_from_height(height-1);
   CryptoNote::Block b;
   if (!parse_and_validate_block_from_blob(bd, b))
     throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));

@@ -117,7 +117,7 @@ namespace CryptoNote {
     }
 
     void blockPushed() {
-//      assert(!m_blockchain.empty());
+      //assert(!m_blockchain.empty());
 
       if (m_currency.upgradeHeight(m_targetVersion) != UNDEF_HEIGHT) {
         if (m_blockchain.size() <= m_currency.upgradeHeight(m_targetVersion) + 1) {

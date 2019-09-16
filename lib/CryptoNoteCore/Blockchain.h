@@ -141,6 +141,7 @@ public:
     bool addNewBlock(const Block& bl_, block_verification_context& bvc);
     bool add_new_block(const Block& b, block_verification_context& bvc);
     bool cleanup_handle_incoming_blocks(bool force_sync);
+    bool prepare_handle_incoming_blocks(const std::list<block_complete_entry> &blocks_entry);
     bool resetAndSetGenesisBlock(const Block& b);
     bool haveBlock(const Crypto::Hash& id);
     size_t getTotalTransactions();
@@ -350,6 +351,8 @@ private:
     friend class BlockchainIndicesSerializer;
     HardFork *m_hardfork;
 
+    std::atomic<bool> m_cancel;
+
     boost::asio::io_service m_async_service;
     boost::thread_group m_async_pool;
     std::unique_ptr<boost::asio::io_service::work> m_async_work_idle;
@@ -365,7 +368,11 @@ private:
     OrphanBlocksIndex m_orthanBlocksIndex;
     bool m_blockchainIndexesEnabled;
 
+    void cancel();
+
     std::unordered_map<Crypto::Hash, std::unordered_map<Crypto::KeyImage, std::vector<output_data_t>>> m_scan_table;
+    std::unordered_map<Crypto::Hash, Crypto::Hash> m_blocks_longhash_table;
+    std::unordered_map<Crypto::Hash, std::unordered_map<Crypto::KeyImage, bool>> m_check_txin_table;
 
     IntrusiveLinkedList<MessageQueue<BlockchainMessage>> m_messageQueueList;
 
@@ -408,6 +415,14 @@ private:
     bool checkUpgradeHeight(const UpgradeDetector& upgradeDetector);
 
     bool handle_block_to_main_chain(const Block& bl, const Crypto::Hash& id, block_verification_context& bvc);
+    HardFork::State get_hard_fork_state() const;
+    void output_scan_worker(const uint64_t amount,const std::vector<uint64_t> &offsets,
+        std::vector<output_data_t> &outputs, std::unordered_map<Crypto::Hash,
+        CryptoNote::Transaction> &txs) const;
+    void block_longhash_worker(uint64_t height, const std::vector<CryptoNote::Block> &blocks,
+        std::unordered_map<Crypto::Hash, Crypto::Hash> &map) const;
+    std::vector<Crypto::Hash> m_blocks_hash_check;
+    std::vector<Crypto::Hash> m_blocks_txs_check;
 
     bool storeBlockchainIndices();
     bool loadBlockchainIndices();
@@ -435,6 +450,8 @@ private:
     Blockchain& m_bc;
     std::lock_guard<std::recursive_mutex> m_lock;
   };
+
+
 
   template<class visitor_t> bool Blockchain::scanOutputKeysForIndexes(const KeyInput& tx_in_to_key, visitor_t& vis, uint32_t* pmax_related_block_height) {
     std::lock_guard<std::recursive_mutex> lk(m_blockchain_lock);

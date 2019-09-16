@@ -574,6 +574,31 @@ bool get_block_longhash(cn_context &context, const Block& b, Hash& res) {
   }
   return true;
 }
+bool get_block_longhash(Crypto::cn_context& cn, const Block& b, uint64_t height, Crypto::Hash& res) {
+  BinaryArray bd;
+  if (b.majorVersion == BLOCK_MAJOR_VERSION_1 || b.majorVersion >= BLOCK_MAJOR_VERSION_4) {
+    if (!get_block_hashing_blob(b, bd)) {
+      return false;
+    }
+  } else if (b.majorVersion == BLOCK_MAJOR_VERSION_2 || b.majorVersion == BLOCK_MAJOR_VERSION_3) {
+    if (!get_parent_block_hashing_blob(b, bd)) {
+      return false;
+    }
+  } else {
+    return false;
+  }
+  cn_slow_hash(cn, bd.data(), bd.size(), res);
+  //cn_slow_hash(context, bd.data(), bd.size(), res);
+  if(b.majorVersion == BLOCK_MAJOR_VERSION_4) {
+    // heavy 4.0
+  cn_slow_hash(cn, bd.data(), bd.size(), res);
+  }
+  else {
+    // classic 1.0||2.0||3.0||5.0
+  cn_slow_hash(cn, bd.data(), bd.size(), res);
+  }
+  return true;
+}
 
 std::vector<uint32_t> relative_output_offsets_to_absolute(const std::vector<uint32_t>& off) {
   std::vector<uint32_t> res = off;

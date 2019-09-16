@@ -524,7 +524,7 @@ void BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& block
   if (mdb_cursor_get(m_cur_block_heights, (MDB_val *)&zerokval, &val_h, MDB_GET_BOTH) == 0)
     {} // throw1(BLOCK_EXISTS("Attempting to add block that's already in the db"));
 
-  if (m_height >= 1)
+  if (m_height > 0)
   {
     MDB_val_set(parent_key, blk.previousBlockHash);
     int result = mdb_cursor_get(m_cur_block_heights, (MDB_val *)&zerokval, &parent_key, MDB_GET_BOTH);
@@ -1722,7 +1722,7 @@ CryptoNote::difficulty_type BlockchainLMDB::get_block_difficulty(const uint64_t&
 
   diff1 = get_block_cumulative_difficulty(height);
 
-  if (height >= 1)
+  if (height > 0)
     diff2 = get_block_cumulative_difficulty(height-1);
   return (diff1-diff2);
 }
@@ -1806,9 +1806,9 @@ Crypto::Hash BlockchainLMDB::top_block_hash() const
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
   uint64_t m_height = height();
-  if (m_height >= 1)
+  if (m_height > 0)
   {
-    return get_block_hash_from_height(m_height - 1);
+    return get_block_hash_from_height(m_height);
   }
 
   return CryptoNote::NULL_HASH;
@@ -1820,9 +1820,9 @@ CryptoNote::Block BlockchainLMDB::get_top_block() const
   check_open();
   uint64_t m_height = height();
 
-  if (m_height >= 1)
+  if (m_height > 0)
   {
-    return get_block_from_height(m_height - 1);
+    return get_block_from_height(m_height);
   }
 
   CryptoNote::Block b = get_block(get_block_hash_from_height(m_height));
