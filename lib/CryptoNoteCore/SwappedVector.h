@@ -32,6 +32,7 @@
 #include "Common/StdOutputStream.h"
 #include "Serialization/BinaryInputStreamSerializer.h"
 #include "Serialization/BinaryOutputStreamSerializer.h"
+#include "CryptoNoteConfig.h"
 
 template<class T> class SwappedVector {
 public:
@@ -283,12 +284,12 @@ template<class T> const T& SwappedVector<T>::operator[](uint64_t index) {
     return itemIter->second.item;
   }
 
-  if (index >= m_offsets.size()) {
-    throw std::runtime_error("SwappedVector::operator[]");
+/*  if (index >= m_offsets.size()) {
+    throw std::runtime_error(std::string(std::string("SwappedVector::operator[] in function:") + std::string(__FUNCTION__) + std::string(", file: ") + std::string(__FILE__)).c_str());
   }
-
+*/
   if (!m_itemsFile) {
-    throw std::runtime_error("SwappedVector::operator[]");
+    throw std::runtime_error(std::string(std::string("SwappedVector::operator[] in function:") + std::string(__FUNCTION__) + std::string(", file: ") + std::string(__FILE__)).c_str());
   }
 
   m_itemsFile.seekg(m_offsets[index]);

@@ -189,9 +189,15 @@ public:
           if (!m_blockIndex.getBlockHeight(bl_id, height)) {
             missed_bs.push_back(bl_id);
           } else {
-            if (!(height < m_blocks.size())) { logger(Logging::ERROR, Logging::BRIGHT_RED) << "Internal error: bl_id=" << Common::podToHex(bl_id)
-            << " have index record with offset=" << height << ", bigger then m_blocks.size()=" << m_blocks.size(); return false; }
-            blocks.push_back(m_blocks[height].bl);
+            if (Tools::getDefaultDbType() != "lmdb") {
+              if (!(height < m_blocks.size())) { logger(Logging::ERROR, Logging::BRIGHT_RED) << "Internal error: bl_id=" << Common::podToHex(bl_id)
+              << " have index record with offset=" << height << ", bigger then m_blocks.size()=" << m_blocks.size(); return false; }
+              blocks.push_back(m_blocks[height].bl);
+            } else {
+              if (!(height < m_db->height())) { logger(Logging::ERROR, Logging::BRIGHT_RED) << "Internal error: bl_id=" << Common::podToHex(bl_id)
+              << " have index record with offset=" << height << ", larger then m_db->height()=" << m_db->height(); return false; }
+              blocks.push_back(m_blocks[height].bl);
+            }
           }
         } catch (const std::exception& e) {
           return false;
@@ -333,6 +339,12 @@ private:
     typedef std::unordered_map<Crypto::Hash, uint32_t> BlockMap;
     typedef std::unordered_map<Crypto::Hash, TransactionIndex> TransactionMap;
     typedef BasicUpgradeDetector<Blocks> UpgradeDetector;
+    UpgradeDetector m_upgradeDetectorV2;
+    UpgradeDetector m_upgradeDetectorV3;
+    UpgradeDetector m_upgradeDetectorV4;
+    UpgradeDetector m_upgradeDetectorV5;
+    UpgradeDetector m_upgradeDetectorV6;
+
 
     friend class BlockCacheSerializer;
     friend class BlockchainIndicesSerializer;
@@ -346,11 +358,6 @@ private:
     CryptoNote::BlockIndex m_blockIndex;
     TransactionMap m_transactionMap;
     MultisignatureOutputsContainer m_multisignatureOutputs;
-    UpgradeDetector m_upgradeDetectorV2;
-    UpgradeDetector m_upgradeDetectorV3;
-    UpgradeDetector m_upgradeDetectorV4;
-    UpgradeDetector m_upgradeDetectorV5;
-    UpgradeDetector m_upgradeDetectorV6;
 
     PaymentIdIndex m_paymentIdIndex;
     TimestampBlocksIndex m_timestampIndex;
