@@ -162,7 +162,7 @@ protected:
     for (auto& i : t_blocks)
     {
       CryptoNote::Block bl;
-      blobdata bd = i;
+      blobdata bd = h2b(i);
       parse_and_validate_block_from_blob(bd, bl);
       m_blocks.push_back(bl);
     }
