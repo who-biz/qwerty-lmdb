@@ -170,11 +170,9 @@ void HardFork::init()
   uint64_t height = db.height();
   if (height > window_size)
     height -= window_size - 1;
-  else
-    height = 1;
 
   bool populate = false;
-  try
+/*  try
   {
     db.get_hard_fork_version(0);
   }
@@ -191,7 +189,7 @@ void HardFork::init()
   }
   else {
     rescan_from_chain_height(height);
-  }
+  }*/
   //MDEBUG("reorganization done");
 }
 
