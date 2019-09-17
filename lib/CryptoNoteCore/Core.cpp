@@ -125,8 +125,7 @@ uint32_t core::get_current_blockchain_height() {
 }
 
 uint8_t core::getCurrentBlockMajorVersion() {
-//  assert(m_blockchain.getCurrentBlockchainHeight() > 0);
-  if (m_blockchain.getCurrentBlockchainHeight() == 0) {
+  if (m_blockchain.getCurrentBlockchainHeight() < 1) {
     return 1;
   }
   return m_blockchain.getBlockMajorVersionForHeight(m_blockchain.getCurrentBlockchainHeight());
@@ -138,7 +137,7 @@ uint8_t core::getBlockMajorVersionForHeight(uint32_t height) {
 }
 
 void core::get_blockchain_top(uint32_t& height, Crypto::Hash& top_id) {
-//  assert(m_blockchain.getCurrentBlockchainHeight() > 0);
+  assert(m_blockchain.getCurrentBlockchainHeight() > 0);
   top_id = m_blockchain.getTailId(height);
 }
 
