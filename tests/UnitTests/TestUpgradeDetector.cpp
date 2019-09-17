@@ -20,6 +20,7 @@
 
 #include "gtest/gtest.h"
 
+#include "BlockchainDB/BlockchainDB.h"
 #include "CryptoNoteCore/CryptoNoteBasic.h"
 #include "CryptoNoteCore/UpgradeDetector.h"
 
@@ -34,6 +35,9 @@ namespace {
   struct BlockEx {
     CryptoNote::Block bl;
   };
+
+  std::unique_ptr<CryptoNote::BlockchainDB> db;
+  CryptoNote::BlockchainDB* m_db = db.release();
 
   typedef std::vector<BlockEx> BlockVector;
   typedef CryptoNote::BasicUpgradeDetector<BlockVector> UpgradeDetector;
@@ -91,7 +95,7 @@ namespace {
   TEST_F(UpgradeDetector_voting_init, handlesEmptyBlockchain) {
     CryptoNote::Currency currency = createCurrency();
     BlockVector blocks;
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), UpgradeDetector::UNDEF_HEIGHT);
   }
@@ -101,7 +105,7 @@ namespace {
     BlockVector blocks;
     createBlocks(blocks, currency.upgradeVotingWindow() - 1, BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_1);
 
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), UpgradeDetector::UNDEF_HEIGHT);
   }
@@ -111,7 +115,7 @@ namespace {
     BlockVector blocks;
     createBlocks(blocks, currency.upgradeVotingWindow(), BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_1);
 
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), currency.upgradeVotingWindow() - 1);
   }
@@ -122,7 +126,7 @@ namespace {
     createBlocks(blocks, currency.upgradeVotingWindow(), BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_0);
     createBlocks(blocks, currency.minNumberVotingBlocks() - 1, BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_1);
 
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), UpgradeDetector::UNDEF_HEIGHT);
   }
@@ -133,7 +137,7 @@ namespace {
     createBlocks(blocks, currency.upgradeVotingWindow(), BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_0);
     createBlocks(blocks, currency.minNumberVotingBlocks(), BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_1);
 
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), blocks.size() - 1);
   }
@@ -147,7 +151,7 @@ namespace {
     // Upgrade is here
     createBlocks(blocks, 1, BLOCK_MAJOR_VERSION_2, BLOCK_MINOR_VERSION_0);
 
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), currency.upgradeVotingWindow() - 1);
     ASSERT_EQ(upgradeDetector.upgradeHeight(), upgradeHeight);
@@ -182,17 +186,17 @@ namespace {
 //    // Upgrade to v4 is here
 //    createBlocks(blocks, 1, BLOCK_V4, BLOCK_MINOR_VERSION_0);
 //
-//    UpgradeDetector upgradeDetectorV2(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+//    UpgradeDetector upgradeDetectorV2(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
 //    ASSERT_TRUE(upgradeDetectorV2.init());
 //    ASSERT_EQ(upgradeDetectorV2.votingCompleteHeight(), votingCompleteHeigntV2);
 //    ASSERT_EQ(upgradeDetectorV2.upgradeHeight(), upgradeHeightV2);
 //
-//    UpgradeDetector upgradeDetectorV3(currency, blocks, BLOCK_V3, logger);
+//    UpgradeDetector upgradeDetectorV3(currency, blocks, *m_db, BLOCK_V3, logger);
 //    ASSERT_TRUE(upgradeDetectorV3.init());
 //    ASSERT_EQ(upgradeDetectorV3.votingCompleteHeight(), votingCompleteHeigntV3);
 //    ASSERT_EQ(upgradeDetectorV3.upgradeHeight(), upgradeHeightV3);
 //
-//    UpgradeDetector upgradeDetectorV4(currency, blocks, BLOCK_V4, logger);
+//    UpgradeDetector upgradeDetectorV4(currency, blocks, *m_db, BLOCK_V4, logger);
 //    ASSERT_TRUE(upgradeDetectorV4.init());
 //    ASSERT_EQ(upgradeDetectorV4.votingCompleteHeight(), votingCompleteHeigntV4);
 //    ASSERT_EQ(upgradeDetectorV4.upgradeHeight(), upgradeHeightV4);
@@ -202,7 +206,7 @@ namespace {
     const uint64_t upgradeHeight = 17;
     CryptoNote::Currency currency = createCurrency(upgradeHeight);
     BlockVector blocks;
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.upgradeHeight(), upgradeHeight);
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), UpgradeDetector::UNDEF_HEIGHT);
@@ -214,7 +218,7 @@ namespace {
     BlockVector blocks;
     createBlocks(blocks, upgradeHeight, BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_1);
 
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.upgradeHeight(), upgradeHeight);
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), UpgradeDetector::UNDEF_HEIGHT);
@@ -226,7 +230,7 @@ namespace {
     BlockVector blocks;
     createBlocks(blocks, upgradeHeight + 1, BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_1);
 
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.upgradeHeight(), upgradeHeight);
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), UpgradeDetector::UNDEF_HEIGHT);
@@ -239,7 +243,7 @@ namespace {
     createBlocks(blocks, upgradeHeight + 1, BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_1);
     createBlocks(blocks, 1, BLOCK_MAJOR_VERSION_2, BLOCK_MINOR_VERSION_0);
 
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
     ASSERT_EQ(upgradeDetector.upgradeHeight(), upgradeHeight);
     ASSERT_EQ(upgradeDetector.votingCompleteHeight(), UpgradeDetector::UNDEF_HEIGHT);
@@ -248,7 +252,7 @@ namespace {
   TEST_F(UpgradeDetector_voting, handlesVotingCompleteStartingEmptyBlockchain) {
     CryptoNote::Currency currency = createCurrency();
     BlockVector blocks;
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
 
     createBlocks(blocks, upgradeDetector, currency.upgradeVotingWindow(), BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_0);
@@ -262,7 +266,7 @@ namespace {
     const uint64_t portion = currency.minNumberVotingBlocks() - currency.minNumberVotingBlocks() / 2;
 
     BlockVector blocks;
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
 
     createBlocks(blocks, upgradeDetector, currency.upgradeVotingWindow(), BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_0);
     createBlocks(blocks, upgradeDetector, currency.minNumberVotingBlocks() - portion, BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_1);
@@ -275,7 +279,7 @@ namespace {
   TEST_F(UpgradeDetector_voting, handlesVotingCancelling) {
     CryptoNote::Currency currency = createCurrency();
     BlockVector blocks;
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
 
     createBlocks(blocks, upgradeDetector, currency.upgradeVotingWindow(), BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_0);
@@ -297,7 +301,7 @@ namespace {
   TEST_F(UpgradeDetector_voting, handlesVotingAndUpgradeCancelling) {
     CryptoNote::Currency currency = createCurrency();
     BlockVector blocks;
-    UpgradeDetector upgradeDetector(currency, blocks, BLOCK_MAJOR_VERSION_2, logger);
+    UpgradeDetector upgradeDetector(currency, blocks, *m_db, BLOCK_MAJOR_VERSION_2, logger);
     ASSERT_TRUE(upgradeDetector.init());
 
     createBlocks(blocks, upgradeDetector, currency.upgradeVotingWindow(), BLOCK_MAJOR_VERSION_1, BLOCK_MINOR_VERSION_0);

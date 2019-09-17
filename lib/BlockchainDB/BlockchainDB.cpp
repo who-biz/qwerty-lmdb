@@ -149,7 +149,7 @@ uint64_t BlockchainDB::add_block( const CryptoNote::Block& blk
   // call out to subclass implementation to add the block & metadata
   add_block(blk, block_size, cumulative_difficulty, coins_generated, blk_hash);
 
-//  m_hardfork->add(blk, prev_height);
+  m_hardfork->add(blk, prev_height);
 
   block_txn_stop();
 
