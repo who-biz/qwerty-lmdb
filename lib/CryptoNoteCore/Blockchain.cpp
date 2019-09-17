@@ -2224,7 +2224,6 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
 
   std::vector<const Crypto::PublicKey *> output_keys;
 
-  if (Tools::getDefaultDbType() != "lmdb") {
     struct outputs_visitor {
       std::vector<const Crypto::PublicKey *>& m_results_collector;
       Blockchain& m_bch;
@@ -2260,7 +2259,7 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
       return false;
     }
 
-  } else {
+ /* } else {
       struct outputs_visitor {
         std::vector<const Crypto::PublicKey *>& m_results_collector;
         Blockchain& m_bch;
@@ -2289,8 +2288,7 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
         " and count indexes " << txin.outputIndexes.size();
       return false;
     }
-
-  }
+  }*/
 
   // additional key_image check, fix discovered by Monero Lab and suggested by "fluffypony" (bitcointalk.org)
   static const Crypto::KeyImage I = { { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
@@ -2499,7 +2497,21 @@ bool Blockchain::addNewBlock(const Block& bl_, block_verification_context& bvc) 
 }
 
 const Blockchain::TransactionEntry& Blockchain::transactionByIndex(TransactionIndex index) {
-  return m_blocks[index.block].transactions[index.transaction];
+  bool r = Tools::getDefaultDbType() != "lmdb";
+  if (r)
+    return m_blocks[index.block].transactions[index.transaction];
+  else {
+    Crypto::Hash tx_id = m_db->get_block_from_height(index.block).transactionHashes[index.transaction];
+    Transaction tx = m_db->get_tx(tx_id);
+
+    auto it = m_transactionMap.find(tx_id);
+    if (it == m_transactionMap.end()) {
+      logger(WARNING, YELLOW) << "warning: transactionByIndex failed to find transaction with id = " << tx_id;
+    }
+
+    const TransactionEntry& tx_entry = transactionByIndex(it->second);
+    return tx_entry;
+  }
 }
 
 bool Blockchain::pushBlock(const Block& blockData, block_verification_context& bvc) {
