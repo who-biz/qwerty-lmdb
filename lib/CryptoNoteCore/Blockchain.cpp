@@ -88,7 +88,7 @@ class BlockchainIndicesSerializer;
 }
 
 namespace CryptoNote {
-
+#define HEIGHT_COND (r ? m_blocks.size() : m_db->height())
 #define DB_TX_START if (Tools::getDefaultDbType() == "lmdb") { m_db->block_txn_start(true); }
 #define DB_TX_STOP if (Tools::getDefaultDbType() == "lmdb") { m_db->block_txn_stop(); }
 
@@ -622,7 +622,7 @@ uint32_t Blockchain::getCurrentBlockchainHeight() {
     if (Tools::getDefaultDbType() != "lmdb") {
       return static_cast<uint32_t>(m_blocks.size());
     } else {
-      return static_cast<uint32_t>(m_db->height()-1);
+      return static_cast<uint32_t>(m_db->height());
     }
 }
 
@@ -1165,7 +1165,7 @@ uint64_t Blockchain::getBlockTimestamp(uint32_t height) {
   } else {
     assert(height < m_db->height());
     if (m_db->height() <= 1) {
-      timestamp = time(NULL);
+      timestamp = 0;
     } else {
       timestamp = m_db->get_block_timestamp(height);
     }
@@ -1176,17 +1176,19 @@ return timestamp;
 uint64_t Blockchain::getMinimalFee(uint32_t height) {
 	std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
 
-	if (height == 0 || m_blocks.size() <= 1) {
+    bool r = Tools::getDefaultDbType() != "lmdb";
+
+	if (height == 0 || HEIGHT_COND <= 1) {
 	    return 0;
 	}
 
-	if (height > m_blocks.size() - 1) {
-		height = m_blocks.size() - 1;
+	if (height > HEIGHT_COND - 1) {
+		height = HEIGHT_COND - 1;
 	}
 	if (height < 3) {
 		height = 3;
 	}
-	size_t window = std::min(height, std::min<uint32_t>(m_blocks.size(), m_currency.expectedNumberOfBlocksPerDay()));
+	size_t window = std::min(height, std::min<uint32_t>(HEIGHT_COND, m_currency.expectedNumberOfBlocksPerDay()));
 	if (window == 0) {
 		++window;
 	}
@@ -2732,10 +2734,7 @@ if (!m_db->height()) {
   if (Tools::getDefaultDbType() != "lmdb") {
     block.height = static_cast<uint32_t>(m_blocks.size());
   } else {
-    if (m_db->height() < 1) {
-      block.height = 0;
-    }
-    block.height = m_db->height() - 1;
+    block.height = m_db->height();
   }
   block.block_cumulative_size = cumulative_block_size;
   block.cumulative_difficulty = currentDifficulty;

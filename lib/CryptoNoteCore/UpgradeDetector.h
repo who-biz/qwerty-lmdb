@@ -59,7 +59,7 @@ namespace CryptoNote {
 
       bool r = Tools::getDefaultDbType() != "lmdb";
 
-      #define HEIGHT  (r ? m_blockchain.size() : db.height()-1)
+      #define HEIGHT  (r ? m_blockchain.size() : db.height())
 
       uint32_t upgradeHeight = m_currency.upgradeHeight(m_targetVersion);
       if (upgradeHeight == UNDEF_HEIGHT) {
@@ -134,9 +134,9 @@ namespace CryptoNote {
 
       if (m_currency.upgradeHeight(m_targetVersion) != UNDEF_HEIGHT) {
         if (HEIGHT <= m_currency.upgradeHeight(m_targetVersion) + 1) {
-          assert((r ? m_blockchain.back().bl.majorVersion : db.get_top_block().majorVersion) <= m_targetVersion - 1);
+//          assert((r ? m_blockchain.back().bl.majorVersion : db.get_top_block().majorVersion) <= m_targetVersion - 1);
         } else {
-          assert((r ? m_blockchain.back().bl.majorVersion : db.get_top_block().majorVersion) >= m_targetVersion);
+//          assert((r ? m_blockchain.back().bl.majorVersion : db.get_top_block().majorVersion) >= m_targetVersion);
         }
 
       } else if (m_votingCompleteHeight != UNDEF_HEIGHT) {
@@ -193,13 +193,16 @@ namespace CryptoNote {
     }
 
     size_t getNumberOfVotes(uint32_t height) {
+
+      bool r = Tools::getDefaultDbType() != "lmdb";
+
       if (height < m_currency.upgradeVotingWindow() - 1) {
         return 0;
       }
 
       size_t voteCounter = 0;
       for (size_t i = height + 1 - m_currency.upgradeVotingWindow(); i <= height; ++i) {
-        const auto& b = m_blockchain[i].bl;
+        const auto& b = (r ? m_blockchain[i].bl : db.get_block_from_height(i));
         voteCounter += (b.majorVersion == m_targetVersion - 1) && (b.minorVersion == BLOCK_MINOR_VERSION_1) ? 1 : 0;
       }
 

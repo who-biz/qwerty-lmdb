@@ -1805,7 +1805,7 @@ Crypto::Hash BlockchainLMDB::top_block_hash() const
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
-  uint64_t m_height = height();
+  uint64_t m_height = height()-1;
   if (m_height > 0)
   {
     return get_block_hash_from_height(m_height);
@@ -1820,12 +1820,12 @@ CryptoNote::Block BlockchainLMDB::get_top_block() const
   check_open();
   uint64_t m_height = height();
 
+  CryptoNote::Block b;
   if (m_height > 0)
   {
-    return get_block_from_height(m_height);
+    b = get_block_from_height(m_height - 1);
   }
 
-  CryptoNote::Block b = get_block(get_block_hash_from_height(m_height));
   return b;
 }
 
