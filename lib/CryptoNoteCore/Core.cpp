@@ -861,14 +861,12 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
     }
-    lbs->prepare_handle_incoming_blocks(blocks);
-    lbs->add_new_block(b, bvc);
-    lbs->cleanup_handle_incoming_blocks(true);
+    m_blockchain.prepare_handle_incoming_blocks(blocks);
+    m_blockchain.addNewBlock(b, bvc);
+    m_blockchain.cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
-  } else {
-    m_blockchain.pushBlock(b, bvc);
-  }
+   }
   if (control_miner) {
     update_block_template_and_resume_mining();
   }

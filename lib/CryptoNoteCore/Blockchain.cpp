@@ -824,13 +824,14 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 void Blockchain::rebuildCache() {
   std::chrono::steady_clock::time_point timePoint = std::chrono::steady_clock::now();
   m_blockIndex.clear();
+  bool r = Tools::getDefaultDbType() != "lmdb";
   m_transactionMap.clear();
   m_spent_keys.clear();
   m_outputs.clear();
   m_multisignatureOutputs.clear();
-  for (uint32_t b = 0; b < m_blocks.size(); ++b) {
+  for (uint32_t b = 0; b < HEIGHT_COND; ++b) {
     if (b % 1000 == 0) {
-      logger(INFO, BRIGHT_WHITE) << "Height " << b << " of " << m_blocks.size();
+      logger(INFO, BRIGHT_WHITE) << "Height " << b << " of " << HEIGHT_COND;
     }
     const BlockEntry& block = m_blocks[b];
     Crypto::Hash blockHash = get_block_hash(block.bl);
@@ -1249,12 +1250,12 @@ bool Blockchain::switch_to_alternative_blockchain(std::list<blocks_ext_by_hash::
 
   size_t split_height = alt_chain.front()->second.height;
 
-/*    if (!m_db->block_exists(alt_chain.front()->second.bl.previousBlockHash))
+    if (!m_db->block_exists(alt_chain.front()->second.bl.previousBlockHash))
     {
       logger(ERROR, BRIGHT_RED) << "switch_to_alternative_blockchain: blockchain size is lower than split height";
       return false;
     }
-*/
+
     if (!(HEIGHT_COND > split_height)) {
       logger(ERROR, BRIGHT_RED) << "switch_to_alternative_blockchain: blockchain size is lower than split height";
       return false;
@@ -2057,15 +2058,9 @@ uint32_t Blockchain::findBlockchainSupplement(const std::vector<Crypto::Hash>& q
 uint64_t Blockchain::blockDifficulty(size_t i) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   bool r = Tools::getDefaultDbType() != "lmdb";
-  uint64_t diff_one = 1;
-  uint64_t diff_two = 1;
   if (!(i < HEIGHT_COND)) { logger(ERROR, BRIGHT_RED) << "wrong block index i = " << i << " at Blockchain::block_difficulty()"; return false; }
-  diff_one = (r ? m_blocks[i].cumulative_difficulty : m_db->get_block_cumulative_difficulty(i));
-  if (i == 0) {
-    return diff_one;
-  }
-   diff_two = (r ? m_blocks[i - 1].cumulative_difficulty : m_db->get_block_cumulative_difficulty(i - 1));
-   return diff_one - diff_two;
+  if (r) { return m_blocks[i].cumulative_difficulty - m_blocks[i - 1].cumulative_difficulty; }
+  else { return m_db->get_block_difficulty(i); }
 }
 
 uint64_t Blockchain::blockCumulativeDifficulty(size_t i) {
@@ -2744,7 +2739,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
 
     blob_size = toBinaryArray(block.transactions.back().tx).size();
     fee = getInputAmount(block.transactions.back().tx) - getOutputAmount(block.transactions.back().tx);
-    if (!checkTransactionInputs(block.transactions.back().tx)) {
+/*    if (!checkTransactionInputs(block.transactions.back().tx)) {
       logger(INFO, BRIGHT_WHITE) <<
         "Block " << blockHash << " has at least one transaction with wrong inputs: " << tx_id;
       bvc.m_verification_failed = true;
@@ -2753,7 +2748,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
       popTransactions(block, minerTransactionHash);
       DB_TX_STOP
       return false;
-    }
+    }*/
       ++transactionIndex.transaction;
       pushTransaction(block, tx_id, transactionIndex);
 
@@ -2789,13 +2784,13 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
 
     if (!r) {
       try {
-        bool z = m_db->add_block(block.bl, block.block_cumulative_size, block.cumulative_difficulty, block.already_generated_coins, transactions);
-        if (z) {
+        uint64_t new_height = m_db->add_block(block.bl, block.block_cumulative_size, block.cumulative_difficulty, block.already_generated_coins, transactions);
+        if (new_height > m_db->height()-1) {
           auto block_processing_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - blockProcessingStart).count();
           logger(DEBUGGING) <<
           "+++++ BLOCK SUCCESSFULLY ADDED" << ENDL << "id:\t" << blockHash
           << ENDL << "PoW:\t" << proof_of_work
-          << ENDL << "HEIGHT " << block.height << ", difficulty:\t" << currentDifficulty
+          << ENDL << "HEIGHT " << new_height << ", difficulty:\t" << currentDifficulty
           << ENDL << "block reward: " << m_currency.formatAmount(reward) << ", fee = " << m_currency.formatAmount(fee_summary)
           << ", coinbase_blob_size: " << coinbase_blob_size << ", cumulative size: " << cumulative_block_size
           << ", " << block_processing_time << "(" << target_calculating_time << "/" << longhash_calculating_time << ")ms";
@@ -2864,15 +2859,6 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
   }
 
   //check that block refers to chain tail
-  if(!(bl.previousBlockHash == getTailId()))
-  {
-    //chain switching or wrong block
-    bvc.m_added_to_main_chain = false;
-    bool R = handle_alternative_block(bl, id, bvc);
-    DB_TX_STOP
-    return R;
-    //never relay alternative blocks
-  }
   DB_TX_STOP
   return pushBlock(bl, bvc);
 }
@@ -2880,8 +2866,6 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
 
 bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
 {
-  std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  std::lock_guard<decltype(m_tx_pool)> poolLock(m_tx_pool);
 
   if (m_sync_counter > 0)
   {
@@ -3466,11 +3450,11 @@ bool Blockchain::loadTransactions(const Block& block, std::vector<Transaction>& 
 void Blockchain::saveTransactions(const std::vector<Transaction>& transactions) {
   tx_verification_context context;
   for (size_t i = 0; i < transactions.size(); ++i) {
-    if (Tools::getDefaultDbType() != "lmdb") {
+//    if (Tools::getDefaultDbType() != "lmdb") {
       if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true)) {
         logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
       }
-    } else {
+  /*  } else {
       std::vector<Crypto::Hash> hashes;
       txpool_tx_meta_t meta;
       Crypto::Hash hash = getObjectHash(transactions[transactions.size() - 1 - i]);
@@ -3478,7 +3462,7 @@ void Blockchain::saveTransactions(const std::vector<Transaction>& transactions) 
         logger(WARNING,BRIGHT_YELLOW) << "Failed to get transaction meta by hash: " << hash;
       }
       m_db->add_txpool_tx(transactions[transactions.size() - 1 - i], meta);
-    }
+    }*/
   }
 }
 
@@ -3631,14 +3615,6 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_e
     {
       m_blocks_longhash_table.clear();
       uint64_t thread_height = height;
-      Tools::threadpool::waiter waiter;
-      for (uint64_t i = 0; i < threads; i++)
-      {
-        tpool.submit(&waiter, boost::bind(&Blockchain::block_longhash_worker, this, thread_height, std::cref(blocks[i]), std::ref(maps[i])));
-        thread_height += blocks[i].size();
-      }
-
-      waiter.wait();
 
       if (m_cancel)
         return false;
@@ -3691,23 +3667,10 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_e
       if (!parse_and_validate_tx_from_blob(tx_blob, tx, tx_hash, tx_prefix_hash))
         SCAN_TABLE_QUIT("Could not parse tx from incoming blocks.");
 
-      auto its = m_scan_table.find(tx_prefix_hash);
-      if (its != m_scan_table.end())
-        SCAN_TABLE_QUIT("Duplicate tx found from incoming blocks.");
-
-      m_scan_table.emplace(tx_prefix_hash, std::unordered_map<Crypto::KeyImage, std::vector<output_data_t>>());
-      its = m_scan_table.find(tx_prefix_hash);
-      assert(its != m_scan_table.end());
-
       // get all amounts from tx.vin(s)
       for (const auto &txin : tx.inputs)
       {
         const KeyInput &in_to_key = boost::get <KeyInput > (txin);
-
-        // check for duplicate
-        auto it = its->second.find(in_to_key.keyImage);
-        if (it != its->second.end())
-          SCAN_TABLE_QUIT("Duplicate key_image found from incoming blocks.");
 
         amounts.push_back(in_to_key.amount);
       }
@@ -3751,29 +3714,11 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_e
   // [output] stores all transactions for each tx_out_index::hash found
   std::vector<std::unordered_map<Crypto::Hash, CryptoNote::Transaction>> transactions(amounts.size());
 
-  threads = tpool.get_max_concurrency();
-  if (!m_db->can_thread_bulk_indices())
-    threads = 1;
-
-  if (threads > 1)
-  {
-    Tools::threadpool::waiter waiter;
-
-    for (size_t i = 0; i < amounts.size(); i++)
-    {
-      uint64_t amount = amounts[i];
-      tpool.submit(&waiter, boost::bind(&Blockchain::output_scan_worker, this, amount, std::cref(offset_map[amount]), std::ref(tx_map[amount]), std::ref(transactions[i])));
-    }
-    waiter.wait();
-  }
-  else
-  {
     for (size_t i = 0; i < amounts.size(); i++)
     {
       uint64_t amount = amounts[i];
       output_scan_worker(amount, offset_map[amount], tx_map[amount], transactions[i]);
     }
-  }
 
   int total_txs = 0;
 
@@ -3847,6 +3792,46 @@ bool Blockchain::isBlockInMainChain(const Crypto::Hash& blockId) {
     R = m_db->block_exists(blockId, height);
   }
   return R;
+}
+
+void Blockchain::add_txpool_tx(Transaction &tx, const txpool_tx_meta_t &meta)
+{
+  m_db->add_txpool_tx(tx, meta);
+}
+
+void Blockchain::update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t &meta)
+{
+  m_db->update_txpool_tx(txid, meta);
+}
+
+void Blockchain::remove_txpool_tx(const Crypto::Hash &txid)
+{
+  m_db->remove_txpool_tx(txid);
+}
+
+uint64_t Blockchain::get_txpool_tx_count() const
+{
+  return m_db->get_txpool_tx_count();
+}
+
+bool Blockchain::get_txpool_tx_meta(const Crypto::Hash& txid, txpool_tx_meta_t &meta) const
+{
+  return m_db->get_txpool_tx_meta(txid, meta);
+}
+
+bool Blockchain::get_txpool_tx_blob(const Crypto::Hash& txid, CryptoNote::blobdata &bd) const
+{
+  return m_db->get_txpool_tx_blob(txid, bd);
+}
+
+CryptoNote::blobdata Blockchain::get_txpool_tx_blob(const Crypto::Hash& txid) const
+{
+  return m_db->get_txpool_tx_blob(txid);
+}
+
+bool Blockchain::for_all_txpool_txes(std::function<bool(const Crypto::Hash&, const txpool_tx_meta_t&, const CryptoNote::blobdata*)> f, bool include_blob) const
+{
+  return m_db->for_all_txpool_txes(f, include_blob);
 }
 
 bool Blockchain::isInCheckpointZone(const uint32_t height) {

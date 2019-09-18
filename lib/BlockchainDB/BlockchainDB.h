@@ -1269,7 +1269,7 @@ public:
   /**
    * @brief get the number of transactions in the txpool
    */
-//  virtual uint64_t get_txpool_tx_count(bool include_unrelayed_txes = true) const = 0;
+  virtual uint64_t get_txpool_tx_count() const = 0;
 
   /**
    * @brief check whether a txid is in the txpool

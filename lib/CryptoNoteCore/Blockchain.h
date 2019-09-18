@@ -180,6 +180,16 @@ public:
     bool addMessageQueue(MessageQueue<BlockchainMessage>& messageQueue);
     bool removeMessageQueue(MessageQueue<BlockchainMessage>& messageQueue);
 
+    void add_txpool_tx(Transaction &tx, const txpool_tx_meta_t &meta);
+    void update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t &meta);
+    void remove_txpool_tx(const Crypto::Hash &txid);
+    uint64_t get_txpool_tx_count() const;
+    bool get_txpool_tx_meta(const Crypto::Hash& txid, txpool_tx_meta_t &meta) const;
+    bool get_txpool_tx_blob(const Crypto::Hash& txid, CryptoNote::blobdata &bd) const;
+    CryptoNote::blobdata get_txpool_tx_blob(const Crypto::Hash& txid) const;
+    bool for_all_txpool_txes(std::function<bool(const Crypto::Hash&, const txpool_tx_meta_t&, const CryptoNote::blobdata*)>, bool include_blob = false) const;
+
+
     template<class t_ids_container, class t_blocks_container, class t_missed_container>
     bool getBlocks(const t_ids_container& block_ids, t_blocks_container& blocks, t_missed_container& missed_bs) {
       std::lock_guard<std::recursive_mutex> lk(m_blockchain_lock);
