@@ -208,6 +208,11 @@ public:
     }
 
     template<class t_ids_container, class t_tx_container, class t_missed_container>
+    void get_transactions_blobs(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs);
+    template<class t_ids_container, class t_tx_container, class t_missed_container>
+    void get_transactions(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs);
+
+    template<class t_ids_container, class t_tx_container, class t_missed_container>
     void getBlockchainTransactions(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs) {
       std::lock_guard<decltype(m_blockchain_lock)> bcLock(m_blockchain_lock);
 
@@ -223,6 +228,7 @@ public:
 
     template<class t_ids_container, class t_tx_container, class t_missed_container>
     void getTransactions(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs, bool checkTxPool = false) {
+      Tools::getDefaultDbType() != "lmdb";
       if (checkTxPool){
         std::lock_guard<decltype(m_tx_pool)> txLock(m_tx_pool);
 

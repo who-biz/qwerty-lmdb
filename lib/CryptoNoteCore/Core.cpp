@@ -861,9 +861,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
     }
-    m_blockchain.prepare_handle_incoming_blocks(blocks);
+    lbs->prepare_handle_incoming_blocks(blocks);
     lbs->add_new_block(b, bvc);
-    m_blockchain.cleanup_handle_incoming_blocks(true);
+    lbs->cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
   } else {
@@ -1844,9 +1844,9 @@ bool core::handleBlockFound(Block& b)
     }
     catch (const std::exception &e)
     {
-      m_miner->resume();
+     logger(ERROR, BRIGHT_RED) << "Something went wrong at handleBlockFound!";
     }
-    m_blockchain.prepare_handle_incoming_blocks(blocks);
+    lbs->prepare_handle_incoming_blocks(blocks);
     lbs->add_new_block(b, bvc);
     m_blockchain.cleanup_handle_incoming_blocks(true);
     update_miner_block_template();

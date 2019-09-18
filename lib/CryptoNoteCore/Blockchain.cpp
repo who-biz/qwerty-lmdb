@@ -1804,7 +1804,11 @@ bool Blockchain::getBlocks(uint32_t start_offset, uint32_t count, std::list<Bloc
     }
     blocks.push_back((r ? m_blocks[i].bl : b));
     std::list<Crypto::Hash> missed_ids;
-    getTransactions((r ? m_blocks[i].bl.transactionHashes : b.transactionHashes), txs, missed_ids);
+    if (r) {
+      getTransactions(m_blocks[i].bl.transactionHashes, txs, missed_ids);
+    } else {
+      get_transactions(b.transactionHashes, txs, missed_ids);
+    }
     if (!(!missed_ids.size())) { logger(ERROR, BRIGHT_RED) << "have missed transactions in own block in main blockchain"; return false; }
   }
 
@@ -1954,6 +1958,59 @@ bool Blockchain::getRandomOutsByAmount(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_
     }
   }
   return true;
+}
+
+template<class t_ids_container, class t_tx_container, class t_missed_container>
+void Blockchain::get_transactions_blobs(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs)
+{
+  std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  for (const auto& tx_hash : txs_ids)
+  {
+    try
+    {
+      CryptoNote::blobdata tx;
+      if (m_db->get_tx_blob(tx_hash, tx))
+        txs.push_back(std::move(tx));
+      else
+        missed_txs.push_back(tx_hash);
+    }
+    catch (const std::exception& e)
+    {
+      logger(ERROR, BRIGHT_RED) << "Exception at get_transactions_blobs: " << e.what();
+      return;
+    }
+  }
+  return;
+}
+
+template<class t_ids_container, class t_tx_container, class t_missed_container>
+void Blockchain::get_transactions(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs)
+{
+  std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+
+  for (const auto& tx_hash : txs_ids)
+  {
+    try
+    {
+      CryptoNote::blobdata tx;
+      if (m_db->get_tx_blob(tx_hash, tx))
+      {
+        if (!parse_and_validate_tx_from_blob(tx, txs.back()))
+        {
+          logger(ERROR, BRIGHT_RED) << "Invalid transaction";
+          return;
+        }
+      }
+      else
+        missed_txs.push_back(tx_hash);
+    }
+    catch (const std::exception& e)
+    {
+      logger(ERROR, BRIGHT_RED) << "Exception at get_transactions: " << e.what();
+      return;
+    }
+  }
+  return;
 }
 
 uint32_t Blockchain::findBlockchainSupplement(const std::vector<Crypto::Hash>& qblock_ids) {
@@ -2422,8 +2479,12 @@ bool Blockchain::checkCumulativeBlockSize(const Crypto::Hash& blockId, size_t cu
 bool Blockchain::getBlockCumulativeSize(const Block& block, size_t& cumulativeSize) {
   std::vector<Transaction> blockTxs;
   std::vector<Crypto::Hash> missedTxs;
-  getTransactions(block.transactionHashes, blockTxs, missedTxs, true);
-
+  bool r = Tools::getDefaultDbType() != "lmdb";
+  if (r) {
+    getTransactions(block.transactionHashes, blockTxs, missedTxs, true);
+  } else {
+    get_transactions(block.transactionHashes, blockTxs, missedTxs);
+  }
   cumulativeSize = getObjectBinarySize(block.baseTransaction);
   for (const Transaction& tx : blockTxs) {
     cumulativeSize += getObjectBinarySize(tx);
@@ -2754,6 +2815,7 @@ bool Blockchain::pushBlock(BlockEntry& block) {
 
 bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc)
 {
+
   Block bl = bl_;
   Crypto::Hash id = getObjectHash(bl);
   DB_TX_START
@@ -2782,45 +2844,20 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
 
 bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
 {
-  bool success = false;
-
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  std::lock_guard<decltype(m_tx_pool)> poolLock(m_tx_pool);
 
-  try
-  {
-    m_db->batch_stop();
-    success = true;
-  }
-  catch (const std::exception &e)
-  {
-    logger(ERROR, BRIGHT_RED) << "Exception in cleanup_handle_incoming_blocks: " << e.what();
-  }
-
-  if (success && m_sync_counter > 0)
-  {
-    if (force_sync)
-    {
-      if(m_db_sync_mode != db_nosync)
-        store_blockchain();
-      m_sync_counter = 0;
-    }
-    else if (m_db_blocks_per_sync && m_sync_counter >= m_db_blocks_per_sync)
+    if (m_db_blocks_per_sync && m_sync_counter >= m_db_blocks_per_sync)
     {
       if(m_db_sync_mode == db_async)
       {
-        m_sync_counter = 0;
         m_async_service.dispatch(boost::bind(&Blockchain::store_blockchain, this));
-      }
-      else if(m_db_sync_mode == db_sync)
-      {
-        store_blockchain();
       }
       else // db_nosync
       {
         // DO NOTHING, not required to call sync.
       }
     }
-  }
 
   m_blocks_longhash_table.clear();
   m_scan_table.clear();
@@ -2828,7 +2865,7 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
   m_check_txin_table.clear();
 
   m_tx_pool.unlock();
-  return success;
+  return true;
 }
 
 void Blockchain::popBlock() {
