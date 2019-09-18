@@ -38,8 +38,8 @@
 #include "Serialization/BinarySerializationTools.h"
 #include "CryptoNoteTools.h"
 #include "TransactionExtra.h"
-#include <BlockchainDB/BlockchainDB.h>
-
+#include "BlockchainDB/BlockchainDB.h"
+#include "BlockchainDB/Structures.h"
 using namespace Logging;
 using namespace Common;
 
@@ -566,12 +566,20 @@ bool Blockchain::checkTransactionSize(size_t blobSize) {
 
 bool Blockchain::haveTransaction(const Crypto::Hash &id) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  return m_transactionMap.find(id) != m_transactionMap.end();
+  if (Tools::getDefaultDbType() != "lmdb") {
+    return m_transactionMap.find(id) != m_transactionMap.end();
+  } else {
+    return m_db->tx_exists(id);
+  }
 }
 
 bool Blockchain::have_tx_keyimg_as_spent(const Crypto::KeyImage &key_im) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  return  m_spent_keys.find(key_im) != m_spent_keys.end();
+  if (Tools::getDefaultDbType() != "lmdb") {
+    return  m_spent_keys.find(key_im) != m_spent_keys.end();
+  } else {
+    return m_db->has_key_image(key_im);
+  }
 }
 
 uint32_t Blockchain::getCurrentBlockchainHeight() {
@@ -966,6 +974,7 @@ Crypto::Hash Blockchain::getTailId() {
 
 std::vector<Crypto::Hash> Blockchain::buildSparseChain() {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+
     if (m_blockIndex.size() == 0) {
       return doBuildSparseChain(m_currency.genesisBlockHash());
     }
@@ -980,15 +989,18 @@ std::vector<Crypto::Hash> Blockchain::buildSparseChain(const Crypto::Hash& start
 
 std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& startBlockId) const {
   const Crypto::Hash hash = m_currency.genesisBlockHash();
-
+  bool r = Tools::getDefaultDbType() != "lmdb";
 
   std::vector<Crypto::Hash> sparseChain;
 
-    bool r = m_blockIndex.size() == 0;
+    bool R = m_blockIndex.size() == 0;
     if (m_blockIndex.hasBlock(startBlockId)) {
-      sparseChain = m_blockIndex.buildSparseChain(r ? hash : startBlockId);
+      sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId);
     } else {
-//    assert(m_alternative_chains.count(startBlockId) > 0);
+      if (m_db->block_exists(startBlockId)) {
+        sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId);
+    } else {
+      assert(m_alternative_chains.count(startBlockId) > 0);
 
       std::vector<Crypto::Hash> alternativeChain;
       Crypto::Hash blockchainAncestor;
@@ -1001,12 +1013,13 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
         sparseChain.emplace_back(alternativeChain[i - 1]);
       }
 
- //   assert(!sparseChain.empty());
-//    assert(m_blockIndex.hasBlock(blockchainAncestor));
+      assert(!sparseChain.empty());
+      assert(m_blockIndex.hasBlock(blockchainAncestor));
       std::vector<Crypto::Hash> sparseMainChain = m_blockIndex.buildSparseChain(blockchainAncestor);
       sparseChain.reserve(sparseChain.size() + sparseMainChain.size());
       std::copy(sparseMainChain.begin(), sparseMainChain.end(), std::back_inserter(sparseChain));
     }
+  }
   return sparseChain;
 }
 
@@ -1014,15 +1027,16 @@ Crypto::Hash Blockchain::getBlockIdByHeight(uint32_t height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   Crypto::Hash hash = NULL_HASH;
     assert(height < m_blockIndex.size());
-    hash = m_blockIndex.getBlockId(height);
-  /*else {
+   if (Tools::getDefaultDbType() == "lmdb") {
     assert(height < m_db->height());
     try {
       hash = m_db->get_block_hash_from_height(height);
+      return hash;
     } catch (const std::exception& e) {
       logger(ERROR, BRIGHT_RED) << "Something went wrong fetching block hash by height: " << e.what();
     }
-  }*/
+  }
+  hash = m_blockIndex.getBlockId(height);
   return hash;
 }
 
@@ -1351,8 +1365,8 @@ bool Blockchain::switch_to_alternative_blockchain(std::list<blocks_ext_by_hash::
   for (auto alt_ch_iter = alt_chain.begin(); alt_ch_iter != alt_chain.end(); alt_ch_iter++) {
     auto ch_ent = *alt_ch_iter;
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
-    bool r = pushBlock(ch_ent->second.bl, bvc);
-    if (!r || !bvc.m_added_to_main_chain) {
+    bool R = pushBlock(ch_ent->second.bl, bvc);
+    if (!R || !bvc.m_added_to_main_chain) {
       logger(INFO, BRIGHT_WHITE) << "Failed to switch to alternative blockchain";
       rollback_blockchain_switching(disconnected_chain, split_height);
       //add_block_as_invalid(ch_ent->second, get_block_hash(ch_ent->second.bl));
@@ -1377,8 +1391,8 @@ bool Blockchain::switch_to_alternative_blockchain(std::list<blocks_ext_by_hash::
     //pushing old chain as alternative chain
     for (auto& old_ch_ent : disconnected_chain) {
       block_verification_context bvc = boost::value_initialized<block_verification_context>();
-      bool r = handle_alternative_block(old_ch_ent, get_block_hash(old_ch_ent), bvc, false);
-      if (!r) {
+      bool R = handle_alternative_block(old_ch_ent, get_block_hash(old_ch_ent), bvc, false);
+      if (!R) {
         logger(WARNING, BRIGHT_YELLOW) << ("Failed to push ex-main chain blocks to alternative chain ");
         break;
       }
@@ -1642,8 +1656,15 @@ bool Blockchain::handle_alternative_block(const Block& b, const Crypto::Hash& id
 
   //block is not related with head of main chain
   //first of all - look in alternative chains container
-  uint32_t mainPrevHeight = 0;
-  const bool mainPrev = m_blockIndex.getBlockHeight(b.previousBlockHash, mainPrevHeight);
+  uint32_t mainPrevHeight;
+  bool mainPrev_nc = false;
+ // if (r) {
+    mainPrev_nc = m_blockIndex.getBlockHeight(b.previousBlockHash, mainPrevHeight);
+ /* } else {
+    mainPrevHeight = m_db->get_block_height(b.previousBlockHash);
+    mainPrev_nc = mainPrevHeight != 0;
+  }*/
+  const bool mainPrev = mainPrev_nc;
   const auto it_prev = m_alternative_chains.find(b.previousBlockHash);
 
   if (it_prev != m_alternative_chains.end() || mainPrev) {
@@ -1747,14 +1768,14 @@ bool Blockchain::handle_alternative_block(const Block& b, const Crypto::Hash& id
       logger(INFO, BRIGHT_GREEN) <<
         "###### REORGANIZE on height: " << alt_chain.front()->second.height << " of " << HEIGHT_COND - 1 <<
         ", checkpoint is found in alternative chain on height " << bei.height;
-      bool r = switch_to_alternative_blockchain(alt_chain, true);
-      if (r) {
+      bool R = switch_to_alternative_blockchain(alt_chain, true);
+      if (R) {
         bvc.m_added_to_main_chain = true;
         bvc.m_switched_to_alt_chain = true;
       } else {
         bvc.m_verification_failed = true;
       }
-      return r;
+      return R;
     } else if ((r ? m_blocks.back().cumulative_difficulty : m_db->get_block_cumulative_difficulty(m_db->height()-1)) < bei.cumulative_difficulty) //check if difficulty bigger then in main chain
     {
       //do reorganize!
@@ -1762,14 +1783,14 @@ bool Blockchain::handle_alternative_block(const Block& b, const Crypto::Hash& id
         "###### REORGANIZE on height: " << alt_chain.front()->second.height << " of " << HEIGHT_COND - 1 << " with cum_difficulty "
         << ( r ? m_blocks.back().cumulative_difficulty : m_db->get_block_cumulative_difficulty(m_db->height()-1) )
         << ENDL << " alternative blockchain size: " << alt_chain.size() << " with cum_difficulty " << bei.cumulative_difficulty;
-      bool r = switch_to_alternative_blockchain(alt_chain, false);
-      if (r) {
+      bool R = switch_to_alternative_blockchain(alt_chain, false);
+      if (R) {
         bvc.m_added_to_main_chain = true;
         bvc.m_switched_to_alt_chain = true;
       } else {
         bvc.m_verification_failed = true;
       }
-      return r;
+      return R;
     } else {
       logger(INFO, BRIGHT_BLUE) <<
         "----- BLOCK ADDED AS ALTERNATIVE ON HEIGHT " << bei.height
@@ -2209,8 +2230,14 @@ bool Blockchain::checkTransactionInputs(const Transaction& tx, uint32_t& max_use
 bool Blockchain::haveTransactionKeyImagesAsSpent(const Transaction &tx) {
   for (const auto& in : tx.inputs) {
     if (in.type() == typeid(KeyInput)) {
-      if (have_tx_keyimg_as_spent(boost::get<KeyInput>(in).keyImage)) {
-        return true;
+      if (Tools::getDefaultDbType() != "lmdb") {
+        if (have_tx_keyimg_as_spent(boost::get<KeyInput>(in).keyImage)) {
+          return true;
+        }
+      } else {
+        if (m_db->has_key_image(boost::get<KeyInput>(in).keyImage)) {
+          return true;
+        }
       }
     }
   }
@@ -2841,9 +2868,9 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
   {
     //chain switching or wrong block
     bvc.m_added_to_main_chain = false;
-    bool r = handle_alternative_block(bl, id, bvc);
+    bool R = handle_alternative_block(bl, id, bvc);
     DB_TX_STOP
-    return r;
+    return R;
     //never relay alternative blocks
   }
   DB_TX_STOP
@@ -3439,8 +3466,18 @@ bool Blockchain::loadTransactions(const Block& block, std::vector<Transaction>& 
 void Blockchain::saveTransactions(const std::vector<Transaction>& transactions) {
   tx_verification_context context;
   for (size_t i = 0; i < transactions.size(); ++i) {
-    if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true)) {
-      logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
+    if (Tools::getDefaultDbType() != "lmdb") {
+      if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true)) {
+        logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
+      }
+    } else {
+      std::vector<Crypto::Hash> hashes;
+      txpool_tx_meta_t meta;
+      Crypto::Hash hash = getObjectHash(transactions[transactions.size() - 1 - i]);
+      if (!m_db->get_txpool_tx_meta(hash, meta)) {
+        logger(WARNING,BRIGHT_YELLOW) << "Failed to get transaction meta by hash: " << hash;
+      }
+      m_db->add_txpool_tx(transactions[transactions.size() - 1 - i], meta);
     }
   }
 }
@@ -3469,8 +3506,8 @@ void Blockchain::block_longhash_worker(uint64_t height, const std::vector<Crypto
       break;
     Crypto::Hash id = get_block_hash(block);
     Crypto::Hash pow = NULL_HASH;
-    bool r = get_block_longhash(cn, block, height++, pow);
-    if(!r)
+    bool R = get_block_longhash(cn, block, height++, pow);
+    if(!R)
       return;
     map.emplace(id, pow);
   }
@@ -3802,14 +3839,14 @@ void Blockchain::cancel()
 }
 
 bool Blockchain::isBlockInMainChain(const Crypto::Hash& blockId) {
-  bool r = false;
+  bool R = false;
   if (Tools::getDefaultDbType() != "lmdb") {
-    r = m_blockIndex.hasBlock(blockId);
+    R = m_blockIndex.hasBlock(blockId);
   } else {
     uint64_t* height = NULL;
-    r = m_db->block_exists(blockId, height);
+    R = m_db->block_exists(blockId, height);
   }
-  return r;
+  return R;
 }
 
 bool Blockchain::isInCheckpointZone(const uint32_t height) {
