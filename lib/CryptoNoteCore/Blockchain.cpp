@@ -1835,14 +1835,19 @@ bool Blockchain::getBlocks(uint32_t start_offset, uint32_t count, std::list<Bloc
 
 bool Blockchain::handleGetObjects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTIFY_RESPONSE_GET_OBJECTS::request& rsp) { //Deprecated. Should be removed with CryptoNoteProtocolHandler.
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  bool r = Tools::getDefaultDbType() != "lmdb";
   rsp.current_blockchain_height = getCurrentBlockchainHeight();
   std::list<Block> blocks;
   getBlocks(arg.blocks, blocks, rsp.missed_ids);
   for (const auto& bl : blocks) {
     std::list<Crypto::Hash> missed_tx_id;
     std::list<Transaction> txs;
-    getTransactions(bl.transactionHashes, txs, rsp.missed_ids);
-    if (!(!missed_tx_id.size())) { logger(ERROR, BRIGHT_RED) << "Internal error: have missed missed_tx_id.size()=" << missed_tx_id.size() << ENDL << "for block id = " << get_block_hash(bl); return false; } //WTF???
+    if (r) {
+      getTransactions(bl.transactionHashes, txs, rsp.missed_ids);
+    } else {
+      get_transactions(bl.transactionHashes, txs, rsp.missed_ids);
+    }
+   if (!(!missed_tx_id.size())) { logger(ERROR, BRIGHT_RED) << "Internal error: have missed missed_tx_id.size()=" << missed_tx_id.size() << ENDL << "for block id = " << get_block_hash(bl); return false; } //WTF???
     rsp.blocks.push_back(block_complete_entry());
     block_complete_entry& e = rsp.blocks.back();
     //pack block
@@ -1855,7 +1860,11 @@ bool Blockchain::handleGetObjects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTI
 
   //get another transactions, if need
   std::list<Transaction> txs;
-  getTransactions(arg.txs, txs, rsp.missed_ids);
+  if (r) {
+    getTransactions(arg.txs, txs, rsp.missed_ids);
+  } else {
+    get_transactions(arg.txs, txs, rsp.missed_ids);
+  }
   //pack aside transactions
   for (const auto& tx : txs) {
     rsp.txs.push_back(asString(toBinaryArray(tx)));
@@ -2847,10 +2856,17 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   std::lock_guard<decltype(m_tx_pool)> poolLock(m_tx_pool);
 
-    if (m_db_blocks_per_sync && m_sync_counter >= m_db_blocks_per_sync)
+  if (m_sync_counter > 0)
+  {
+    if (force_sync)
+    {
+      m_sync_counter = 0;
+    }
+    else if (m_db_blocks_per_sync && m_sync_counter >= m_db_blocks_per_sync)
     {
       if(m_db_sync_mode == db_async)
       {
+        m_sync_counter = 0;
         m_async_service.dispatch(boost::bind(&Blockchain::store_blockchain, this));
       }
       else // db_nosync
@@ -2858,6 +2874,7 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
         // DO NOTHING, not required to call sync.
       }
     }
+  }
 
   m_blocks_longhash_table.clear();
   m_scan_table.clear();

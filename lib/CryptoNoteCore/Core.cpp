@@ -876,7 +876,12 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
   if (relay_block && bvc.m_added_to_main_chain) {
     std::list<Crypto::Hash> missed_txs;
     std::list<Transaction> txs;
-    m_blockchain.getTransactions(b.transactionHashes, txs, missed_txs);
+    bool r = Tools::getDefaultDbType() != "lmdb";
+    if (r) {
+      m_blockchain.getTransactions(b.transactionHashes, txs, missed_txs);
+    } else {
+      m_blockchain.get_transactions(b.transactionHashes, txs, missed_txs);
+    }
     if (!missed_txs.empty() && getBlockIdByHeight(get_block_height(b)) != get_block_hash(b)) {
       logger(INFO) << "Block added, but it seems that reorganize just happened after that, do not relay this block";
     } else {
@@ -1046,6 +1051,7 @@ bool core::queryBlocks(
   uint32_t& resFullOffset,
   std::vector<BlockFullInfo>& entries) {
 
+  bool r = Tools::getDefaultDbType() != "lmdb";
   LockedBlockchainStorage lbs(m_blockchain);
 
   uint32_t currentHeight = lbs->getCurrentBlockchainHeight();
@@ -1086,8 +1092,11 @@ bool core::queryBlocks(
       // query transactions
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
-
+      if (r) {
+        lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      } else {
+        lbs->get_transactions(b.transactionHashes, txs, missedTxs);
+      }
       // fill data
       block_complete_entry& completeEntry = item;
       completeEntry.block = asString(toBinaryArray(b));
@@ -1144,6 +1153,7 @@ bool core::queryBlocksLite(
   uint32_t& resFullOffset,
   std::vector<BlockShortInfo>& entries) {
   LockedBlockchainStorage lbs(m_blockchain);
+  bool r = Tools::getDefaultDbType() != "lmdb";
 
   resCurrentHeight = lbs->getCurrentBlockchainHeight();
   resStartHeight = 0;
@@ -1178,7 +1188,11 @@ bool core::queryBlocksLite(
     if (b.timestamp >= timestamp) {
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      if (r) {
+        lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      } else {
+        lbs->get_transactions(b.transactionHashes, txs, missedTxs);
+      }
 
       item.block = asString(toBinaryArray(b));
 
@@ -1206,6 +1220,7 @@ bool core::queryBlocksDetailed(
   std::vector<BlockFullInfo>& entries) {
 
   LockedBlockchainStorage lbs(m_blockchain);
+  bool r = Tools::getDefaultDbType() != "lmdb";
 
   uint32_t currentHeight = lbs->getCurrentBlockchainHeight();
   uint32_t startOffset = 0;
@@ -1241,7 +1256,11 @@ bool core::queryBlocksDetailed(
       // query transactions
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      if (r) {
+        lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      } else {
+        lbs->get_transactions(b.transactionHashes, txs, missedTxs);
+      }
 
       // fill data
       block_complete_entry& completeEntry = item;
