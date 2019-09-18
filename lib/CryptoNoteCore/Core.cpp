@@ -766,8 +766,12 @@ void core::update_block_template_and_resume_mining() {
 
 bool core::handle_block_found(Block& b) {
   block_verification_context bvc = boost::value_initialized<block_verification_context>();
-  handle_incoming_block(b, bvc, true, true);
-
+  bool r = Tools::getDefaultDbType() != "lmdb";
+  if (r) {
+    handle_incoming_block(b, bvc, true, true);
+  } else {
+    handleBlockFound(b);
+  }
   if (bvc.m_verification_failed) {
     logger(ERROR) << "mined block failed verification";
   }
@@ -832,9 +836,39 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
   if (control_miner) {
     pause_mining();
   }
+  bool r = Tools::getDefaultDbType() != "lmdb";
+  if (!r) {
+    LockedBlockchainStorage lbs(m_blockchain); 
+    block_verification_context bvc = boost::value_initialized<block_verification_context>();
+    std::list<block_complete_entry> blocks;
+    try
+    {
+      BlockFullInfo item;
 
-  m_blockchain.pushBlock(b, bvc);
+      item.block_id = get_block_hash(b);
 
+      std::list<Transaction> txs;
+      std::list<Crypto::Hash> missedTxs;
+      block_complete_entry& completeEntry = item;
+
+      completeEntry.block = asString(toBinaryArray(b));
+      for (auto& tx : txs) {
+        completeEntry.txs.push_back(asString(toBinaryArray(tx)));
+      }
+
+    }
+    catch (const std::exception &e)
+    {
+      logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
+    }
+    m_blockchain.prepare_handle_incoming_blocks(blocks);
+    lbs->add_new_block(b, bvc);
+    m_blockchain.cleanup_handle_incoming_blocks(true);
+    if (bvc.m_verification_failed)
+      logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
+  } else {
+    m_blockchain.pushBlock(b, bvc);
+  }
   if (control_miner) {
     update_block_template_and_resume_mining();
   }

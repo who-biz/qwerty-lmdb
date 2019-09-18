@@ -1240,7 +1240,7 @@ public:
    *
    * @return a list of amount-specific output indices
    */
- // virtual std::vector<uint64_t> get_tx_amount_output_indices(const uint64_t tx_id) const = 0;
+  virtual std::vector<uint64_t> get_tx_amount_output_indices(const uint64_t tx_id) const = 0;
 
   /**
    * @brief check if a key image is stored as spent
