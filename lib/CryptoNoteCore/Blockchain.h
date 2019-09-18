@@ -285,7 +285,7 @@ private:
       }
     };
 
-    struct TransactionEntry {
+    typedef struct {
       Transaction tx;
       std::vector<uint32_t> m_global_output_indexes;
 
@@ -293,7 +293,7 @@ private:
         s(tx, "tx");
         s(m_global_output_indexes, "indexes");
       }
-    };
+    } TransactionEntry;
 
     struct BlockEntry {
       Block bl;

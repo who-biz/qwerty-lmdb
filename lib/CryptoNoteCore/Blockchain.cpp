@@ -2501,16 +2501,25 @@ const Blockchain::TransactionEntry& Blockchain::transactionByIndex(TransactionIn
   if (r)
     return m_blocks[index.block].transactions[index.transaction];
   else {
-    Crypto::Hash tx_id = m_db->get_block_from_height(index.block).transactionHashes[index.transaction];
-    Transaction tx = m_db->get_tx(tx_id);
-
-    auto it = m_transactionMap.find(tx_id);
-    if (it == m_transactionMap.end()) {
-      logger(WARNING, YELLOW) << "warning: transactionByIndex failed to find transaction with id = " << tx_id;
-    }
-
-    const TransactionEntry& tx_entry = transactionByIndex(it->second);
-    return tx_entry;
+    std::vector<tx_out_index> out_index;
+    std::vector<uint32_t> offsets;
+    m_db->get_output_tx_and_index(index.block, offsets, out_index);
+    struct TransactionEntrySub {
+      Transaction tx;
+      std::vector<uint32_t> m_global_output_indexes;
+      void serialize(ISerializer& s) {
+        s(tx, "tx");
+        s(m_global_output_indexes, "indexes");
+      }
+    };
+    TransactionEntrySub tx_sub;
+    tx_sub.tx = m_db->get_tx(out_index[index.transaction].first);
+    tx_sub.m_global_output_indexes = offsets;
+    TransactionEntry entry;
+    entry.tx = tx_sub.tx;
+    entry.m_global_output_indexes = tx_sub.m_global_output_indexes;
+    const TransactionEntry& e = entry;
+    return e;
   }
 }
 
