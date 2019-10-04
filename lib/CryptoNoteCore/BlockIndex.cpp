@@ -17,6 +17,7 @@
 // along with Qwertycoin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "BlockIndex.h"
+#include "Common/Util.h"
 
 #include <boost/utility/value_init.hpp>
 
@@ -24,8 +25,14 @@
 #include "Serialization/SerializationOverloads.h"
 
 namespace CryptoNote {
-  Crypto::Hash BlockIndex::getBlockId(uint32_t height) const {
+  Crypto::Hash BlockIndex::getBlockId(uint32_t height, BlockchainDB& db) const {
 //    assert(height < m_container.size());
+
+    return db.get_block_hash_from_height(height);
+  }
+
+  Crypto::Hash BlockIndex::getBlockId(uint32_t height) const {
+    assert(height < m_container.size());
 
     return m_container[static_cast<size_t>(height)];
   }
@@ -45,6 +52,21 @@ namespace CryptoNote {
     return result;
   }
 
+  std::vector<Crypto::Hash> BlockIndex::getBlockIds(uint32_t startBlockIndex, uint32_t maxCount, BlockchainDB& db) const {
+    std::vector<Crypto::Hash> result;
+    if (startBlockIndex >= db.height()) {
+      return result;
+    }
+
+    size_t count = std::min(static_cast<size_t>(maxCount), db.height() - static_cast<size_t>(startBlockIndex));
+    result.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      result.push_back(db.get_block_hash_from_height(startBlockIndex + i));
+    }
+
+    return result;
+  }
+
   bool BlockIndex::findSupplement(const std::vector<Crypto::Hash>& ids, uint32_t& offset) const {
     for (const auto& id : ids) {
       if (getBlockHeight(id, offset)) {
@@ -56,11 +78,10 @@ namespace CryptoNote {
   }
 
   std::vector<Crypto::Hash> BlockIndex::buildSparseChain(const Crypto::Hash& startBlockId) const {
-//    assert(m_index.count(startBlockId) > 0);
+    assert(m_index.count(startBlockId) > 0);
 
     uint32_t startBlockHeight;
     getBlockHeight(startBlockId, startBlockHeight);
-
     std::vector<Crypto::Hash> result;
     size_t sparseChainEnd = static_cast<size_t>(startBlockHeight + 1);
     for (size_t i = 1; i <= sparseChainEnd; i *= 2) {
@@ -68,6 +89,23 @@ namespace CryptoNote {
     }
 
     if (result.back() != m_container[0]) {
+      result.emplace_back(m_container[0]);
+    }
+
+    return result;
+  }
+
+  std::vector<Crypto::Hash> BlockIndex::buildSparseChain(const Crypto::Hash& startBlockId, BlockchainDB& db) const {
+
+    uint32_t startBlockHeight = db.get_block_height(startBlockId);
+
+    std::vector<Crypto::Hash> result;
+    size_t sparseChainEnd = static_cast<size_t>(startBlockHeight);
+    for (size_t i = 0; i <= sparseChainEnd; i++) {
+      result.emplace_back(db.get_block_hash_from_height(sparseChainEnd - i));
+    }
+
+    if (m_container.empty()) {
       result.emplace_back(m_container[0]);
     }
 

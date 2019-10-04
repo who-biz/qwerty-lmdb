@@ -603,11 +603,6 @@ namespace Crypto {
     ge_dsmp image_pre;
     EllipticCurveScalar sum, h;
     rs_comm *const buf = reinterpret_cast<rs_comm *>(alloca(rs_comm_size(pubs_count)));
-#if !defined(NDEBUG)
-    for (i = 0; i < pubs_count; i++) {
-      assert(check_key(*pubs[i]));
-    }
-#endif
     if (ge_frombytes_vartime(&image_unp, reinterpret_cast<const unsigned char*>(&image)) != 0) {
       return false;
     }
@@ -621,7 +616,7 @@ namespace Crypto {
         return false;
       }
       if (ge_frombytes_vartime(&tmp3, reinterpret_cast<const unsigned char*>(&*pubs[i])) != 0) {
-        abort();
+//        abort();
       }
       ge_double_scalarmult_base_vartime(&tmp2, reinterpret_cast<const unsigned char*>(&sig[i]), &tmp3, reinterpret_cast<const unsigned char*>(&sig[i]) + 32);
       ge_tobytes(reinterpret_cast<unsigned char*>(&buf->ab[i].a), &tmp2);

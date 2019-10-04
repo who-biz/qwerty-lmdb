@@ -712,8 +712,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       }
 
     } else {
-      Crypto::Hash firstBlockHash = get_block_hash(m_db->get_block_from_height(0));
-      if (!(firstBlockHash == m_currency.genesisBlockHash())) {
+        if (get_block_hash(m_currency.genesisBlock()) != m_currency.genesisBlockHash()) {
          logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
            "Probably you set --testnet flag with data "
            "dir with non-test blockchain or another "
@@ -833,38 +832,73 @@ void Blockchain::rebuildCache() {
     if (b % 1000 == 0) {
       logger(INFO, BRIGHT_WHITE) << "Height " << b << " of " << HEIGHT_COND;
     }
-    const BlockEntry& block = m_blocks[b];
-    Crypto::Hash blockHash = get_block_hash(block.bl);
+    Block block = boost::value_initialized<Block>();
+    Crypto::Hash blockHash = NULL_HASH;
+    if (r) {
+      block = m_blocks[b].bl;
+    } else {
+      block = m_db->get_block_from_height(b);
+    }
+    blockHash = get_block_hash(block);
     m_blockIndex.push(blockHash);
-    for (uint16_t t = 0; t < block.transactions.size(); ++t) {
-      const TransactionEntry& transaction = block.transactions[t];
-      Crypto::Hash transactionHash = getObjectHash(transaction.tx);
-      TransactionIndex transactionIndex = { b, t };
-      m_transactionMap.insert(std::make_pair(transactionHash, transactionIndex));
+    Transaction tr = boost::value_initialized<Transaction>();
+    if (r) {
+      for (uint16_t t = 0; t < block.transactionHashes.size(); ++t) {
+        const BlockEntry& block_entry = m_blocks[b];
+        const TransactionEntry& transaction = block_entry.transactions[t];
+        logger(INFO, BRIGHT_GREEN) << "transaction index: " << std::to_string(t);
+                                                                      // TODO: this looks like it doesn't count the first transaction.
+        Crypto::Hash transactionHash = getObjectHash(transaction.tx); // if index = 0. could be source of key image discrepancy, if
+        TransactionIndex transactionIndex = { b, t };                 // the index does not start at 1 elsewhere (not sure why it would)
+        m_transactionMap.insert(std::make_pair(transactionHash, transactionIndex));
+        const Transaction tx = transaction.tx;
 
-      // process inputs
-      for (auto& i : transaction.tx.inputs) {
-        if (i.type() == typeid(KeyInput)) {
-          m_spent_keys.insert(::boost::get<KeyInput>(i).keyImage);
-        } else if (i.type() == typeid(MultisignatureInput)) {
-          auto out = ::boost::get<MultisignatureInput>(i);
-          m_multisignatureOutputs[out.amount][out.outputIndex].isUsed = true;
+        for (uint16_t o = 0; o < tx.outputs.size(); ++o) {
+          const auto& out = tx.outputs[o];
+          if (out.target.type() == typeid(KeyOutput)) {
+            m_outputs[out.amount].push_back(std::make_pair<>(transactionIndex, o));
+          } else if (out.target.type() == typeid(MultisignatureOutput)) {
+            MultisignatureOutputUsage usage = { transactionIndex, o, false };
+            m_multisignatureOutputs[out.amount].push_back(usage);
+          }
+        }
+        for (auto& in : tx.inputs) {
+          if (in.type() == typeid(KeyInput)) {
+            m_spent_keys.insert(::boost::get<KeyInput>(in).keyImage);
+          } else if (in.type() == typeid(MultisignatureInput)) {
+            auto out = ::boost::get<MultisignatureInput>(in);
+            m_multisignatureOutputs[out.amount][out.outputIndex].isUsed = true;
+          }
         }
       }
+    } else {
+      for (size_t i = 1; i < block.transactionHashes.size(); ++i) {
+        tr = m_db->get_tx(block.transactionHashes[i]);
+        const Transaction tx = tr;
+        Crypto::Hash transactionHash = getObjectHash(tr);
+        TransactionIndex transactionIndex = { b, i };
+        m_transactionMap.insert(std::make_pair(transactionHash, transactionIndex));
 
-      // process outputs
-      for (uint16_t o = 0; o < transaction.tx.outputs.size(); ++o) {
-        const auto& out = transaction.tx.outputs[o];
-        if (out.target.type() == typeid(KeyOutput)) {
-          m_outputs[out.amount].push_back(std::make_pair<>(transactionIndex, o));
-        } else if (out.target.type() == typeid(MultisignatureOutput)) {
-          MultisignatureOutputUsage usage = { transactionIndex, o, false };
-          m_multisignatureOutputs[out.amount].push_back(usage);
+        for (size_t j = 1; j < tx.outputs.size(); j++) {
+          const auto& out = tx.outputs[j];
+          if (out.target.type() == typeid(KeyOutput)) {
+            m_outputs[out.amount].push_back(std::make_pair<>(transactionIndex, j));
+          } else if (out.target.type() == typeid(MultisignatureOutput)) {
+            MultisignatureOutputUsage usage = { transactionIndex, j, false };
+            m_multisignatureOutputs[out.amount].push_back(usage);
+          }
+        }
+        for (auto& in : tx.inputs) {
+          if (in.type() == typeid(KeyInput)) {
+            m_spent_keys.insert(::boost::get<KeyInput>(in).keyImage);
+          } else if (in.type() == typeid(MultisignatureInput)) {
+            auto out = ::boost::get<MultisignatureInput>(in);
+            m_multisignatureOutputs[out.amount][out.outputIndex].isUsed = true;
+          }
         }
       }
     }
   }
-
   std::chrono::duration<double> duration = std::chrono::steady_clock::now() - timePoint;
   logger(INFO, BRIGHT_WHITE) << "Rebuilding internal structures took: " << duration.count();
 }
@@ -975,8 +1009,9 @@ Crypto::Hash Blockchain::getTailId() {
 
 std::vector<Crypto::Hash> Blockchain::buildSparseChain() {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  bool r = Tools::getDefaultDbType() != "lmdb";
 
-    if (m_blockIndex.size() == 0) {
+    if (m_blockIndex.size() <= 0) {
       return doBuildSparseChain(m_currency.genesisBlockHash());
     }
   return doBuildSparseChain(getTailId());
@@ -994,12 +1029,15 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
 
   std::vector<Crypto::Hash> sparseChain;
 
-    bool R = m_blockIndex.size() == 0;
-    if (m_blockIndex.hasBlock(startBlockId)) {
-      sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId);
+    bool R = false;
+    if (r) {
+      R = m_blockIndex.size() == 0;
+      if (m_blockIndex.hasBlock(startBlockId)) {
+        sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId);
+      }
     } else {
       if (m_db->block_exists(startBlockId)) {
-        sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId);
+        sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId, *m_db);
     } else {
       assert(m_alternative_chains.count(startBlockId) > 0);
 
@@ -1027,36 +1065,38 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
 Crypto::Hash Blockchain::getBlockIdByHeight(uint32_t height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   Crypto::Hash hash = NULL_HASH;
+   bool r = Tools::getDefaultDbType() != "lmdb";
+   if (r) {
     assert(height < m_blockIndex.size());
-   if (Tools::getDefaultDbType() == "lmdb") {
+    hash = m_blockIndex.getBlockId(height);
+   } else {
     assert(height < m_db->height());
     try {
       hash = m_db->get_block_hash_from_height(height);
-      return hash;
     } catch (const std::exception& e) {
       logger(ERROR, BRIGHT_RED) << "Something went wrong fetching block hash by height: " << e.what();
     }
   }
-  hash = m_blockIndex.getBlockId(height);
-  return hash;
+    return hash;
 }
 
 bool Blockchain::getBlockByHash(const Crypto::Hash& blockHash, Block& b) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  bool r = Tools::getDefaultDbType() != "lmdb";
 
   uint32_t height = 0;
-  if (m_blockIndex.getBlockHeight(blockHash, height)) {
-    if (Tools::getDefaultDbType() != "lmdb") {
+  if (r) {
+    if (m_blockIndex.getBlockHeight(blockHash, height)) {
       b = m_blocks[height].bl;
       return true;
-    } else {
-      try {
-        b = m_db->get_block(blockHash);
-        return true;
-      } catch (const std::exception& e) {
-        logger(ERROR, BRIGHT_RED) << "Something went wrong fetching block by hash: " << e.what();
-      }
     }
+  } else {
+    try {
+      b = m_db->get_block(blockHash);
+    } catch (const std::exception& e) {
+      logger(ERROR, BRIGHT_RED) << "Something went wrong fetching block by hash: " << e.what();
+    }
+    return true;
   }
   logger(WARNING) << blockHash;
 
@@ -1659,12 +1699,12 @@ bool Blockchain::handle_alternative_block(const Block& b, const Crypto::Hash& id
   //first of all - look in alternative chains container
   uint32_t mainPrevHeight;
   bool mainPrev_nc = false;
- // if (r) {
+  if (r) {
     mainPrev_nc = m_blockIndex.getBlockHeight(b.previousBlockHash, mainPrevHeight);
- /* } else {
+  } else {
     mainPrevHeight = m_db->get_block_height(b.previousBlockHash);
     mainPrev_nc = mainPrevHeight != 0;
-  }*/
+  }
   const bool mainPrev = mainPrev_nc;
   const auto it_prev = m_alternative_chains.find(b.previousBlockHash);
 
@@ -2098,9 +2138,10 @@ void Blockchain::print_blockchain(uint64_t start_index, uint64_t end_index) {
 
 void Blockchain::print_blockchain_index() {
   std::stringstream ss;
+  bool r = Tools::getDefaultDbType() != "lmdb";
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
 
-  std::vector<Crypto::Hash> blockIds = m_blockIndex.getBlockIds(0, std::numeric_limits<uint32_t>::max());
+  std::vector<Crypto::Hash> blockIds = (r ? m_blockIndex.getBlockIds(0, std::numeric_limits<uint32_t>::max()) : m_blockIndex.getBlockIds(0, std::numeric_limits<uint32_t>::max(), *m_db));
   logger(INFO, BRIGHT_WHITE) << "Current blockchain index:";
 
   size_t height = 0;
@@ -3204,7 +3245,7 @@ void Blockchain::removeLastBlock() {
   logger(DEBUGGING) << "Removing last block with height " << (r ? m_blocks.back().height : (m_db->height()-1));
   popTransactions(m_blocks.back(), getObjectHash((r ? m_blocks.back().bl.baseTransaction : m_db->get_top_block().baseTransaction)));
 
-  Crypto::Hash blockHash = getBlockIdByHeight(m_blocks.back().height);
+  Crypto::Hash blockHash = getBlockIdByHeight(r ? m_blocks.back().height : (m_db->height() - 1));
   m_timestampIndex.remove((r ? m_blocks.back().bl.timestamp : m_db->get_block_timestamp(m_db->height()-1)), blockHash);
   m_generatedTransactionsIndex.remove((r ? m_blocks.back().bl : m_db->get_top_block()));
   popBlock();
@@ -3374,14 +3415,16 @@ bool Blockchain::loadBlockchainIndices() {
       const Block& block = (r ? m_blocks[b].bl : m_db->get_block_from_height(b));
       m_timestampIndex.add(block.timestamp, get_block_hash(block));
       m_generatedTransactionsIndex.add(block);
-      for (uint16_t t = 0; t < block.transactionHashes.size(); ++t) {
 
         if (r) {
-          const TransactionEntry& transaction = m_blocks[b].transactions[t];
-          m_paymentIdIndex.add(transaction.tx);
+          for (uint16_t t = 0; t < block.transactionHashes.size(); ++t) {
+            const TransactionEntry& transaction = m_blocks[b].transactions[t];
+            m_paymentIdIndex.add(transaction.tx);
+          }
         } else {
-          const Transaction& tx = m_db->get_tx(block.transactionHashes[t]);
-          m_paymentIdIndex.add(tx);
+          for (uint16_t t = 0; t < block.transactionHashes.size(); t++) {
+            const Transaction& tx = m_db->get_tx(block.transactionHashes[t]);
+            m_paymentIdIndex.add(tx);
         }
       }
     }

@@ -916,7 +916,7 @@ BlockchainLMDB::BlockchainLMDB(bool batch_transactions): BlockchainDB()
   // someone accidentally misuses this class...
   m_folder = "thishsouldnotexistbecauseitisgibberish";
 
-  m_batch_transactions = false;
+  m_batch_transactions = batch_transactions;
   m_write_txn = nullptr;
   m_write_batch_txn = nullptr;
   m_batch_active = false;
@@ -1363,7 +1363,12 @@ uint64_t BlockchainLMDB::get_txpool_tx_count() const
   uint64_t num_entries = 0;
 
   TXN_PREFIX_RDONLY();
-    RCURSOR(txpool_meta);
+
+    MDB_stat db_stats;
+    if ((result = mdb_stat(m_txn, m_txpool_meta, &db_stats)))
+      throw(DB_ERROR(lmdb_error("Failed to query m_txpool_meta: ", result).c_str()));
+    num_entries = db_stats.ms_entries;
+/*    RCURSOR(txpool_meta);
     RCURSOR(txpool_blob);
 
     MDB_val k;
@@ -1380,7 +1385,7 @@ uint64_t BlockchainLMDB::get_txpool_tx_count() const
       const txpool_tx_meta_t &meta = *(const txpool_tx_meta_t*)v.mv_data;
         ++num_entries;
     }
-
+*/
   TXN_POSTFIX_RDONLY();
 
   return num_entries;
@@ -2276,7 +2281,8 @@ bool BlockchainLMDB::for_blocks_range(const uint64_t& h1, const uint64_t& h2, st
       throw(DB_ERROR("Failed to parse block from blob retrieved from the db"));
     }
     Crypto::Hash hash;
-    if (!get_block_hash(b, hash));
+    if (!get_block_hash(b, hash))
+                throw(DB_ERROR("Failed to get block hash from blob retrieved from the db"));
     if (!f(height, hash, b)) {
       fret = false;
       break;
@@ -3515,7 +3521,7 @@ void BlockchainLMDB::migrate_0_1()
     txn.commit();
   } while(0);
 
-  uint32_t version = 1;
+  uint32_t version = 0;
   v.mv_data = (void *)&version;
   v.mv_size = sizeof(version);
   MDB_val_copy<const char *> vk("version");
