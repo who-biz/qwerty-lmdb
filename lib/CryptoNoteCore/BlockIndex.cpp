@@ -25,18 +25,11 @@
 #include "Serialization/SerializationOverloads.h"
 
 namespace CryptoNote {
-  Crypto::Hash BlockIndex::getBlockId(uint32_t height, BlockchainDB& db) const {
-//    assert(height < m_container.size());
-
-    return db.get_block_hash_from_height(height);
-  }
-
   Crypto::Hash BlockIndex::getBlockId(uint32_t height) const {
-    assert(height < m_container.size());
+//    assert(height < m_container.size());
 
     return m_container[static_cast<size_t>(height)];
   }
-
   std::vector<Crypto::Hash> BlockIndex::getBlockIds(uint32_t startBlockIndex, uint32_t maxCount) const {
     std::vector<Crypto::Hash> result;
     if (startBlockIndex >= m_container.size()) {
@@ -54,14 +47,14 @@ namespace CryptoNote {
 
   std::vector<Crypto::Hash> BlockIndex::getBlockIds(uint32_t startBlockIndex, uint32_t maxCount, BlockchainDB& db) const {
     std::vector<Crypto::Hash> result;
-    if (startBlockIndex >= db.height()) {
+    if (startBlockIndex >= m_container.size()) {
       return result;
     }
 
-    size_t count = std::min(static_cast<size_t>(maxCount), db.height() - static_cast<size_t>(startBlockIndex));
+    size_t count = std::min(static_cast<size_t>(maxCount), m_container.size() - static_cast<size_t>(startBlockIndex));
     result.reserve(count);
     for (size_t i = 0; i < count; ++i) {
-      result.push_back(db.get_block_hash_from_height(startBlockIndex + i));
+      result.push_back(m_container[startBlockIndex + i]);
     }
 
     return result;
@@ -100,20 +93,19 @@ namespace CryptoNote {
     uint32_t startBlockHeight = db.get_block_height(startBlockId);
 
     std::vector<Crypto::Hash> result;
-    size_t sparseChainEnd = static_cast<size_t>(startBlockHeight);
-    for (size_t i = 0; i <= sparseChainEnd; i++) {
+    size_t sparseChainEnd = static_cast<size_t>(startBlockHeight + 1);
+    for (size_t i = 1; i <= sparseChainEnd; i *= 2) {
       result.emplace_back(db.get_block_hash_from_height(sparseChainEnd - i));
     }
 
-    if (m_container.empty()) {
+    if (result.back() != m_container[0]) {
       result.emplace_back(m_container[0]);
     }
-
     return result;
   }
 
   Crypto::Hash BlockIndex::getTailId() const {
-//    assert(!m_container.empty());
+    assert(!m_container.empty());
     return m_container.back();
   }
 

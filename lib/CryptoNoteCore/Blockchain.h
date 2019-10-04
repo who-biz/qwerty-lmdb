@@ -425,6 +425,7 @@ private:
     bool pushTransaction(BlockEntry& block, const Crypto::Hash& transactionHash, TransactionIndex transactionIndex);
     void popTransaction(const Transaction& transaction, const Crypto::Hash& transactionHash);
     void popTransactions(const BlockEntry& block, const Crypto::Hash& minerTransactionHash);
+    void popTransactions(const Block& block, const Crypto::Hash& minerTransactionHash);
     bool validateInput(const MultisignatureInput& input, const Crypto::Hash& transactionHash, const Crypto::Hash& transactionPrefixHash, const std::vector<Crypto::Signature>& transactionSignatures);
     bool checkCheckpoints(uint32_t& lastValidCheckpointHeight);
     void removeLastBlock();
