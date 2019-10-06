@@ -3151,11 +3151,16 @@ void Blockchain::popTransaction(const Transaction& transaction, const Crypto::Ha
 
 void Blockchain::popTransactions(const Block& block, const Crypto::Hash& minerTransactionHash) {
   const size_t count = block.transactionHashes.size() - 1;
+  DB_TX_START
   for (size_t i = 0; i < count; ++i) {
-    popTransaction(m_db->get_tx(block.transactionHashes[count - i]), block.transactionHashes[count - 1 - i]);
+    try {
+      popTransaction(m_db->get_tx(block.transactionHashes[count - i]), block.transactionHashes[count - 1 - i]);
+    } catch (std::exception& e) {
+      logger(ERROR, BRIGHT_RED) << "Error at popTransactions!" << e.what();
+    }
   }
-
   popTransaction(block.baseTransaction, minerTransactionHash);
+  DB_TX_STOP
 }
 
 void Blockchain::popTransactions(const BlockEntry& block, const Crypto::Hash& minerTransactionHash) {
