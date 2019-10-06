@@ -724,12 +724,12 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     }
   }
 
-    uint32_t lastValidCheckpointHeight = 0;
+/*    uint32_t lastValidCheckpointHeight;
     if (!checkCheckpoints(lastValidCheckpointHeight)) {
     logger(WARNING, BRIGHT_YELLOW) << "Invalid checkpoint found. Rollback blockchain to height=" << lastValidCheckpointHeight;
       rollbackBlockchainTo(lastValidCheckpointHeight);
     }
-
+*/
     if (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init()) {
       logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector. Trying self healing procedure.";
       //return false;
