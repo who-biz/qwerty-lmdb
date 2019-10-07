@@ -114,7 +114,9 @@ public:
 
     bool getLowerBound(uint64_t timestamp, uint64_t startOffset, uint32_t& height);
     std::vector<Crypto::Hash> getBlockIds(uint32_t startHeight, uint32_t maxCount);
-
+   bool have_tx(const Crypto::Hash &id) const;
+   bool have_tx_keyimg_as_spent(const Crypto::KeyImage &key_im) const;
+   Crypto::PublicKey get_output_key(uint64_t amount, uint64_t global_index) const;
     void setCheckpoints(Checkpoints&& chk_pts) { m_checkpoints = chk_pts; }
     bool getBlocks(uint32_t start_offset, uint32_t count, std::list<Block>& blocks, std::list<Transaction>& txs);
     bool getBlocks(uint32_t start_offset, uint32_t count, std::list<Block>& blocks);
@@ -179,7 +181,12 @@ public:
 
     bool addMessageQueue(MessageQueue<BlockchainMessage>& messageQueue);
     bool removeMessageQueue(MessageQueue<BlockchainMessage>& messageQueue);
-
+    bool find_blockchain_supplement(const std::vector<Crypto::Hash>& qblock_ids, size_t& starter_offset);
+    bool find_blockchain_supplement(const std::vector<Crypto::Hash>& qblock_ids, std::vector<Crypto::Hash>& hashes, size_t& start_height, size_t& current_height);
+    bool find_blockchain_supplement(const std::vector<Crypto::Hash>& qblock_ids, NOTIFY_RESPONSE_CHAIN_ENTRY::request& resp);
+    bool find_blockchain_supplement(const uint64_t req_start_block, const std::vector<Crypto::Hash>& qblock_ids, std::vector<std::pair<CryptoNote::blobdata, std::vector<CryptoNote::blobdata> > >& blocks, size_t& total_height, size_t& start_height, size_t max_count);
+    bool add_block_as_invalid(const Block& bl, const Crypto::Hash& h);
+    bool add_block_as_invalid(block_extended_info& bei, const Crypto::Hash& h);
     void add_txpool_tx(Transaction &tx, const txpool_tx_meta_t &meta);
     void update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t &meta);
     void remove_txpool_tx(const Crypto::Hash &txid);
@@ -330,7 +337,11 @@ private:
     };
 
     typedef google::sparse_hash_set<Crypto::KeyImage> key_images_container;
+    union _bex { block_extended_info* info; BlockEntry* entry; };
+    typedef union _bex bex;
     typedef std::unordered_map<Crypto::Hash, BlockEntry> blocks_ext_by_hash;
+    typedef std::unordered_map<Crypto::Hash,bex> bex_by_hash;
+    bex_by_hash m_invalid_blocks;
     typedef google::sparse_hash_map<uint64_t, std::vector<std::pair<TransactionIndex, uint16_t>>> outputs_container; //Crypto::Hash - tx hash, size_t - index of out in transaction
     typedef google::sparse_hash_map<uint64_t, std::vector<MultisignatureOutputUsage>> MultisignatureOutputsContainer;
 

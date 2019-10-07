@@ -861,9 +861,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
     }
-    m_blockchain.prepare_handle_incoming_blocks(blocks);
+ //   m_blockchain.prepare_handle_incoming_blocks(blocks);
     m_blockchain.addNewBlock(b, bvc);
-    m_blockchain.cleanup_handle_incoming_blocks(true);
+//    m_blockchain.cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
    }
