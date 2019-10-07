@@ -672,6 +672,8 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
     m_async_work_idle = std::unique_ptr < boost::asio::io_service::work > (new boost::asio::io_service::work(m_async_service));
     m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
+    // TODO: Monero implementation says we only need one thread here. Probably true, but also
+    // probably a major performance increase with more than one.
 
   if (db_type == "lmdb")
   {
@@ -884,7 +886,8 @@ void Blockchain::rebuildCache() {
         logger(INFO, BRIGHT_GREEN) << "transaction index: " << std::to_string(t);
                                                                       // TODO: this looks like it doesn't count the first transaction.
         Crypto::Hash transactionHash = getObjectHash(transaction.tx); // if index = 0. could be source of key image discrepancy, if
-        TransactionIndex transactionIndex = { b, t };                 // the index does not start at 1 elsewhere (not sure why it would)
+        TransactionIndex transactionIndex = { b, t };                 // the index does not start at 1 (it does not in XMR, but appears
+                                                                      // to do so in QWC due to minerTx being skipped on purpose
         m_transactionMap.insert(std::make_pair(transactionHash, transactionIndex));
         const Transaction tx = transaction.tx;
 
@@ -998,8 +1001,8 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
     m_db->reset();
   } else {
     m_blocks.clear();
+    m_blockIndex.clear();
   }
-  m_blockIndex.clear();
   m_transactionMap.clear();
 
   m_spent_keys.clear();
@@ -1105,9 +1108,15 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
 
 Crypto::Hash Blockchain::getBlockIdByHeight(uint32_t height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  bool r = Tools::getDefaultDbType() != "lmdb";
   Crypto::Hash hash = NULL_HASH;
-   // assert(height < m_blockIndex.size());
+  if (r) {
+    assert(height < m_blockIndex.size());
     hash = m_blockIndex.getBlockId(height);
+  } else {
+    assert(height < m_db->height());
+    hash = m_db->get_block_hash_from_height(height);
+  }
     return hash;
 }
 
