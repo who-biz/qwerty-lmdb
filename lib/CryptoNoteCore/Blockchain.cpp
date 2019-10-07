@@ -693,17 +693,20 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
     }
 
+    if (m_db->height() < 1) {
+
       m_hardfork = new HardFork(*m_db, 1, 0);
-      for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
-        m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
 
       m_hardfork->init();
       m_db->set_hard_fork(m_hardfork);
-
-      if (m_db->height() > 0) {
+    } else {
         logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
         BlockCacheSerializer loader(*this, get_block_hash(m_db->get_top_block()), logger.getLogger());
         loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
+        m_hardfork = new HardFork(*m_db, 1, 0);
+        for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
+          m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
+        m_hardfork->init();
       }
         rebuildCache();
 
@@ -2140,14 +2143,23 @@ Crypto::PublicKey Blockchain::get_output_key(uint64_t amount, uint64_t global_in
 }
 
 uint32_t Blockchain::findBlockchainSupplement(const std::vector<Crypto::Hash>& qblock_ids) {
-//  assert(!qblock_ids.empty());
-  assert(qblock_ids.back() == m_blockIndex.getBlockId(0));
-
+  bool r = Tools::getDefaultDbType() != "lmdb";
+  assert(!qblock_ids.empty());
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  uint32_t blockIndex;
-  // assert above guarantees that method returns true
-  m_blockIndex.findSupplement(qblock_ids, blockIndex);
-  return blockIndex;
+
+
+  if (r) {
+    assert(qblock_ids.back() == m_blockIndex.getBlockId(0));
+    // assert above guarantees that method returns true
+    uint32_t blockIndex;
+    m_blockIndex.findSupplement(qblock_ids, blockIndex);
+    return blockIndex;
+  } else {
+    assert(qblock_ids.back() == m_db->get_block_hash_from_height(m_db->get_block_height(qblock_ids.back())));
+    size_t blockIndex = 0;
+    find_blockchain_supplement(qblock_ids, blockIndex);
+    return blockIndex;
+  }
 }
 
 uint64_t Blockchain::blockDifficulty(size_t i) {
@@ -2232,7 +2244,7 @@ std::vector<Crypto::Hash> Blockchain::findBlockchainSupplement(const std::vector
   uint32_t& totalBlockCount, uint32_t& startBlockIndex) {
 
   assert(!remoteBlockIds.empty());
-//  assert(remoteBlockIds.back() == m_blockIndex.getBlockId(0));
+  assert(remoteBlockIds.back() == m_blockIndex.getBlockId(0));
 
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   totalBlockCount = getCurrentBlockchainHeight();
@@ -3479,8 +3491,6 @@ bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qbl
   size_t start_height = resp.start_height;
   size_t total_height = resp.total_height;
   bool result = find_blockchain_supplement(qblock_ids, resp.m_block_ids, start_height, total_height);
-//  resp.cumulativeDifficulty = m_db->get_block_cumulative_difficulty(m_db->height() - 1);
-    // ^^^  dafuq we doing this for?
   return result;
 }
 //------------------------------------------------------------------

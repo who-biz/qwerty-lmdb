@@ -256,9 +256,9 @@ namespace CryptoNote
     if (cmd.isResponse && cmd.command == COMMAND_TIMED_SYNC::ID) {
       if (!handleTimedSyncResponse(cmd.buf, ctx)) {
         // invalid response, close connection
-        ctx.m_state = CryptoNoteConnectionContext::state_shutdown;
+  //      ctx.m_state = CryptoNoteConnectionContext::state_shutdown;
       }
-      return 0;
+  //    return 0;
     }
 
     switch (cmd.command) {
