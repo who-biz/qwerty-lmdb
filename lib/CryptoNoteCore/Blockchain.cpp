@@ -3374,12 +3374,23 @@ std::vector<Crypto::Hash> Blockchain::getBlockIds(uint32_t startHeight, uint32_t
 bool Blockchain::getBlockContainingTransaction(const Crypto::Hash& txId, Crypto::Hash& blockId, uint32_t& blockHeight) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   bool r = Tools::getDefaultDbType() != "lmdb";
-  auto it = m_transactionMap.find(txId);
-  if (it == m_transactionMap.end()) {
-    return false;
+  if (r) {
+    auto it = m_transactionMap.find(txId);
+    if (it == m_transactionMap.end()) {
+      return false;
+    } else {
+      blockHeight = m_blocks[it->second.block].height;
+      blockId = getBlockIdByHeight(blockHeight);
+      return true;
+    }
   } else {
-    blockHeight = r ? m_blocks[it->second.block].height : m_db->get_tx_block_height(it->first);
-    blockId = getBlockIdByHeight(blockHeight);
+    if (!m_db->tx_exists(txId))
+    {
+      logger(ERROR, BRIGHT_RED) << "Error! Transaction does not exist for txid: " << Common::podToHex(txId);
+      return false;
+    }
+    blockHeight = m_db->get_tx_block_height(txId);
+    blockId = m_db->get_block_hash_from_height(blockHeight);
     return true;
   }
 }
