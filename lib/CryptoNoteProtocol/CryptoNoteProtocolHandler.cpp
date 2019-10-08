@@ -110,12 +110,14 @@ void CryptoNoteProtocolHandler::stop() {
 bool CryptoNoteProtocolHandler::start_sync(CryptoNoteConnectionContext& context) {
   logger(Logging::TRACE) << context << "Starting synchronization";
 
-
+  if (context.m_state == CryptoNoteConnectionContext::state_synchronizing) {
+  //  assert(context.m_needed_objects.empty());
+  //  assert(context.m_requested_objects.empty());
     NOTIFY_REQUEST_CHAIN::request r = boost::value_initialized<NOTIFY_REQUEST_CHAIN::request>();
     r.block_ids = m_core.buildSparseChain();
     logger(Logging::TRACE) << context << "-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size();
     post_notify<NOTIFY_REQUEST_CHAIN>(*m_p2p, r, context);
-
+  }
   return true;
 }
 
@@ -359,7 +361,7 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
       if (m_core.have_block(get_block_hash(b))) {
         context.m_state = CryptoNoteConnectionContext::state_idle;
 //        context.m_needed_objects.clear();
-        context.m_requested_objects.clear();
+//        context.m_requested_objects.clear();
         logger(Logging::DEBUGGING) << context << "Connection set to idle state.";
         return 1;
       }
