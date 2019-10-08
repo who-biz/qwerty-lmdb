@@ -614,6 +614,7 @@ uint32_t Blockchain::getCurrentBlockchainHeight() {
 
 bool Blockchain::init(const std::string& config_folder, const std::string& db_type, const int& db_flags, bool load_existing) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+
   if (!config_folder.empty() && !Tools::create_directories_if_necessary(config_folder)) {
     logger(ERROR, BRIGHT_RED) << "Failed to create data directory: " << m_config_folder;
     return false;
@@ -622,7 +623,11 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
   m_config_folder = config_folder;
   std::unique_ptr<BlockchainDB> db(new_db(db_type));
 
-  if (db_type == "")
+  uint64_t before_popping = 0;
+  uint64_t num_popped_blocks = 0;
+
+
+  if (Tools::getDefaultDbType() != "lmdb")
   {
     logger(ERROR, BRIGHT_RED) << " No DB type supplied, using BlockIndexes instead";
 
@@ -630,7 +635,8 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     {
       return false;
     }
-    if (load_existing && !m_blocks.empty())
+
+    if (load_existing && m_blocks.empty())
     {
       logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
       BlockCacheSerializer loader(*this, get_block_hash(m_blocks.back().bl), logger.getLogger());
@@ -640,43 +646,37 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
         logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
         rebuildCache();
       }
-
+    }
       if (m_blockchainIndexesEnabled) {
         loadBlockchainIndices();
       }
-    } else {
-      m_blocks.clear();
-    }
 
-    if (m_blocks.empty())
-    {
-      logger(INFO, BRIGHT_WHITE)
-        << "Blockchain not loaded, generating genesis block.";
-      block_verification_context bvc = boost::value_initialized<block_verification_context>();
-      pushBlock(m_currency.genesisBlock(), bvc);
-      if (bvc.m_verification_failed) {
-        logger(ERROR, BRIGHT_RED) << "Failed to add genesis block to blockchain";
-        return false;
+      if (m_blocks.empty())
+      {
+        logger(INFO, BRIGHT_WHITE)
+          << "Blockchain not loaded, generating genesis block.";
+        block_verification_context bvc = boost::value_initialized<block_verification_context>();
+        pushBlock(m_currency.genesisBlock(), bvc);
+        if (bvc.m_verification_failed) {
+          logger(ERROR, BRIGHT_RED) << "Failed to add genesis block to blockchain";
+          return false;
+        }
+      } else {
+        Crypto::Hash firstBlockHash = get_block_hash(m_blocks[0].bl);
+        if (!(firstBlockHash == m_currency.genesisBlockHash())) {
+          logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
+            "Probably you set --testnet flag with data "
+            "dir with non-test blockchain or another "
+            "network.";
+          return false;
+        }
       }
-    } else {
-      Crypto::Hash firstBlockHash = get_block_hash(m_blocks[0].bl);
-      if (!(firstBlockHash == m_currency.genesisBlockHash())) {
-        logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
-          "Probably you set --testnet flag with data "
-          "dir with non-test blockchain or another "
-          "network.";
-        return false;
-      }
-    }
-  }
+  } else {
 
     m_async_work_idle = std::unique_ptr < boost::asio::io_service::work > (new boost::asio::io_service::work(m_async_service));
     m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
     // TODO: Monero implementation says we only need one thread here. Probably true, but also
     // probably a major performance increase with more than one.
-
-  if (db_type == "lmdb")
-  {
 
     const std::string filename = m_config_folder;
 
@@ -686,7 +686,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
         return false;
     } catch (std::exception& e) {
       logger(ERROR,BRIGHT_RED) << "Something went wrong when opening DB! Closing to prevent issues";
-   }
+    }
 
     if (!m_db->is_open())
     {
@@ -709,7 +709,6 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       if (m_blockchainIndexesEnabled) {
         loadBlockchainIndices();
       }
-    }
 
       logger(WARNING, BRIGHT_YELLOW) << "Building internal structures...";
       rebuildCache();
@@ -737,33 +736,30 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       }
 
     } else {
-        if (get_block_hash(m_currency.genesisBlock()) != m_currency.genesisBlockHash()) {
-         logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
-           "Probably you set --testnet flag with data "
-           "dir with non-test blockchain or another "
-           "network.";
-      DB_TX_STOP
-      return false;
+      if (get_block_hash(m_currency.genesisBlock()) != m_currency.genesisBlockHash()) {
+        logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
+          "Probably you set --testnet flag with data "
+          "dir with non-test blockchain or another "
+          "network.";
+        DB_TX_STOP
+        return false;
       }
     }
 
-    uint64_t before_popping = 0;
-
-    if (Tools::getDefaultDbType() == "lmdb") {
-      m_db->fixup();
-      if (m_db->height() > 0) {
-        before_popping = m_db->height()-1;
-      }
+    m_db->fixup();
+    if (m_db->height() > 0)
+    {
+      before_popping = m_db->height()-1;
     }
 
+  }
 
-
-/*    uint32_t lastValidCheckpointHeight;
+    uint32_t lastValidCheckpointHeight;
     if (!checkCheckpoints(lastValidCheckpointHeight)) {
     logger(WARNING, BRIGHT_YELLOW) << "Invalid checkpoint found. Rollback blockchain to height=" << lastValidCheckpointHeight;
       rollbackBlockchainTo(lastValidCheckpointHeight);
     }
-*/
+
     if (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init()) {
       logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector. Trying self healing procedure.";
       //return false;
@@ -792,16 +788,14 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
         " expected=" << static_cast<int>(m_upgradeDetectorV4.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
       rollbackBlockchainTo(upgradeHeight);
       reinitUpgradeDetectors = true;
-  	}
-    else if (!checkUpgradeHeight(m_upgradeDetectorV5)) {
+  	} else if (!checkUpgradeHeight(m_upgradeDetectorV5)) {
       uint32_t upgradeHeight = m_upgradeDetectorV5.upgradeHeight();
       Block Block = m_db->get_block_from_height(upgradeHeight + 1);
       logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>((Tools::getDefaultDbType() != "lmdb") ? m_blocks[upgradeHeight + 1].bl.majorVersion : Block.majorVersion) <<
         " expected=" << static_cast<int>(m_upgradeDetectorV5.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
       rollbackBlockchainTo(upgradeHeight);
       reinitUpgradeDetectors = true;
-    }
-    else if (!checkUpgradeHeight(m_upgradeDetectorV6)) {
+    } else if (!checkUpgradeHeight(m_upgradeDetectorV6)) {
       uint32_t upgradeHeight = m_upgradeDetectorV6.upgradeHeight();
       Block Block = m_db->get_block_from_height(upgradeHeight + 1);
       logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>((Tools::getDefaultDbType() != "lmdb") ? m_blocks[upgradeHeight + 1].bl.majorVersion : Block.majorVersion) <<
@@ -809,15 +803,18 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       rollbackBlockchainTo(upgradeHeight);
       reinitUpgradeDetectors = true;
     }
-
-  uint64_t num_popped_blocks = before_popping - getCurrentBlockchainHeight();
-  if (num_popped_blocks > 0)
-  {
-    m_hardfork->reorganize_from_chain_height(getCurrentBlockchainHeight());
-    m_tx_pool.on_blockchain_dec(m_db->height()-1, getTailId());
-  }
-
-    if (reinitUpgradeDetectors && (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init())) {
+  
+    if ((getCurrentBlockchainHeight() > 1) && (num_popped_blocks > getCurrentBlockchainHeight()) && db_type == "lmdb")
+    {
+      num_popped_blocks = before_popping - getCurrentBlockchainHeight(); // TODO: this section needs cleaned up
+      if (num_popped_blocks > 0)
+      {
+        m_hardfork->reorganize_from_chain_height(getCurrentBlockchainHeight());
+        m_tx_pool.on_blockchain_dec(m_db->height()-1, getTailId());
+      }
+    }
+    if (reinitUpgradeDetectors && (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init()))
+    {
       logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector";
       return false;
     }
@@ -835,10 +832,8 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       << Common::timeIntervalToString(timestamp_diff)
       << " time ago, current difficulty: " << getDifficultyForNextBlock();
 
- }
+  } else {
 
-   if (db_type == "lmdb")
-   {
      DB_TX_START
      uint64_t top_block_timestamp = 0;
      uint64_t timestamp_diff = 0;
