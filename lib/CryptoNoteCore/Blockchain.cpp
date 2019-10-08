@@ -692,33 +692,31 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     {
       logger(ERROR,BRIGHT_RED) << "Attempted to init Blockchain with unopened DB";
     }
-
-    if (m_db->height() < 1) {
-
       m_hardfork = new HardFork(*m_db, 1, 0);
 
+      for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
+        m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
       m_hardfork->init();
+
+    if (m_db->height() < 1) {
       m_db->set_hard_fork(m_hardfork);
     } else {
         logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
-        BlockCacheSerializer loader(*this, get_block_hash(m_db->get_top_block()), logger.getLogger());
-        loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
-        m_hardfork = new HardFork(*m_db, 1, 0);
-        for (size_t n = 0; n < sizeof(mainnet_hard_forks) / sizeof(mainnet_hard_forks[0]); ++n)
-          m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
-        m_hardfork->init();
+//        BlockCacheSerializer loader(*this, get_block_hash(m_db->get_top_block()), logger.getLogger());
+//        loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
       }
-        rebuildCache();
 
       if (m_blockchainIndexesEnabled) {
         loadBlockchainIndices();
       }
+    }
 
-    if(m_db->height() < 1)
-    {
       logger(WARNING, BRIGHT_YELLOW) << "Building internal structures...";
       rebuildCache();
 
+
+    if(m_db->height() < 1)
+    {
       DB_TX_START
       logger(INFO, BRIGHT_WHITE) << "Blockchain not loaded, generating genesis block.";
       block_verification_context bvc = boost::value_initialized<block_verification_context>();
@@ -748,13 +746,17 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       return false;
       }
     }
-  }
+
     uint64_t before_popping = 0;
-    if (m_db->height() > 0) {
-      before_popping = m_db->height()-1;
+
+    if (Tools::getDefaultDbType() == "lmdb") {
+      m_db->fixup();
+      if (m_db->height() > 0) {
+        before_popping = m_db->height()-1;
+      }
     }
 
-    m_db->fixup();
+
 
 /*    uint32_t lastValidCheckpointHeight;
     if (!checkCheckpoints(lastValidCheckpointHeight)) {
@@ -968,25 +970,29 @@ bool Blockchain::storeCache() {
 bool Blockchain::deinit() {
 
   bool r = Tools::getDefaultDbType() != "lmdb";
-   {
 
-     store_blockchain();
 
-     m_async_work_idle.reset();
-     m_async_pool.join_all();
-     m_async_service.stop();
-
-      storeCache();
      if (r) {
+
       storeBlockchainIndices();
+      storeCache();
+
      } else {
-       try {
+
+       m_async_work_idle.reset();
+       m_async_pool.join_all();
+       m_async_service.stop();
+
+       store_blockchain();
+       storeCache();
+
+
+      try {
          m_db->close();
          logger(INFO, WHITE) << "Local blockchain read/write activity stopped successfully";
        } catch (std::exception& e) {
          logger(ERROR, BRIGHT_RED) << "There was an issue closing/storing the blockchain, shutting down now to prevent issues!";
        }
-     }
 
       delete m_hardfork;
       m_hardfork = nullptr;
@@ -1002,6 +1008,7 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   if (Tools::getDefaultDbType() == "lmdb") {
     m_db->reset();
+    m_blockIndex.clear();
   } else {
     m_blocks.clear();
     m_blockIndex.clear();
@@ -2255,15 +2262,16 @@ std::vector<Crypto::Hash> Blockchain::findBlockchainSupplement(const std::vector
 
 bool Blockchain::haveBlock(const Crypto::Hash& id) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-    if (m_blockIndex.hasBlock(id)) {
-      return true;
-    } else {
    if (Tools::getDefaultDbType() == "lmdb") {
     if (m_db->block_exists(id)) {
       return true;
     }
+   } else {
+     if (m_blockIndex.hasBlock(id)) {
+       return true;
+     }
    }
-  }
+
     if (m_alternative_chains.count(id)) {
       return true;
     }
@@ -2654,6 +2662,15 @@ bool Blockchain::update_next_cumulative_size_limit() {
 
 bool Blockchain::addNewBlock(const Block& bl_, block_verification_context& bvc) {
   //copy block here to let modify block.target
+  bool r = Tools::getDefaultDbType() != "lmdb";
+  if (r) {
+    if (!add_new_block(bl_, bvc)) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+
   Block bl = bl_;
   Crypto::Hash id;
   if (!get_block_hash(bl, id)) {

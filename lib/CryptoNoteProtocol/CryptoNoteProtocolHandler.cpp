@@ -110,15 +110,11 @@ void CryptoNoteProtocolHandler::stop() {
 bool CryptoNoteProtocolHandler::start_sync(CryptoNoteConnectionContext& context) {
   logger(Logging::TRACE) << context << "Starting synchronization";
 
-  if (context.m_state == CryptoNoteConnectionContext::state_synchronizing) {
-    assert(context.m_needed_objects.empty());
-    assert(context.m_requested_objects.empty());
 
     NOTIFY_REQUEST_CHAIN::request r = boost::value_initialized<NOTIFY_REQUEST_CHAIN::request>();
     r.block_ids = m_core.buildSparseChain();
     logger(Logging::TRACE) << context << "-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size();
     post_notify<NOTIFY_REQUEST_CHAIN>(*m_p2p, r, context);
-  }
 
   return true;
 }
@@ -158,8 +154,7 @@ bool CryptoNoteProtocolHandler::process_payload_sync_data(const CORE_SYNC_DATA& 
   if (context.m_state == CryptoNoteConnectionContext::state_befor_handshake && !is_inital)
     return true;
 
-  if (context.m_state == CryptoNoteConnectionContext::state_synchronizing) {
-  } else if (m_core.have_block(hshd.top_id)) {
+  if (m_core.have_block(hshd.top_id)) {
     if (is_inital) {
       on_connection_synchronized();
       context.m_state = CryptoNoteConnectionContext::state_pool_sync_required;
@@ -363,7 +358,7 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
     if (count == 2) {
       if (m_core.have_block(get_block_hash(b))) {
         context.m_state = CryptoNoteConnectionContext::state_idle;
-        context.m_needed_objects.clear();
+//        context.m_needed_objects.clear();
         context.m_requested_objects.clear();
         logger(Logging::DEBUGGING) << context << "Connection set to idle state.";
         return 1;
@@ -483,11 +478,11 @@ int CryptoNoteProtocolHandler::handle_request_chain(int command, NOTIFY_REQUEST_
     return 1;
   }
 
-//  if (arg.block_ids.back() != m_core.getBlockIdByHeight(0)) {
-//    logger(Logging::ERROR) << context << "Failed to handle NOTIFY_REQUEST_CHAIN. block_ids doesn't end with genesis block ID";
-//    context.m_state = CryptoNoteConnectionContext::state_shutdown;
-//    return 1;
-//  }
+  if (arg.block_ids.back() != m_core.getBlockIdByHeight(0)) {
+    logger(Logging::ERROR) << context << "Failed to handle NOTIFY_REQUEST_CHAIN. block_ids doesn't end with genesis block ID";
+    context.m_state = CryptoNoteConnectionContext::state_shutdown;
+    return 1;
+  }
 
   NOTIFY_RESPONSE_CHAIN_ENTRY::request r;
   r.m_block_ids = m_core.findBlockchainSupplement(arg.block_ids, BLOCKS_IDS_SYNCHRONIZING_DEFAULT_COUNT, r.total_height, r.start_height);

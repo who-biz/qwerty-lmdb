@@ -154,15 +154,15 @@ void P2pConnectionProxy::handleTimedSync(const LevinProtocol::Command& cmd) {
     m_node.handleRemotePeerList(res.local_peerlist, res.local_time);
   } else {
     // we ignore information from the request
-    // COMMAND_TIMED_SYNC::request req;
-    // LevinProtocol::decode(cmd.buf, req);
+    COMMAND_TIMED_SYNC::request req;
+    LevinProtocol::decode(cmd.buf, req);
     COMMAND_TIMED_SYNC::response res;
 
     res.local_time = time(nullptr);
     res.local_peerlist = m_node.getLocalPeerList();
     res.payload_data = m_node.getGenesisPayload();
 
-    m_context.writeMessage(makeReply(COMMAND_TIMED_SYNC::ID, LevinProtocol::encode(res), LEVIN_PROTOCOL_RETCODE_SUCCESS));
+    m_context.writeMessage(makeReply(COMMAND_TIMED_SYNC::ID, LevinProtocol::encode(req), LEVIN_PROTOCOL_RETCODE_SUCCESS));
   }
 }
 
