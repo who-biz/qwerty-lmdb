@@ -137,8 +137,12 @@ uint8_t core::getBlockMajorVersionForHeight(uint32_t height) {
 }
 
 void core::get_blockchain_top(uint32_t& height, Crypto::Hash& top_id) {
-  assert(m_blockchain.getCurrentBlockchainHeight() > 0);
-  top_id = m_blockchain.getTailId(height);
+  height = m_blockchain.getCurrentBlockchainHeight();
+  if(!m_blockchain.getCurrentBlockchainHeight()) {
+    top_id = CryptoNote::NULL_HASH;
+  } else {
+    top_id = m_blockchain.getTailId(height);
+  }
 }
 
 bool core::get_blocks(uint32_t start_offset, uint32_t count, std::list<Block>& blocks, std::list<Transaction>& txs) {
@@ -866,7 +870,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
 //    m_blockchain.cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
-   }
+  } else {
+    m_blockchain.addNewBlock(b, bvc);
+  }
   if (control_miner) {
     update_block_template_and_resume_mining();
   }
