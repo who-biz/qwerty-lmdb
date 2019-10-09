@@ -360,8 +360,8 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
     if (count == 2) {
       if (m_core.have_block(get_block_hash(b))) {
         context.m_state = CryptoNoteConnectionContext::state_idle;
-        context.m_needed_objects.clear();
-        context.m_requested_objects.clear();
+//        context.m_needed_objects.clear();
+//        context.m_requested_objects.clear();
         logger(Logging::DEBUGGING) << context << "Connection set to idle state.";
         return 1;
       }

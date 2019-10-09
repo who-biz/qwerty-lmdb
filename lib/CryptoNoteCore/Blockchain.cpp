@@ -3415,14 +3415,14 @@ bool Blockchain::getBlockContainingTransaction(const Crypto::Hash& txId, Crypto:
       return true;
     }
   } else {
-    if (!m_db->tx_exists(txId))
-    {
-      logger(ERROR, BRIGHT_RED) << "Error! Transaction does not exist for txid: " << Common::podToHex(txId);
+    auto it = m_transactionMap.find(txId);
+    if (it == m_transactionMap.end()) {
       return false;
+    } else {
+      blockHeight = m_db->get_tx_block_height(txId);
+      blockId = m_db->get_block_hash_from_height(blockHeight);
+      return true;
     }
-    blockHeight = m_db->get_tx_block_height(txId);
-    blockId = m_db->get_block_hash_from_height(blockHeight);
-    return true;
   }
 }
 bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qblock_ids, size_t& starter_offset)
@@ -3772,7 +3772,7 @@ bool Blockchain::loadTransactions(const Block& block, std::vector<Transaction>& 
     if (!m_tx_pool.take_tx(block.transactionHashes[i], transactions[i], transactionSize, fee)) {
       tx_verification_context context;
       for (size_t j = 0; j < i; ++j) {
-        if (!m_tx_pool.add_tx(transactions[i - 1 - j], context, true)) {
+        if (!m_tx_pool.add_tx(transactions[i - 1 - j], context, true, *m_db)) {
           throw std::runtime_error("Blockchain::loadTransactions, failed to add transaction to pool");
         }
       }
@@ -3788,13 +3788,13 @@ void Blockchain::saveTransactions(const std::vector<Transaction>& transactions) 
   tx_verification_context context;
   for (size_t i = 0; i < transactions.size(); ++i) {
     if (Tools::getDefaultDbType() != "lmdb") {
-      if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true)) {
+      if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true, *m_db)) {
         logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
       }
     } else {
       std::vector<Crypto::Hash> hashes;
       txpool_tx_meta_t meta;
-      if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true)) {
+      if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true, *m_db)) {
         logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
       }
       Crypto::Hash hash = getObjectHash(transactions[transactions.size() - 1 - i]);

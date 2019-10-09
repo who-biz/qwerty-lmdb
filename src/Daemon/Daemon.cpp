@@ -45,6 +45,7 @@
 #include "Rpc/RpcServer.h"
 #include "Rpc/RpcServerConfig.h"
 #include "version.h"
+#include "CryptoNoteCore/Blockchain.h"
 
 #include <Logging/LoggerManager.h>
 

@@ -37,6 +37,7 @@
 #include "CryptoNoteCore/Miner.h"
 #include "CryptoNoteCore/TransactionExtra.h"
 #include "CryptoNoteProtocol/ICryptoNoteProtocolQuery.h"
+#include "BlockchainDB/BlockchainDB.h"
 
 #include "P2p/NetNode.h"
 

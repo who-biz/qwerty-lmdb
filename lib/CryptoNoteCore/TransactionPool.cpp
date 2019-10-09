@@ -37,14 +37,15 @@
 #include "CryptoNoteFormatUtils.h"
 #include "CryptoNoteTools.h"
 #include "CryptoNoteConfig.h"
-#include "TransactionExtra.h" 
+#include "TransactionExtra.h"
+#include "Blockchain.h"
+#include "BlockchainDB/BlockchainDB.h"
 
 using namespace Logging;
 
 #undef ERROR
 
 namespace CryptoNote {
-
   //---------------------------------------------------------------------------------
   // BlockTemplate
   //---------------------------------------------------------------------------------
@@ -100,7 +101,6 @@ namespace CryptoNote {
   };
 
   using CryptoNote::BlockInfo;
-
   std::unordered_set<Crypto::Hash> m_validated_transactions;
 
   //---------------------------------------------------------------------------------
@@ -122,7 +122,7 @@ namespace CryptoNote {
     m_timestampIndex(blockchainIndexesEnabled) {
   }
   //---------------------------------------------------------------------------------
-  bool tx_memory_pool::add_tx(const Transaction &tx, /*const Crypto::Hash& tx_prefix_hash,*/ const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keptByBlock) {
+  bool tx_memory_pool::add_tx(const Transaction &tx, /*const Crypto::Hash& tx_prefix_hash,*/ const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keptByBlock, BlockchainDB& db) {
     if (!check_inputs_types_supported(tx)) {
       tvc.m_verification_failed = true;
       return false;
@@ -187,19 +187,45 @@ namespace CryptoNote {
 
     // check inputs
     bool inputsValid = m_validator.checkTransactionInputs(tx, maxUsedBlock);
-
+    bool r = Tools::getDefaultDbType() == "lmdb";
+    txpool_tx_meta_t meta;
     if (!inputsValid) {
       if (!keptByBlock) {
         logger(INFO) << "tx used wrong inputs, rejected";
         tvc.m_verification_failed = true;
         return false;
+      } else if (r && keptByBlock) {
+        meta.blob_size = blobSize;
+        meta.fee = fee;
+        meta.max_used_block_id = CryptoNote::NULL_HASH;
+        meta.max_used_block_height = 0;
+        meta.last_failed_height = 0;
+        meta.last_failed_id = CryptoNote::NULL_HASH;
+        meta.kept_by_block = keptByBlock;
+        meta.receive_time = m_timeProvider.now();
+        meta.last_relayed_time = m_timeProvider.now();
+        meta.double_spend_seen = haveSpentInputs(tx);
+        memset(meta.padding, 0, sizeof(meta.padding));
+        try
+        {
+          CryptoNote::Transaction tx_c = tx;
+          db.add_txpool_tx(tx_c, meta);
+        m_ttlIndex.emplace(std::make_pair(id, ttl.ttl));
+        }
+        catch (const std::exception &e)
+        {
+          logger (ERROR,BRIGHT_RED) << "transaction already exists at inserting in memory pool: " << e.what();
+          return false;
+        }
+        tvc.m_verifivation_impossible = true;
+        tvc.m_added_to_pool = true;
       }
-
       maxUsedBlock.clear();
       tvc.m_verifivation_impossible = true;
-    }
 
-    if (!keptByBlock) {
+   }
+
+    if (!keptByBlock) {	
       bool sizeValid = m_validator.checkTransactionSize(blobSize);
       if (!sizeValid) {
         logger(INFO) << "tx too big, rejected";
@@ -219,6 +245,7 @@ namespace CryptoNote {
     }
 
     // add to pool
+    if (!r)
     {
       TransactionDetails txd;
 
@@ -243,11 +270,38 @@ namespace CryptoNote {
       if (ttl.ttl != 0) {
         m_ttlIndex.emplace(std::make_pair(id, ttl.ttl));
       }
+    } else {
+      meta.blob_size = blobSize;
+      meta.kept_by_block = keptByBlock;
+      meta.fee = fee;
+      meta.max_used_block_id = maxUsedBlock.id;
+      meta.max_used_block_height = maxUsedBlock.height;
+      meta.last_failed_height = 0;
+      meta.last_failed_id = CryptoNote::NULL_HASH;
+      meta.receive_time = m_timeProvider.now();
+      meta.last_relayed_time = m_timeProvider.now();
+      meta.double_spend_seen = false;
+      memset(meta.padding, 0, sizeof(meta.padding));
+
+      try
+      {
+        db.remove_txpool_tx(getObjectHash(tx));
+        CryptoNote::Transaction tx_c = tx;
+        db.add_txpool_tx(tx_c, meta);
+        if (!addTransactionInputs(id, tx, keptByBlock))
+          return false;
+      }
+      catch (const std::exception &e)
+      {
+        logger(ERROR,BRIGHT_RED) << "internal error: transaction already exists at inserting in memory pool: " << e.what();
+        return false;
+      }
     }
 
     tvc.m_added_to_pool = true;
     tvc.m_should_be_relayed = inputsValid && (fee > 0 || isFusionTransaction || ttl.ttl != 0);
     tvc.m_verification_failed = true;
+
 
     if (!addTransactionInputs(id, tx, keptByBlock))
       return false;
@@ -258,11 +312,11 @@ namespace CryptoNote {
   }
 
   //---------------------------------------------------------------------------------
-  bool tx_memory_pool::add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block) {
+  bool tx_memory_pool::add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db) {
     Crypto::Hash h = NULL_HASH;
     size_t blobSize = 0;
     getObjectHash(tx, h, blobSize);
-    return add_tx(tx, h, blobSize, tvc, keeped_by_block);
+    return add_tx(tx, h, blobSize, tvc, keeped_by_block, db);
   }
   //---------------------------------------------------------------------------------
   bool tx_memory_pool::take_tx(const Crypto::Hash &id, Transaction &tx, size_t& blobSize, uint64_t& fee) {
