@@ -865,9 +865,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
     }
- //   m_blockchain.prepare_handle_incoming_blocks(blocks);
+    m_blockchain.prepare_handle_incoming_blocks(blocks);
     m_blockchain.addNewBlock(b, bvc);
-//    m_blockchain.cleanup_handle_incoming_blocks(true);
+    m_blockchain.cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
   } else {
@@ -964,7 +964,11 @@ std::list<CryptoNote::tx_memory_pool::TransactionDetails> core::getMemoryPool() 
 }
 
 std::vector<Crypto::Hash> core::buildSparseChain() {
-//  assert(m_blockchain.getCurrentBlockchainHeight() != 0);
+  std::vector<Crypto::Hash> chain;
+  if (m_blockchain.getCurrentBlockchainHeight() < 1) {
+    chain.push_back(m_currency.genesisBlockHash());
+    return chain;
+  }
   return m_blockchain.buildSparseChain();
 }
 

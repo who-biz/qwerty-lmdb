@@ -1027,19 +1027,27 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
 
 Crypto::Hash Blockchain::getTailId(uint32_t& height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+    if (getCurrentBlockchainHeight()) {
+      height = getCurrentBlockchainHeight();
+    }
   return getTailId();
 }
 
 Crypto::Hash Blockchain::getTailId() {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  Crypto::Hash hash = NULL_HASH;
+  Crypto::Hash hash;
   bool r = Tools::getDefaultDbType() != "lmdb";
-  if (HEIGHT_COND >= 1) {
-    if (r) {
-      hash = m_blockIndex.getTailId();
-    } else {
-      hash = m_db->top_block_hash();
-    }
+
+  if (HEIGHT_COND < 1) {
+    return NULL_HASH;
+  } if (HEIGHT_COND == 1) {
+    return m_currency.genesisBlockHash();
+  }
+
+  if (r) {
+    hash = m_blockIndex.getTailId();
+  } else {
+    hash = m_db->top_block_hash();
   }
   return hash;
 }
@@ -1047,11 +1055,17 @@ Crypto::Hash Blockchain::getTailId() {
 std::vector<Crypto::Hash> Blockchain::buildSparseChain() {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   bool r = Tools::getDefaultDbType() != "lmdb";
-
-    if (r ? (m_blockIndex.size() <= 1) : (m_db->height() <= 1)) {
+  if (r) {
+    if (m_blockIndex.size() <= 0) {
       return doBuildSparseChain(m_currency.genesisBlockHash());
     }
-  return doBuildSparseChain(getTailId());
+    return doBuildSparseChain(getTailId());
+  } else {
+    if (m_db->height() <= 0) {
+      return doBuildSparseChain(m_currency.genesisBlockHash());
+    }
+    return doBuildSparseChain(getTailId());
+  }
 }
 
 std::vector<Crypto::Hash> Blockchain::buildSparseChain(const Crypto::Hash& startBlockId) {
@@ -1061,21 +1075,24 @@ std::vector<Crypto::Hash> Blockchain::buildSparseChain(const Crypto::Hash& start
 }
 
 std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& startBlockId) const {
+  const Crypto::Hash hash = m_currency.genesisBlockHash();
   bool r = Tools::getDefaultDbType() != "lmdb";
+
   std::vector<Crypto::Hash> sparseChain;
-  if (r) {
-    if (m_blockIndex.hasBlock(startBlockId)) {
-      sparseChain = m_blockIndex.buildSparseChain(startBlockId);
-    }
-  } else {
-    if (m_db->block_exists(startBlockId)) {
-//      sparseChain = m_blockIndex.buildSparseChain(startBlockId, *m_db);
-//      return sparseChain;
-    }
-  }
 
-    bool R = (r ? m_blockIndex.hasBlock(startBlockId) : m_db->block_exists(startBlockId));
+    bool R = r ? (m_blockIndex.size() == 0) : (m_db->height() < 1);
+    if (r) {
+      if (m_blockIndex.hasBlock(startBlockId)) {
+        sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId);
+      }
+    } else {
+      if (m_db->block_exists(startBlockId)) {
+        sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId, *m_db);
+      }
+    }
 
+    R = false;
+    R = r ? m_blockIndex.hasBlock(startBlockId) : m_db->block_exists(startBlockId);
     if (!R) {
 
       assert(m_alternative_chains.count(startBlockId) > 0);
@@ -1104,7 +1121,7 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
 Crypto::Hash Blockchain::getBlockIdByHeight(uint32_t height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   bool r = Tools::getDefaultDbType() != "lmdb";
-  Crypto::Hash hash = m_currency.genesisBlockHash();
+  Crypto::Hash hash = NULL_HASH;
   if (r) {
     assert(height < m_blockIndex.size());
     hash = m_blockIndex.getBlockId(height);
@@ -2148,8 +2165,8 @@ uint32_t Blockchain::findBlockchainSupplement(const std::vector<Crypto::Hash>& q
     return blockIndex;
   } else {
     assert(qblock_ids.back() == m_db->get_block_hash_from_height(m_db->get_block_height(qblock_ids.back())));
-    size_t blockIndex = 0;
-    find_blockchain_supplement(qblock_ids, blockIndex);
+    uint32_t blockIndex;
+    m_blockIndex.findSupplement(qblock_ids, blockIndex, *m_db);
     return blockIndex;
   }
 }

@@ -72,6 +72,7 @@ namespace CryptoNote
     std::vector<Crypto::Hash> getBlockIds(uint32_t startBlockIndex, uint32_t maxCount) const;
     std::vector<Crypto::Hash> getBlockIds(uint32_t startBlockIndex, uint32_t maxCount, BlockchainDB& db) const;
     bool findSupplement(const std::vector<Crypto::Hash>& ids, uint32_t& offset) const;
+    bool findSupplement(const std::vector<Crypto::Hash>& ids, uint32_t& offset, BlockchainDB& db) const;
     std::vector<Crypto::Hash> buildSparseChain(const Crypto::Hash& startBlockId, BlockchainDB& db) const;
     std::vector<Crypto::Hash> buildSparseChain(const Crypto::Hash& startBlockId) const;
     Crypto::Hash getTailId() const;

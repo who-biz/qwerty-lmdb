@@ -70,6 +70,22 @@ namespace CryptoNote {
     return false;
   }
 
+  bool BlockIndex::findSupplement(const std::vector<Crypto::Hash>& ids, uint32_t& offset, BlockchainDB& db) const {
+    // TODO: Check if this should return a vector by reference for offset
+    for (const auto& id : ids) {
+      try {
+        offset = db.get_block_height(id);
+      } catch (...) {
+        std::exception e;
+        throw e;
+        return false;
+      }
+      return true;
+    }
+
+    return false;
+  }
+
   std::vector<Crypto::Hash> BlockIndex::buildSparseChain(const Crypto::Hash& startBlockId) const {
     assert(m_index.count(startBlockId) > 0);
 
