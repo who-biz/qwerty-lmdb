@@ -210,11 +210,11 @@ public:
      bool fillTxExtra(const std::vector<uint8_t>& rawExtra, TransactionExtraDetails2& extraDetails);
 
    private:
-     size_t addChain(const std::vector<const IBlock*>& chain, std::unique_ptr<BlockchainDB>& db);
-     bool handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& txHash, size_t blobSize, tx_verification_context& tvc, bool keptByBlock, uint32_t height, bool loose_check, std::unique_ptr<BlockchainDB>& db);
+     size_t addChain(const std::vector<const IBlock*>& chain, BlockchainDB& db);
+     bool handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& txHash, size_t blobSize, tx_verification_context& tvc, bool keptByBlock, uint32_t height, bool loose_check, BlockchainDB& db);
      bool add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block);
-     bool add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block, std::unique_ptr<BlockchainDB>& db);
-     bool handle_incoming_tx(const BinaryArray& tx_blob, tx_verification_context& tvc, bool keeped_by_block, bool loose_check, std::unique_ptr<BlockchainDB>& db); //Deprecated. Should be removed with CryptoNoteProtocolHandler.
+     bool add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db);
+     bool handle_incoming_tx(const BinaryArray& tx_blob, tx_verification_context& tvc, bool keeped_by_block, bool loose_check, BlockchainDB& db); //Deprecated. Should be removed with CryptoNoteProtocolHandler.
      bool load_state_data();
      bool parse_tx_from_blob(Transaction& tx, Crypto::Hash& tx_hash, Crypto::Hash& tx_prefix_hash, const BinaryArray& blob);
      bool handle_incoming_block(const Block& b, block_verification_context& bvc, bool control_miner, bool relay_block);

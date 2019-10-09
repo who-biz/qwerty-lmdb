@@ -519,8 +519,9 @@ private:
           *pmax_related_block_height = amount_outs_vec[i].first.block;
         }
       }
-    BlockchainDB *m_db;
 
+    std::unique_ptr<BlockchainDB> main_db(new_db(Tools::getDefaultDbType()));
+    BlockchainDB* m_db = main_db.release();
     blockchain_db_sync_mode m_db_sync_mode;
     bool m_db_default_sync;
 

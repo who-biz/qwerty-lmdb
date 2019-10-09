@@ -103,10 +103,8 @@ namespace CryptoNote {
     bool deinit();
 
     bool have_tx(const Crypto::Hash &id) const;
-    bool add_tx(const Transaction &tx, const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keeped_by_block);
-    bool add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block);
-    bool add_tx(const Transaction &tx, const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keeped_by_block, std::unique_ptr<BlockchainDB>& db);
-    bool add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block, std::unique_ptr<BlockchainDB>& db);
+    bool add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db);
+    bool add_tx(const Transaction &tx, const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db);
     //gets tx and remove it from pool
     bool take_tx(const Crypto::Hash &id, Transaction &tx, size_t& blobSize, uint64_t& fee);
 
