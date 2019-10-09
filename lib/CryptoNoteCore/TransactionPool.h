@@ -45,8 +45,8 @@
 #include "CryptoNoteCore/BlockchainIndices.h"
 #include "CryptoNoteCore/ICore.h"
 #include "BlockchainDB/BlockchainDB.h"
-
 #include <Logging/LoggerRef.h>
+
 
 namespace CryptoNote {
 
@@ -84,6 +84,7 @@ namespace CryptoNote {
   /************************************************************************/
   /*                                                                      */
   /************************************************************************/
+
   class tx_memory_pool: boost::noncopyable {
   public:
     tx_memory_pool(
@@ -102,8 +103,10 @@ namespace CryptoNote {
     bool deinit();
 
     bool have_tx(const Crypto::Hash &id) const;
-    bool add_tx(const Transaction &tx, const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db);
-    bool add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db);
+    bool add_tx(const Transaction &tx, const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keeped_by_block);
+    bool add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block);
+    bool add_tx(const Transaction &tx, const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keeped_by_block, std::unique_ptr<BlockchainDB>& db);
+    bool add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block, std::unique_ptr<BlockchainDB>& db);
     //gets tx and remove it from pool
     bool take_tx(const Crypto::Hash &id, Transaction &tx, size_t& blobSize, uint64_t& fee);
 
@@ -220,8 +223,6 @@ namespace CryptoNote {
     tx_container_t m_transactions;
     tx_container_t::nth_index<1>::type& m_fee_index;
     std::unordered_map<Crypto::Hash, uint64_t> m_recentlyDeletedTransactions;
-
-    BlockchainDB* m_db;
 
     Logging::LoggerRef logger;
 

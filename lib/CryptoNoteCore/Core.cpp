@@ -322,11 +322,11 @@ bool core::deinit() {
 }
 
 size_t core::addChain(const std::vector<const IBlock*>& chain) {
-  BlockchainDB* m_db;
-  return addChain(chain, *m_db);
+  std::unique_ptr<BlockchainDB> db(new_db("lmdb"));
+  return addChain(chain, db);
 }
 
-size_t core::addChain(const std::vector<const IBlock*>& chain, BlockchainDB& db) {
+size_t core::addChain(const std::vector<const IBlock*>& chain, std::unique_ptr<BlockchainDB>& db) {
   size_t blocksCounter = 0;
 
   for (const IBlock* block : chain) {
@@ -367,11 +367,11 @@ size_t core::addChain(const std::vector<const IBlock*>& chain, BlockchainDB& db)
 
 
 bool core::handle_incoming_tx(const BinaryArray& tx_blob, tx_verification_context& tvc, bool keeped_by_block, bool loose_check) { //Deprecated. Should be removed with CryptoNoteProtocolHandler.
-  BlockchainDB* m_db;
-  return handle_incoming_tx(tx_blob, tvc, keeped_by_block, loose_check, *m_db);
+  std::unique_ptr<BlockchainDB> db(new_db("lmdb"));
+  return handle_incoming_tx(tx_blob, tvc, keeped_by_block, loose_check, db);
 }
 
-bool core::handle_incoming_tx(const BinaryArray& tx_blob, tx_verification_context& tvc, bool keeped_by_block, bool loose_check, BlockchainDB& db) { //Deprecated. Should be removed with CryptoNoteProtocolHandler.
+bool core::handle_incoming_tx(const BinaryArray& tx_blob, tx_verification_context& tvc, bool keeped_by_block, bool loose_check, std::unique_ptr<BlockchainDB>& db) { //Deprecated. Should be removed with CryptoNoteProtocolHandler.
   tvc = boost::value_initialized<tx_verification_context>();
   //want to process all transactions sequentially
 
@@ -597,11 +597,11 @@ size_t core::get_blockchain_total_transactions() {
 //}
 
 bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block) {
-  BlockchainDB* m_db;
-  return add_new_tx(tx, tx_hash, blob_size, tvc, keeped_by_block, *m_db);
+  std::unique_ptr<BlockchainDB> db(new_db("lmdb"));
+  return add_new_tx(tx, tx_hash, blob_size, tvc, keeped_by_block, db);
 }
 
-bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block, CryptoNote::BlockchainDB& db) {
+bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block, std::unique_ptr<BlockchainDB>& db) {
   //Locking on m_mempool and m_blockchain closes possibility to add tx to memory pool which is already in blockchain
   std::lock_guard<decltype(m_mempool)> lk(m_mempool);
   LockedBlockchainStorage lbs(m_blockchain);
@@ -1752,11 +1752,11 @@ bool core::fillTransactionDetails(const Transaction& transaction, TransactionDet
 }
 
 bool core::handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& txHash, size_t blobSize, tx_verification_context& tvc, bool keptByBlock, uint32_t height, bool loose_check) {
-  BlockchainDB* m_db;
-  return handleIncomingTransaction(tx, txHash, blobSize, tvc, keptByBlock, height, loose_check, *m_db);
+  std::unique_ptr<BlockchainDB> db(new_db("lmdb"));
+  return handleIncomingTransaction(tx, txHash, blobSize, tvc, keptByBlock, height, loose_check, db);
 }
 
-bool core::handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& txHash, size_t blobSize, tx_verification_context& tvc, bool keptByBlock, uint32_t height, bool loose_check, BlockchainDB& db) {
+bool core::handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& txHash, size_t blobSize, tx_verification_context& tvc, bool keptByBlock, uint32_t height, bool loose_check, std::unique_ptr<BlockchainDB>& db) {
   if (!check_tx_syntax(tx)) {
     logger(INFO) << "WRONG TRANSACTION BLOB, Failed to check tx " << txHash << " syntax, rejected";
     tvc.m_verification_failed = true;
@@ -1796,7 +1796,7 @@ bool core::handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& 
     return false;
   }
 
-  bool r = add_new_tx(tx, txHash, blobSize, tvc, keptByBlock, db);
+  bool r = add_new_tx(tx, txHash, blobSize, tvc, keptByBlock);
   if (tvc.m_verification_failed) {
     if (!tvc.m_tx_fee_too_small) {
       logger(ERROR) << "Transaction verification failed: " << txHash;

@@ -1077,7 +1077,6 @@ std::vector<Crypto::Hash> Blockchain::buildSparseChain(const Crypto::Hash& start
 std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& startBlockId) const {
   const Crypto::Hash hash = m_currency.genesisBlockHash();
   bool r = Tools::getDefaultDbType() != "lmdb";
-
   std::vector<Crypto::Hash> sparseChain;
 
     bool R = r ? (m_blockIndex.size() == 0) : (m_db->height() < 1);
@@ -2153,6 +2152,7 @@ Crypto::PublicKey Blockchain::get_output_key(uint64_t amount, uint64_t global_in
 
 uint32_t Blockchain::findBlockchainSupplement(const std::vector<Crypto::Hash>& qblock_ids) {
   bool r = Tools::getDefaultDbType() != "lmdb";
+
   assert(!qblock_ids.empty());
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
 
@@ -3766,13 +3766,14 @@ bool Blockchain::getTransactionIdsByPaymentId(const Crypto::Hash& paymentId, std
 
 bool Blockchain::loadTransactions(const Block& block, std::vector<Transaction>& transactions) {
   transactions.resize(block.transactionHashes.size());
+
   size_t transactionSize;
   uint64_t fee;
   for (size_t i = 0; i < block.transactionHashes.size(); ++i) {
     if (!m_tx_pool.take_tx(block.transactionHashes[i], transactions[i], transactionSize, fee)) {
       tx_verification_context context;
       for (size_t j = 0; j < i; ++j) {
-        if (!m_tx_pool.add_tx(transactions[i - 1 - j], context, true, *m_db)) {
+        if (!m_tx_pool.add_tx(transactions[i - 1 - j], context, true)) {
           throw std::runtime_error("Blockchain::loadTransactions, failed to add transaction to pool");
         }
       }
@@ -3786,21 +3787,10 @@ bool Blockchain::loadTransactions(const Block& block, std::vector<Transaction>& 
 
 void Blockchain::saveTransactions(const std::vector<Transaction>& transactions) {
   tx_verification_context context;
+
   for (size_t i = 0; i < transactions.size(); ++i) {
-    if (Tools::getDefaultDbType() != "lmdb") {
-      if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true, *m_db)) {
-        logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
-      }
-    } else {
-      std::vector<Crypto::Hash> hashes;
-      txpool_tx_meta_t meta;
-      if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true, *m_db)) {
-        logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
-      }
-      Crypto::Hash hash = getObjectHash(transactions[transactions.size() - 1 - i]);
-      if (!m_db->get_txpool_tx_meta(hash, meta)) {
-        logger(WARNING,BRIGHT_YELLOW) << "Failed to get transaction meta by hash: " << hash;
-      }
+    if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true)) {
+      logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
     }
   }
 }

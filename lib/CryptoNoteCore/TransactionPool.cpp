@@ -46,6 +46,7 @@ using namespace Logging;
 #undef ERROR
 
 namespace CryptoNote {
+
   //---------------------------------------------------------------------------------
   // BlockTemplate
   //---------------------------------------------------------------------------------
@@ -122,11 +123,18 @@ namespace CryptoNote {
     m_timestampIndex(blockchainIndexesEnabled) {
   }
   //---------------------------------------------------------------------------------
-  bool tx_memory_pool::add_tx(const Transaction &tx, /*const Crypto::Hash& tx_prefix_hash,*/ const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keptByBlock, BlockchainDB& db) {
+  bool tx_memory_pool::add_tx(const Transaction &tx, /*const Crypto::Hash& tx_prefix_hash,*/ const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keptByBlock) {
+    std::unique_ptr<BlockchainDB> db(new_db("lmdb"));
+    return add_tx(tx, id, blobSize, tvc, keptByBlock, db);
+  }
+
+  bool tx_memory_pool::add_tx(const Transaction &tx, /*const Crypto::Hash& tx_prefix_hash,*/ const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keptByBlock, std::unique_ptr<BlockchainDB>& db) {
     if (!check_inputs_types_supported(tx)) {
       tvc.m_verification_failed = true;
       return false;
     }
+
+    BlockchainDB* m_db = db.release();
 
     uint64_t inputs_amount = 0;
     uint64_t outputs_amount = get_outs_money_amount(tx);
@@ -209,7 +217,7 @@ namespace CryptoNote {
         try
         {
           CryptoNote::Transaction tx_c = tx;
-          db.add_txpool_tx(tx_c, meta);
+          m_db->add_txpool_tx(tx_c, meta);
         m_ttlIndex.emplace(std::make_pair(id, ttl.ttl));
         }
         catch (const std::exception &e)
@@ -285,9 +293,9 @@ namespace CryptoNote {
 
       try
       {
-        db.remove_txpool_tx(getObjectHash(tx));
+        m_db->remove_txpool_tx(getObjectHash(tx));
         CryptoNote::Transaction tx_c = tx;
-        db.add_txpool_tx(tx_c, meta);
+        m_db->add_txpool_tx(tx_c, meta);
         if (!addTransactionInputs(id, tx, keptByBlock))
           return false;
       }
@@ -312,13 +320,12 @@ namespace CryptoNote {
   }
 
   //---------------------------------------------------------------------------------
-  bool tx_memory_pool::add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db) {
+  bool tx_memory_pool::add_tx(const Transaction &tx, tx_verification_context& tvc, bool keeped_by_block) {
     Crypto::Hash h = NULL_HASH;
     size_t blobSize = 0;
     getObjectHash(tx, h, blobSize);
-    return add_tx(tx, h, blobSize, tvc, keeped_by_block, db);
+    return add_tx(tx, h, blobSize, tvc, keeped_by_block);
   }
-  //---------------------------------------------------------------------------------
   bool tx_memory_pool::take_tx(const Crypto::Hash &id, Transaction &tx, size_t& blobSize, uint64_t& fee) {
     std::lock_guard<std::recursive_mutex> lock(m_transactions_lock);
     auto it = m_transactions.find(id);
