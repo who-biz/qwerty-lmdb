@@ -262,9 +262,9 @@ int main(int argc, char* argv[])
       std::cout << "GENESIS_COINBASE_TX_HEX constant has an incorrect value. Please launch: " << CryptoNote::CRYPTONOTE_NAME << "d --" << arg_print_genesis_tx.name;
       return 1;
     }
-    std::unique_ptr<BlockchainDB> db(new_db(Tools::getDefaultDbType()));
+    std::unique_ptr<BlockchainDB> fake_db(new_db(Tools::getDefaultDbType()));
     CryptoNote::Currency currency = currencyBuilder.currency();
-    CryptoNote::core ccore(db, nullptr, currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
+    CryptoNote::core ccore(fake_db, nullptr, currency, nullptr, logManager, command_line::get_arg(vm, arg_enable_blockchain_indexes));
 
 	bool disable_checkpoints = command_line::get_arg(vm, arg_disable_checkpoints);
 	if (!disable_checkpoints) {

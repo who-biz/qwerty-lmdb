@@ -209,8 +209,10 @@ namespace CryptoNote {
         memset(meta.padding, 0, sizeof(meta.padding));
         try
         {
+          m_db.block_txn_start(false);
           CryptoNote::Transaction tx_c = tx;
           m_db.add_txpool_tx(tx_c, meta);
+          m_db.block_txn_stop();
         m_ttlIndex.emplace(std::make_pair(id, ttl.ttl));
         }
         catch (const std::exception &e)
@@ -286,11 +288,15 @@ namespace CryptoNote {
 
       try
       {
+        m_db.block_txn_start(false);
         m_db.remove_txpool_tx(getObjectHash(tx));
+        m_db.block_txn_stop();
         CryptoNote::Transaction tx_c = tx;
+        m_db.block_txn_start(false);
         m_db.add_txpool_tx(tx_c, meta);
-        if (!addTransactionInputs(id, tx, keptByBlock))
-          return false;
+        m_db.block_txn_stop();
+//        if (!addTransactionInputs(id, tx, keptByBlock))
+//          return false;
       }
       catch (const std::exception &e)
       {
@@ -755,10 +761,10 @@ namespace CryptoNote {
           return false;
         }
         auto ins_res = kei_image_set.insert(id);
-        if (!(ins_res.second)) {
+/*        if (!(ins_res.second)) {
           logger(ERROR, BRIGHT_RED) << "internal error: try to insert duplicate iterator in key_image set";
           return false;
-        }
+        }*/
       } else if (in.type() == typeid(MultisignatureInput)) {
         if (!keptByBlock) {
           const auto& msig = boost::get<MultisignatureInput>(in);

@@ -3766,6 +3766,7 @@ bool Blockchain::getTransactionIdsByPaymentId(const Crypto::Hash& paymentId, std
 
 bool Blockchain::loadTransactions(const Block& block, std::vector<Transaction>& transactions) {
   transactions.resize(block.transactionHashes.size());
+  DB_TX_START
 
   size_t transactionSize;
   uint64_t fee;
@@ -3775,24 +3776,26 @@ bool Blockchain::loadTransactions(const Block& block, std::vector<Transaction>& 
       for (size_t j = 0; j < i; ++j) {
         if (!m_tx_pool.add_tx(transactions[i - 1 - j], context, true, *m_db)) {
           throw std::runtime_error("Blockchain::loadTransactions, failed to add transaction to pool");
+          DB_TX_STOP
         }
       }
-
       return false;
     }
   }
-
+  DB_TX_STOP
   return true;
 }
 
 void Blockchain::saveTransactions(const std::vector<Transaction>& transactions) {
   tx_verification_context context;
-
+  DB_TX_START
   for (size_t i = 0; i < transactions.size(); ++i) {
     if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true, *m_db)) {
       logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
+      DB_TX_STOP
     }
   }
+  DB_TX_STOP
 }
 
 bool Blockchain::addMessageQueue(MessageQueue<BlockchainMessage>& messageQueue) {
@@ -4125,17 +4128,23 @@ bool Blockchain::isBlockInMainChain(const Crypto::Hash& blockId) {
 
 void Blockchain::add_txpool_tx(Transaction &tx, const txpool_tx_meta_t &meta)
 {
+  DB_TX_START
   m_db->add_txpool_tx(tx, meta);
+  DB_TX_STOP
 }
 
 void Blockchain::update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t &meta)
 {
+  DB_TX_START
   m_db->update_txpool_tx(txid, meta);
+  DB_TX_STOP
 }
 
 void Blockchain::remove_txpool_tx(const Crypto::Hash &txid)
 {
+  DB_TX_START
   m_db->remove_txpool_tx(txid);
+  DB_TX_STOP
 }
 
 uint64_t Blockchain::get_txpool_tx_count() const

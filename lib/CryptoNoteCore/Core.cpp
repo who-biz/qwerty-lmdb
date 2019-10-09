@@ -783,12 +783,7 @@ void core::update_block_template_and_resume_mining() {
 
 bool core::handle_block_found(Block& b) {
   block_verification_context bvc = boost::value_initialized<block_verification_context>();
-  bool r = Tools::getDefaultDbType() != "lmdb";
-  if (r) {
-    handle_incoming_block(b, bvc, true, true);
-  } else {
-    handleBlockFound(b);
-  }
+  handleBlockFound(b);
   if (bvc.m_verification_failed) {
     logger(ERROR) << "mined block failed verification";
   }
@@ -878,9 +873,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
     }
-    m_blockchain.prepare_handle_incoming_blocks(blocks);
-    m_blockchain.addNewBlock(b, bvc);
-    m_blockchain.cleanup_handle_incoming_blocks(true);
+//    m_blockchain.prepare_handle_incoming_blocks(blocks);
+    m_blockchain.add_new_block(b, bvc);
+ //   m_blockchain.cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
   } else {
