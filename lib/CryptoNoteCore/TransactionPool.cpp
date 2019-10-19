@@ -220,11 +220,11 @@ namespace CryptoNote {
           logger (ERROR,BRIGHT_RED) << "transaction already exists at inserting in memory pool: " << e.what();
           return false;
         }
-        tvc.m_verifivation_impossible = true;
+//        tvc.m_verifivation_impossible = true;
         tvc.m_added_to_pool = true;
       }
       maxUsedBlock.clear();
-      tvc.m_verifivation_impossible = true;
+//      tvc.m_verifivation_impossible = true;
 
    }
 

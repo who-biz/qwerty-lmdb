@@ -77,42 +77,29 @@ void BlockchainDB::add_transaction(const Crypto::Hash& blk_hash, const CryptoNot
   {
     tx_hash = *tx_hash_ptr;
   }
+    std::vector<uint64_t> amount_output_indices;
 
-  for (const CryptoNote::TransactionInput& tx_input : tx.inputs)
-  {
-    if (tx_input.type() == typeid(CryptoNote::KeyInput))
-    {
-      add_spent_key(boost::get<CryptoNote::KeyInput>(tx_input).keyImage);
-    }
-    else if (tx_input.type() == typeid(CryptoNote::BaseInput))
-    {
-      /* nothing to do here */
-      miner_tx = true;
-    }
-    else
-    {
-      //Logger(INFO, WHITE) << "Unsupported input type, removing key images and aborting transaction addition";
-      for (const CryptoNote::TransactionInput& tx_input : tx.inputs)
-      {
-        if (tx_input.type() == typeid(CryptoNote::KeyInput))
-        {
-          remove_spent_key(boost::get<CryptoNote::KeyInput>(tx_input).keyImage);
+        for (uint16_t o = 0; o < tx.outputs.size(); ++o) {
+          const auto& out = tx.outputs[o];
+          if (out.target.type() == typeid(KeyOutput)) {
+            amount_output_indices.push_back(add_output(tx_hash, out, o, tx.unlockTime));
+          } else if (out.target.type() == typeid(MultisignatureOutput)) {
+            amount_output_indices.push_back(add_output(tx_hash, out, o, tx.unlockTime));
+          }
         }
-      }
-      return;
-    }
-}
+        for (auto& in : tx.inputs) {
+          if (in.type() == typeid(KeyInput)) {
+            add_spent_key(::boost::get<KeyInput>(in).keyImage);
+          } else if (in.type() == typeid(MultisignatureInput)) {
+//           ::boost::get<MultisignatureInput>(in).isUsed = true;
+          } else if (in.type() == typeid(CryptoNote::BaseInput)) {
+            miner_tx = true;
+            /* in_gen */
+          }
+        }
+
   uint64_t tx_id = add_transaction_data(blk_hash, tx, tx_hash);
 
-  std::vector<uint64_t> amount_output_indices;
-
-  // iterate tx.vout using indices instead of C++11 foreach syntax because
-  // we need the index
-  for (uint64_t i = 0; i < tx.outputs.size(); ++i)
-  {
-      CryptoNote::TransactionOutput vout = tx.outputs[i];
-      amount_output_indices.push_back(add_output(tx_hash, vout, i, tx.unlockTime));
-  }
   add_tx_amount_output_indices(tx_id, amount_output_indices);
 }
 

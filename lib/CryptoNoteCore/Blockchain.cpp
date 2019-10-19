@@ -467,13 +467,9 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
   {
     try
     {
-      std::vector<uint64_t> off;
-      for (const auto& each : absolute_offsets)
-      {
-        uint64_t conv = each;
-        off.push_back(conv);
-      }
-      m_db->get_output_key(tx_in_to_key.amount, off, outputs);
+      std::vector<uint64_t> longer;
+      for (const auto& each : absolute_offsets) { longer.push_back(static_cast<uint64_t>(each)); }
+      m_db->get_output_key(tx_in_to_key.amount, longer, outputs, true);
       if (absolute_offsets.size() != outputs.size())
       {
         logger(ERROR, BRIGHT_RED) << "Output does not exist! amount = " << std::to_string(tx_in_to_key.amount);
@@ -520,6 +516,7 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
     try
     {
       output_data_t output_index;
+      tx_out_index tx_out_ind;
       try
       {
         // get tx hash and output index for output
@@ -528,8 +525,11 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
         else
           output_index = m_db->get_output_key(tx_in_to_key.amount, i);
 
+         tx_out_ind = m_db->get_output_tx_and_index(tx_in_to_key.amount, i);
+
         // call to the passed boost visitor to grab the public key for the output
-        if (!vis.handle_output(output_index.unlock_time, output_index.pubkey))
+        Transaction tx = m_db->get_tx(tx_out_ind.first);
+        if (!vis.handle_output(tx, output_index.unlock_time, tx.outputs[i]))
         {
           logger(ERROR, BRIGHT_RED) << "Failed to handle_output for output no = " << std::to_string(count) << ", with absolute offset " << std::to_string(i);
           return false;
@@ -540,6 +540,7 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
         logger(ERROR, BRIGHT_RED) <<"Output does not exist! amount = " << std::to_string(tx_in_to_key.amount) << ", absolute_offset = " << std::to_string(i);
         return false;
       }
+
       // if on last output and pmax_related_block_height not null pointer
       if(++count == absolute_offsets.size() && pmax_related_block_height)
       {
@@ -2011,20 +2012,36 @@ uint32_t Blockchain::getAlternativeBlocksCount() {
 
 bool Blockchain::add_out_to_get_random_outs(std::vector<std::pair<TransactionIndex, uint16_t>>& amount_outs, COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::outs_for_amount& result_outs, uint64_t amount, size_t i) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  const Transaction& tx = transactionByIndex(amount_outs[i].first).tx;
-  if (!(tx.outputs.size() > amount_outs[i].second)) {
-    logger(ERROR, BRIGHT_RED) << "internal error: in global outs index, transaction out index="
-      << amount_outs[i].second << " more than transaction outputs = " << tx.outputs.size() << ", for tx id = " << getObjectHash(tx); return false;
+  bool r = Tools::getDefaultDbType() != "lmdb";
+  if (r) {
+    const Transaction& tx = transactionByIndex(amount_outs[i].first).tx;
+    if (!(tx.outputs.size() > amount_outs[i].second)) {
+      logger(ERROR, BRIGHT_RED) << "internal error: in global outs index, transaction out index="
+        << amount_outs[i].second << " more than transaction outputs = " << tx.outputs.size() << ", for tx id = " << getObjectHash(tx); return false;
+    }
+    if (!(tx.outputs[amount_outs[i].second].target.type() == typeid(KeyOutput))) { logger(ERROR, BRIGHT_RED) << "unknown tx out type"; return false; }
+    //check if transaction is unlocked
+    if (!is_tx_spendtime_unlocked(tx.unlockTime))
+      return false;
+    COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::out_entry& oen = *result_outs.outs.insert(result_outs.outs.end(), COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::out_entry());
+    oen.global_amount_index = static_cast<uint32_t>(i);
+    oen.out_key = boost::get<KeyOutput>(tx.outputs[amount_outs[i].second].target).key;
+  } else {
+    std::vector<uint64_t> outs_vec;
+    std::pair<Crypto::Hash,uint64_t> hash_index = m_db->get_output_tx_and_index_from_global(amount_outs[i].first.block);
+    outs_vec = m_db->get_tx_amount_output_indices(amount_outs[i].first.block);   
+    const Transaction& tx = m_db->get_tx(hash_index.first);
+    if (!(outs_vec.size() > amount_outs[i].second)) {
+      logger(ERROR, BRIGHT_RED) << "internal error: in global outs index, transaction out index="
+        << amount_outs[i].second << " more than transaction outputs = " << outs_vec.size() << ", for tx: " << Common::podToHex(hash_index.first); return false;
+    }
+    if (!(tx.outputs[amount_outs[i].second].target.type() == typeid(KeyOutput))) { logger(ERROR, BRIGHT_RED) << "unknown tx out type"; return false; }
+    if(!is_tx_spendtime_unlocked(m_db->get_tx_unlock_time(hash_index.first)))
+      return false;
+    COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::out_entry& oen = *result_outs.outs.insert(result_outs.outs.end(), COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::out_entry());
+    oen.global_amount_index = static_cast<uint32_t>(i);
+    oen.out_key = boost::get<KeyOutput>(tx.outputs[amount_outs[i].second].target).key;
   }
-  if (!(tx.outputs[amount_outs[i].second].target.type() == typeid(KeyOutput))) { logger(ERROR, BRIGHT_RED) << "unknown tx out type"; return false; }
-
-  //check if transaction is unlocked
-  if (!is_tx_spendtime_unlocked(tx.unlockTime))
-    return false;
-
-  COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::out_entry& oen = *result_outs.outs.insert(result_outs.outs.end(), COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::out_entry());
-  oen.global_amount_index = static_cast<uint32_t>(i);
-  oen.out_key = boost::get<KeyOutput>(tx.outputs[amount_outs[i].second].target).key;
   return true;
 }
 
@@ -2375,7 +2392,7 @@ bool Blockchain::checkTransactionInputs(const Transaction& tx, const Crypto::Has
     if (txin.type() == typeid(KeyInput)) {
 
       const KeyInput& in_to_key = boost::get<KeyInput>(txin);
-      if (!(!in_to_key.outputIndexes.empty())) { logger(ERROR, BRIGHT_RED) << "empty in_to_key.outputIndexes in transaction with id " << getObjectHash(tx); return false; }
+      if (in_to_key.outputIndexes.empty()) { logger(ERROR, BRIGHT_RED) << "empty in_to_key.outputIndexes in transaction with id " << getObjectHash(tx); return false; }
 
       if (have_tx_keyimg_as_spent(in_to_key.keyImage)) {
         logger(DEBUGGING) <<
@@ -2475,7 +2492,7 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
         outputs_visitor(std::vector<const Crypto::PublicKey *>& results_collector, Blockchain& bch, ILogger& logger) :m_results_collector(results_collector), m_bch(bch), logger(logger, "outputs_visitor") {
       }
 
-      bool handle_output(uint64_t unlock_time, const Crypto::PublicKey &pubkey)
+      bool handle_output(Transaction tx, uint64_t unlock_time, TransactionOutput out)
       {
         //check tx unlock time
         if (!m_bch.is_tx_spendtime_unlocked(unlock_time))
@@ -2484,7 +2501,13 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
           return false;
         }
 
-        m_results_collector.push_back(&pubkey);
+        if (out.target.type() != typeid(KeyOutput)) {
+          logger(INFO, BRIGHT_WHITE) <<
+            "Output have wrong type id, which=" << out.target.which();
+          return false;
+        }
+
+        m_results_collector.push_back(&boost::get<KeyOutput>(out.target).key);
         return true;
       }
     };
@@ -2496,7 +2519,6 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
         " and count indexes " << txin.outputIndexes.size();
       return false;
     }
-
   }
 
   // additional key_image check, fix discovered by Monero Lab and suggested by "fluffypony" (bitcointalk.org)
@@ -2720,7 +2742,8 @@ bool Blockchain::addNewBlock(const Block& bl_, block_verification_context& bvc) 
 }
 
 const Blockchain::TransactionEntry& Blockchain::transactionByIndex(TransactionIndex index) {
-  return m_blocks[index.block].transactions[index.transaction];
+  bool r = Tools::getDefaultDbType() != "lmdb";
+    return m_blocks[index.block].transactions[index.transaction];
 }
 
 bool Blockchain::pushBlock(const Block& blockData, block_verification_context& bvc) {
