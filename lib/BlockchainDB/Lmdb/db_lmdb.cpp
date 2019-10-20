@@ -2755,7 +2755,7 @@ void BlockchainLMDB::get_output_tx_and_index_from_global(const std::vector<uint6
   TXN_POSTFIX_RDONLY();
 }
 
-void BlockchainLMDB::get_output_key(const uint64_t &amount, const std::vector<uint64_t> &offsets, std::vector<output_data_t> &outputs, bool allow_partial)
+void BlockchainLMDB::get_output_key(const uint64_t &amount, const std::vector<uint32_t> &offsets, std::vector<output_data_t> &outputs, bool allow_partial)
 {
   check_open();
   outputs.clear();

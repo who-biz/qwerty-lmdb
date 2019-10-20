@@ -106,12 +106,14 @@ namespace CryptoNote {
 
   //---------------------------------------------------------------------------------
   tx_memory_pool::tx_memory_pool(
+    std::unique_ptr<BlockchainDB>& m_db,
     const CryptoNote::Currency& currency,
     CryptoNote::ITransactionValidator& validator,
     CryptoNote::ICore& core,
     CryptoNote::ITimeProvider& timeProvider,
     Logging::ILogger& log,
     bool blockchainIndexesEnabled) :
+    m_db(m_db),
     m_currency(currency),
     m_validator(validator),
     m_core(core),
@@ -344,8 +346,14 @@ namespace CryptoNote {
   }
   //---------------------------------------------------------------------------------
   size_t tx_memory_pool::get_transactions_count() const {
+    bool r = Tools::getDefaultDbType() != "lmdb";
     std::lock_guard<std::recursive_mutex> lock(m_transactions_lock);
-    return m_transactions.size();
+    size_t size;
+    if (r) {
+      size = m_transactions.size();
+    } else {
+      size = m_db->get_txpool_tx_count();
+    }
   }
   //---------------------------------------------------------------------------------
   void tx_memory_pool::get_transactions(std::list<Transaction>& txs) const {
@@ -518,6 +526,13 @@ namespace CryptoNote {
         total_size += txd.blobSize;
         logger(DEBUGGING) << "Fusion transaction " << txd.id << " included to block template";
       }
+      txpool_tx_meta_t meta;
+      if (!m_db->get_txpool_tx_meta(txd.id, meta))
+      {
+        logger(ERROR, BRIGHT_RED) << "failed to find tx meta";
+        continue;
+      }
+
     }
 
     for (auto i = m_fee_index.begin(); i != m_fee_index.end(); ++i) {

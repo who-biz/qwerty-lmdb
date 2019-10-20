@@ -87,7 +87,7 @@ core::core(
     : m_db(),
       m_currency(currency),
       logger(logger, "core"),
-      m_mempool(currency, m_blockchain, *this, m_timeProvider, logger, blockchainIndexesEnabled),
+      m_mempool(db, currency, m_blockchain, *this, m_timeProvider, logger, blockchainIndexesEnabled),
       m_blockchain(db, hf, currency, m_mempool, logger, blockchainIndexesEnabled),
       m_miner(new miner(currency, *this, logger)),
       m_starter_message_showed(false)

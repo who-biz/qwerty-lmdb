@@ -88,6 +88,7 @@ namespace CryptoNote {
   class tx_memory_pool: boost::noncopyable {
   public:
     tx_memory_pool(
+      std::unique_ptr<BlockchainDB>& m_db,
       const CryptoNote::Currency& currency,
       CryptoNote::ITransactionValidator& validator,
       CryptoNote::ICore& core,
@@ -107,6 +108,7 @@ namespace CryptoNote {
     bool add_tx(const Transaction &tx, const Crypto::Hash &id, size_t blobSize, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db);
     //gets tx and remove it from pool
     bool take_tx(const Crypto::Hash &id, Transaction &tx, size_t& blobSize, uint64_t& fee);
+
 
     bool on_blockchain_inc(uint64_t new_block_height, const Crypto::Hash& top_block_id);
     bool on_blockchain_dec(uint64_t new_block_height, const Crypto::Hash& top_block_id);
@@ -223,7 +225,7 @@ namespace CryptoNote {
     std::unordered_map<Crypto::Hash, uint64_t> m_recentlyDeletedTransactions;
 
     Logging::LoggerRef logger;
-
+    std::unique_ptr<BlockchainDB>& m_db;
     PaymentIdIndex m_paymentIdIndex;
     TimestampTransactionsIndex m_timestampIndex;
     std::unordered_map<Crypto::Hash, uint64_t> m_ttlIndex;

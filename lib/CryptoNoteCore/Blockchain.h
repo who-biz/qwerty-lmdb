@@ -444,7 +444,7 @@ private:
 
     bool handle_block_to_main_chain(const Block& bl, const Crypto::Hash& id, block_verification_context& bvc);
     HardFork::State get_hard_fork_state() const;
-    void output_scan_worker(const uint64_t amount,const std::vector<uint64_t> &offsets,
+    void output_scan_worker(const uint64_t amount,const std::vector<uint32_t> &offsets,
         std::vector<output_data_t> &outputs, std::unordered_map<Crypto::Hash,
         CryptoNote::Transaction> &txs) const;
     void block_longhash_worker(uint64_t height, const std::vector<CryptoNote::Block> &blocks,
@@ -457,6 +457,7 @@ private:
     bool store_blockchain();
     bool loadTransactions(const Block& block, std::vector<Transaction>& transactions);
     void saveTransactions(const std::vector<Transaction>& transactions);
+    bool check_for_double_spend(const Transaction& tx, key_images_container& keys_this_block) const;
 
     void sendMessage(const BlockchainMessage& message);
 
