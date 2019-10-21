@@ -490,20 +490,7 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
       std::vector<output_data_t> add_outputs;
       for (size_t i = outputs.size(); i < absolute_offsets.size(); i++)
         add_offsets.push_back(absolute_offsets[i]);
-      try
-      {
         m_db->get_output_key(tx_in_to_key.amount, add_offsets, add_outputs, true);
-        if (add_offsets.size() != add_outputs.size())
-        {
-          logger(ERROR, BRIGHT_RED) << "Output does not exist! amount = " << std::to_string(tx_in_to_key.amount);
-          return false;
-        }
-      }
-      catch (...)
-      {
-        logger(ERROR, BRIGHT_RED) << "Output does not exist! amount = " << std::to_string(tx_in_to_key.amount);
-        return false;
-      }
       outputs.insert(outputs.end(), add_outputs.begin(), add_outputs.end());
     }
   }
@@ -642,6 +629,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       if (m_blockchainIndexesEnabled) {
         loadBlockchainIndices();
       }
+
     } else {
       m_blocks.clear();
     }
@@ -693,21 +681,19 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
         m_hardfork->add_fork(mainnet_hard_forks[n].version, mainnet_hard_forks[n].height, mainnet_hard_forks[n].threshold);
       m_hardfork->init();
 
-    if (m_db->height() < 1) {
-      m_db->set_hard_fork(m_hardfork);
-    } else {
+        m_db->set_hard_fork(m_hardfork);
         logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
-//        BlockCacheSerializer loader(*this, get_block_hash(m_db->get_top_block()), logger.getLogger());
-//        loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
-      }
+        BlockCacheSerializer loader(*this, get_block_hash(m_db->get_top_block()), logger.getLogger());
+        loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
 
       if (m_blockchainIndexesEnabled) {
         loadBlockchainIndices();
       }
 
-      logger(WARNING, BRIGHT_YELLOW) << "Building internal structures...";
-      rebuildCache();
-
+      if (!loader.loaded()) {
+        logger(WARNING, BRIGHT_YELLOW) << "Couldn't load from existing, rebuilding internal structures...";
+        rebuildCache();
+      }
 
     if(m_db->height() < 1)
     {
@@ -1972,10 +1958,14 @@ bool Blockchain::handleGetObjects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTI
     e.block = asString(toBinaryArray(bl));
     //pack transactions
     for (Transaction& tx : txs) {
-      e.txs.push_back(asString(toBinaryArray(tx)));
+      if (r) {
+        e.txs.push_back(asString(toBinaryArray(tx)));
+      } else {
+        e.txs.push_back(tx_to_blob(tx));
+      }
     }
   }
-
+/*
   //get another transactions, if need
   std::list<Transaction> txs;
   if (r) {
@@ -1986,7 +1976,7 @@ bool Blockchain::handleGetObjects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTI
   //pack aside transactions
   for (const auto& tx : txs) {
     rsp.txs.push_back(asString(toBinaryArray(tx)));
-  }
+  }*/
   DB_TX_STOP
   return true;
 }
@@ -4223,6 +4213,7 @@ std::vector<uint64_t> timestamps;
         bvc.m_verification_failed = true;
         DB_TX_STOP
         return false;
+      }
     }
     // validate proof_of_work versus difficulty target
     if(!check_hash(proof_of_work, current_diffic))
@@ -4275,27 +4266,28 @@ std::vector<uint64_t> timestamps;
       return false;
     }
 
-      tx_verification_context tvc;
-/*      if(!check_tx_input(tx, tvc))
-      {
+/*      tx_verification_context tvc;
+      if(!check_tx_input(tx, tvc))
+      for (const auto& i : tx.inputs) {
+      if (!check_tx_input(i, getTransactionPrefixHash(tx), tx.signatures[inputIndex], pmax_used_block_height)) {
         logger(ERROR, BRIGHT_RED) << "Block with id: " << id  << " has at least one transaction (id: " << tx_id << " with invalid inputs!";
         add_block_as_invalid(bl, id);
         logger(ERROR, BRIGHT_RED) << "Block with id " << id << " added as invalid because of wrong inputs in transactions";
         bvc.m_verification_failed = true;
-//        return_tx_to_pool(txs);
+        return_tx_to_pool(txs);
         DB_TX_STOP
         return false;
-      }*/
-
+      }
+    }
+*/
   m_blocks_txs_check.clear();
+}
 
   uint64_t base_reward = 0;
   int64_t emissionChange = 0;
   m_hardfork->get_current_version();
   uint64_t already_generated_coins = m_db->height() ? m_db->get_block_already_generated_coins(m_db->height()) : 0;
   if (!validate_miner_transaction(bl, m_db->height() , cumulative_block_size, already_generated_coins, fee_summary, base_reward, emissionChange)) {
- // if(!validate_miner_transaction(bl, cumulative_block_size, fee_summary, base_reward, already_generated_coins, bvc.m_partial_block_reward, m_hardfork->get_current_version())) {
- // {
     logger(ERROR, BRIGHT_RED) << "Block with id: " << id << "has incorrect miner tx";
     bvc.m_verification_failed = true;
     //return_tx_to_pool(txs);
@@ -4361,4 +4353,4 @@ std::vector<uint64_t> timestamps;
   return true;
 }
 
-}}}
+}

@@ -8,7 +8,6 @@ message(STATUS "Generated version.h header: ${CMAKE_CURRENT_BINARY_DIR}/version.
 
 set(QwertycoinFramework_INCLUDE_DIRS
     "${Boost_INCLUDE_DIRS}"
-    "${MINIUPNP_INCLUDE_DIRS}"
     "${SPARSEHASH_INCLUDE_DIRS}"
     "${CMAKE_CURRENT_BINARY_DIR}"
     "${CMAKE_CURRENT_LIST_DIR}"
@@ -497,7 +496,6 @@ set(QwertycoinFramework_P2p_SOURCES
 )
 
 set(QwertycoinFramework_P2p_LIBS
-    MiniUPnP::miniupnpc
     QwertycoinFramework::CryptoNoteProtocol
 )
 

@@ -354,6 +354,7 @@ namespace CryptoNote {
     } else {
       size = m_db->get_txpool_tx_count();
     }
+    return size;
   }
   //---------------------------------------------------------------------------------
   void tx_memory_pool::get_transactions(std::list<Transaction>& txs) const {

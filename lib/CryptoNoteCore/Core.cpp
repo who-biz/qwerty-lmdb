@@ -850,7 +850,6 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
   }
   bool r = Tools::getDefaultDbType() != "lmdb";
   if (!r) {
-    LockedBlockchainStorage lbs(m_blockchain); 
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
     std::list<block_complete_entry> blocks;
     try
@@ -873,9 +872,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
     }
-//    m_blockchain.prepare_handle_incoming_blocks(blocks);
+    m_blockchain.prepare_handle_incoming_blocks(blocks);
     m_blockchain.add_new_block(b, bvc);
- //   m_blockchain.cleanup_handle_incoming_blocks(true);
+    m_blockchain.cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
   } else {
@@ -922,11 +921,10 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
 
   bool core::cleanup_handle_incoming_blocks(bool force_sync)
   {
-    LockedBlockchainStorage lbs(m_blockchain);
 
     bool success = false;
     try {
-      success = lbs->cleanup_handle_incoming_blocks(force_sync);
+      success = m_blockchain.cleanup_handle_incoming_blocks(force_sync);
     }
     catch (...) {}
     return success;
@@ -991,7 +989,6 @@ bool core::handle_get_objects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTIFY_R
 }
 
 Crypto::Hash core::getBlockIdByHeight(uint32_t height) {
-  LockedBlockchainStorage lbs(m_blockchain);
   if (height < m_blockchain.getCurrentBlockchainHeight()) {
     return m_blockchain.getBlockIdByHeight(height);
   } else {
@@ -1068,9 +1065,8 @@ bool core::queryBlocks(
   std::vector<BlockFullInfo>& entries) {
 
   bool r = Tools::getDefaultDbType() != "lmdb";
-  LockedBlockchainStorage lbs(m_blockchain);
 
-  uint32_t currentHeight = lbs->getCurrentBlockchainHeight();
+  uint32_t currentHeight = m_blockchain.getCurrentBlockchainHeight();
   uint32_t startOffset = 0;
   uint32_t startFullOffset = 0;
 
@@ -1097,7 +1093,7 @@ bool core::queryBlocks(
   }
 
   std::list<Block> blocks;
-  lbs->getBlocks(startFullOffset, blocksLeft, blocks);
+  m_blockchain.getBlocks(startFullOffset, blocksLeft, blocks);
 
   for (auto& b : blocks) {
     BlockFullInfo item;
@@ -1108,11 +1104,7 @@ bool core::queryBlocks(
       // query transactions
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-      if (r) {
-        lbs->getTransactions(b.transactionHashes, txs, missedTxs);
-      } else {
-        lbs->get_transactions(b.transactionHashes, txs, missedTxs);
-      }
+      m_blockchain.getTransactions(b.transactionHashes, txs, missedTxs);
       // fill data
       block_complete_entry& completeEntry = item;
       completeEntry.block = asString(toBinaryArray(b));
@@ -1128,7 +1120,6 @@ bool core::queryBlocks(
 }
 
 bool core::findStartAndFullOffsets(const std::vector<Crypto::Hash>& knownBlockIds, uint64_t timestamp, uint32_t& startOffset, uint32_t& startFullOffset) {
-  LockedBlockchainStorage lbs(m_blockchain);
 
   if (knownBlockIds.empty()) {
     logger(ERROR, BRIGHT_RED) << "knownBlockIds is empty";
@@ -1140,8 +1131,8 @@ bool core::findStartAndFullOffsets(const std::vector<Crypto::Hash>& knownBlockId
     return false;
   }
 
-  startOffset = lbs->findBlockchainSupplement(knownBlockIds);
-  if (!lbs->getLowerBound(timestamp, startOffset, startFullOffset)) {
+  startOffset = m_blockchain.findBlockchainSupplement(knownBlockIds);
+  if (!m_blockchain.getLowerBound(timestamp, startOffset, startFullOffset)) {
     startFullOffset = startOffset;
   }
 
@@ -1861,7 +1852,6 @@ void core::rollbackBlockchain(uint32_t height) {
 
 bool core::handleBlockFound(Block& b)
 {
-  LockedBlockchainStorage lbs(m_blockchain); 
    block_verification_context bvc = boost::value_initialized<block_verification_context>();
     m_miner->pause();
     std::list<block_complete_entry> blocks;
@@ -1885,8 +1875,9 @@ bool core::handleBlockFound(Block& b)
     {
      logger(ERROR, BRIGHT_RED) << "Something went wrong at handleBlockFound!";
     }
-    lbs->prepare_handle_incoming_blocks(blocks);
-    lbs->add_new_block(b, bvc);
+    
+    m_blockchain.prepare_handle_incoming_blocks(blocks);
+    m_blockchain.add_new_block(b, bvc);
     m_blockchain.cleanup_handle_incoming_blocks(true);
     update_miner_block_template();
     m_miner->resume();

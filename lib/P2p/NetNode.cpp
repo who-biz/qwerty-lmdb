@@ -29,9 +29,6 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/utility/value_init.hpp>
 
-#include <miniupnpc/miniupnpc.h>
-#include <miniupnpc/upnpcommands.h>
-
 #include <System/Context.h>
 #include <System/ContextGroupTimeout.h>
 #include <System/EventLock.h>
@@ -69,40 +66,6 @@ size_t get_random_index_with_fixed_probability(size_t max_index) {
   return (x*x*x) / (max_index*max_index); //parabola \/
 }
 
-
-void addPortMapping(Logging::LoggerRef& logger, uint32_t port) {
-  // Add UPnP port mapping
-  logger(INFO) << "Attempting to add IGD port mapping.";
-  int result;
-  UPNPDev* deviceList = upnpDiscover(1000, NULL, NULL, 0, 0, 2, &result);
-  UPNPUrls urls;
-  IGDdatas igdData;
-  char lanAddress[64];
-  result = UPNP_GetValidIGD(deviceList, &urls, &igdData, lanAddress, sizeof lanAddress);
-  freeUPNPDevlist(deviceList);
-  if (result != 0) {
-    if (result == 1) {
-      std::ostringstream portString;
-      portString << port;
-      if (UPNP_AddPortMapping(urls.controlURL, igdData.first.servicetype, portString.str().c_str(),
-        portString.str().c_str(), lanAddress, CryptoNote::CRYPTONOTE_NAME, "TCP", 0, "0") != 0) {
-        logger(ERROR) << "UPNP_AddPortMapping failed.";
-      } else {
-        logger(INFO, BRIGHT_GREEN) << "Added IGD port mapping.";
-      }
-    } else if (result == 2) {
-      logger(INFO) << "IGD was found but reported as not connected.";
-    } else if (result == 3) {
-      logger(INFO) << "UPnP device was found but not recoginzed as IGD.";
-    } else {
-      logger(ERROR) << "UPNP_GetValidIGD returned an unknown result code.";
-    }
-
-    FreeUPNPUrls(&urls);
-  } else {
-    logger(INFO) << "No IGD was found.";
-  }
-}
 
 bool parse_peer_from_string(NetworkAddress& pe, const std::string& node_addr) {
   return Common::parseIpAddressAndPort(pe.ip, pe.port, node_addr);
@@ -583,7 +546,6 @@ namespace CryptoNote
     if(m_external_port)
       logger(INFO) << "External port defined as " << m_external_port;
 
-    addPortMapping(logger, m_listeningPort);
 
     return true;
   }

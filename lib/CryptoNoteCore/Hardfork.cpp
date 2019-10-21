@@ -160,7 +160,7 @@ void HardFork::init()
     heights.push_back(Params(original_version, 0, 0));
 
   versions.clear();
-  for (size_t n = 0; n < 256; ++n)
+  for (size_t n = 0; n < 255; ++n)
     last_versions[n] = 0;
   current_fork_index = 0;
 
@@ -211,7 +211,7 @@ bool HardFork::reorganize_from_block_height(uint64_t const& height)
 
   versions.clear();
 
-  for (size_t n = 0; n < 256; ++n)
+  for (size_t n = 0; n < 255; ++n)
     last_versions[n] = 0;
   const uint64_t rescan_height = height >= (window_size - 1) ? height - (window_size  -1) : 0;
   const uint8_t start_version = height == 0 ? original_version : db.get_hard_fork_version(height);

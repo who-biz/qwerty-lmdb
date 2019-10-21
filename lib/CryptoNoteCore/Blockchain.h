@@ -441,6 +441,8 @@ private:
     bool checkCheckpoints(uint32_t& lastValidCheckpointHeight);
     void removeLastBlock();
     bool checkUpgradeHeight(const UpgradeDetector& upgradeDetector);
+    bool m_db_default_sync;
+
 
     bool handle_block_to_main_chain(const Block& bl, const Crypto::Hash& id, block_verification_context& bvc);
     HardFork::State get_hard_fork_state() const;
@@ -520,11 +522,6 @@ private:
           *pmax_related_block_height = amount_outs_vec[i].first.block;
         }
       }
-
-    std::unique_ptr<BlockchainDB> main_db(new_db(Tools::getDefaultDbType()));
-    BlockchainDB* m_db = main_db.release();
-    blockchain_db_sync_mode m_db_sync_mode;
-    bool m_db_default_sync;
 
     }
 
