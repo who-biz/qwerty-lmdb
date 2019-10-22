@@ -9,7 +9,7 @@ if(NOT CMAKE_CXX_STANDARD)
 endif()
 
 # Don't use e.g. GNU extension (like -std=gnu++11) for portability
-set(CMAKE_CXX_EXTENSIONS OFF)
+#set(CMAKE_CXX_EXTENSIONS OFF)
 
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     # Clang and AppleClang

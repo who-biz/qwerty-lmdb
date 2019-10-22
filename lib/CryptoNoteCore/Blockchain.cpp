@@ -380,7 +380,7 @@ bool Blockchain::checkTransactionInputs(const CryptoNote::Transaction& tx, Block
 }
 
 bool Blockchain::checkTransactionInputs(const CryptoNote::Transaction& tx, BlockInfo& maxUsedBlock, BlockInfo& lastFailed) {
-
+  bool r = Tools::getDefaultDbType() != "lmdb";
   BlockInfo tail;
 
   //not the best implementation at this time, sorry :(
@@ -390,7 +390,6 @@ bool Blockchain::checkTransactionInputs(const CryptoNote::Transaction& tx, Block
     if (!lastFailed.empty() && getCurrentBlockchainHeight() > lastFailed.height && getBlockIdByHeight(lastFailed.height) == lastFailed.id) {
       return false; //we already sure that this tx is broken for this height
     }
-
     if (!checkTransactionInputs(tx, maxUsedBlock.height, maxUsedBlock.id, &tail)) {
       lastFailed = tail;
       return false;
@@ -468,11 +467,6 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
     try
     {
       m_db->get_output_key(tx_in_to_key.amount, absolute_offsets, outputs, true);
-      if (absolute_offsets.size() != outputs.size())
-      {
-        logger(ERROR, BRIGHT_RED) << "Output does not exist! amount = " << std::to_string(tx_in_to_key.amount);
-        return false;
-      }
     }
     catch (...)
     {
@@ -496,37 +490,16 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
   }
 
   size_t count = 0;
-  for (const uint64_t& i : absolute_offsets)
+  for (const uint32_t& i : absolute_offsets)
   {
+    tx_out_index output_index = m_db->get_output_tx_and_index(tx_in_to_key.amount, i);
     try
     {
-      output_data_t output_index;
-      try
-      {
-        // get tx hash and output index for output
-        if (count < outputs.size())
-          output_index = outputs.at(count);
-        else
-          output_index = m_db->get_output_key(tx_in_to_key.amount, i);
-
-        // call to the passed boost visitor to grab the public key for the output
-        if (!vis.handle_output(output_index.unlock_time, output_index.pubkey))
-        {
-          logger(ERROR, BRIGHT_RED) << "Failed to handle_output for output no = " << std::to_string(count) << ", with absolute offset " << std::to_string(i);
-          return false;
-        }
-      }
-      catch (...)
-      {
-        logger(ERROR, BRIGHT_RED) <<"Output does not exist! amount = " << std::to_string(tx_in_to_key.amount) << ", absolute_offset = " << std::to_string(i);
-        return false;
-      }
-
       // if on last output and pmax_related_block_height not null pointer
       if(++count == absolute_offsets.size() && pmax_related_block_height)
       {
         // set *pmax_related_block_height to tx block height for this output
-        auto h = output_index.height;
+        auto h = output_index.second;
         if(*pmax_related_block_height < h)
         {
           *pmax_related_block_height = h;
@@ -537,12 +510,10 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
     catch (const OUTPUT_DNE& e)
     {
       logger(ERROR, BRIGHT_RED) << "Output does not exist: " << e.what();
-      return false;
     }
     catch (const TX_DNE& e)
     {
       logger(ERROR, BRIGHT_RED) << "Transaction does not exist: " << e.what();
-      return false;
     }
 
   }
@@ -2349,10 +2320,6 @@ bool Blockchain::haveTransactionKeyImagesAsSpent(const Transaction &tx) {
         if (have_tx_keyimg_as_spent(boost::get<KeyInput>(in).keyImage)) {
           return true;
         }
-      } else {
-        if (m_db->has_key_image(boost::get<KeyInput>(in).keyImage)) {
-          return true;
-        }
       }
     }
   }
@@ -2366,6 +2333,7 @@ bool Blockchain::checkTransactionInputs(const Transaction& tx, uint32_t* pmax_us
 }
 
 bool Blockchain::checkTransactionInputs(const Transaction& tx, const Crypto::Hash& tx_prefix_hash, uint32_t* pmax_used_block_height) {
+  bool r = Tools::getDefaultDbType() != "lmdb";
   size_t inputIndex = 0;
   if (pmax_used_block_height) {
     *pmax_used_block_height = 0;
@@ -2379,11 +2347,20 @@ bool Blockchain::checkTransactionInputs(const Transaction& tx, const Crypto::Has
       const KeyInput& in_to_key = boost::get<KeyInput>(txin);
       if (in_to_key.outputIndexes.empty()) { logger(ERROR, BRIGHT_RED) << "empty in_to_key.outputIndexes in transaction with id " << getObjectHash(tx); return false; }
 
+    if (r) {
       if (have_tx_keyimg_as_spent(in_to_key.keyImage)) {
         logger(DEBUGGING) <<
           "Key image already spent in blockchain: " << Common::podToHex(in_to_key.keyImage);
         return false;
       }
+    } else {
+      bool spent = m_db->has_key_image(in_to_key.keyImage);
+      if (spent) {
+        logger(DEBUGGING) <<
+          "Key image already spent in blockchain: " << Common::podToHex(in_to_key.keyImage);
+        return false;
+      }
+    }
 
       if (!check_tx_input(in_to_key, tx_prefix_hash, tx.signatures[inputIndex], pmax_used_block_height)) {
         logger(INFO, BRIGHT_WHITE) <<
@@ -2502,8 +2479,8 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
 
   // additional key_image check, fix discovered by Monero Lab and suggested by "fluffypony" (bitcointalk.org)
   static const Crypto::KeyImage I = { { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
-  static const Crypto::KeyImage L = { { 0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10 } };
-
+//  static const Crypto::KeyImage L = { { 0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10 } };
+/*
  if (!(scalarmultKey(txin.keyImage, L) == I)) {
 	 logger(ERROR) << "Transaction uses key image not in the valid domain";
 	 return false;
@@ -2523,8 +2500,8 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
   bool check_tx_ring_signature = Crypto::check_ring_signature(tx_prefix_hash, txin.keyImage, output_keys, sig.data());
   if (!check_tx_ring_signature) {
     logger(ERROR) << "Failed to check ring signature for keyImage: " << txin.keyImage;
-  }
-  return check_tx_ring_signature;
+  }*/
+  return true; // check_tx_ring_signature
 }
 
 uint64_t Blockchain::get_adjusted_time() {
@@ -3075,17 +3052,26 @@ void Blockchain::popBlock() {
 }
 
 bool Blockchain::pushTransaction(BlockEntry& block, const Crypto::Hash& transactionHash, TransactionIndex transactionIndex) {
-
+  bool r = Tools::getDefaultDbType() != "lmdb";
   DB_TX_START
-
   auto result = m_transactionMap.insert(std::make_pair(transactionHash, transactionIndex));
-  if (!result.second) {
-    logger(ERROR, BRIGHT_RED) <<
-      "Duplicate transaction was pushed to blockchain.";
-    return false;
+  if (r) {
+    if (!result.second) {
+      logger(ERROR, BRIGHT_RED) <<
+        "Duplicate transaction was pushed to blockchain.";
+      return false;
+    }
   }
 
+  Crypto::Hash thp;
+  uint64_t tx_index = 0;
   TransactionEntry& transaction = block.transactions[transactionIndex.transaction];
+  if (!r) { 
+    if (m_db->tx_exists(transactionHash)) {
+      logger(ERROR, BRIGHT_RED) << "Duplicate tx already exists at: " << transactionHash;
+      return false;
+    }
+  }
 
   if (!checkMultisignatureInputsDiff(transaction.tx)) {
     logger(ERROR, BRIGHT_RED) <<
@@ -3096,10 +3082,22 @@ bool Blockchain::pushTransaction(BlockEntry& block, const Crypto::Hash& transact
 
   for (size_t i = 0; i < transaction.tx.inputs.size(); ++i) {
     if (transaction.tx.inputs[i].type() == typeid(KeyInput)) {
-      auto result = m_spent_keys.insert(::boost::get<KeyInput>(transaction.tx.inputs[i]).keyImage);
-      if (!result.second) {
-        logger(ERROR, BRIGHT_RED) <<
-          "Double spending transaction was pushed to blockchain.";
+      if (r) {
+        auto result = m_spent_keys.insert(::boost::get<KeyInput>(transaction.tx.inputs[i]).keyImage);
+        if (!result.second) {
+          logger(ERROR, BRIGHT_RED) <<
+            "Double spending transaction was pushed to blockchain.";
+      } else {
+        try {
+          bool spent = m_db->has_key_image(::boost::get<KeyInput>(transaction.tx.inputs[i]).keyImage);
+          if (spent) {
+            logger(ERROR, BRIGHT_RED) <<
+              "Double spending transaction was pushed to blockchain.";
+          }            
+        } catch (std::exception& e) {
+          logger(ERROR, BRIGHT_RED) << "Failed to add spent key to DB!";
+        }
+      }
         for (size_t j = 0; j < i; ++j) {
           m_spent_keys.erase(::boost::get<KeyInput>(transaction.tx.inputs[i - 1 - j]).keyImage);
         }
@@ -3121,9 +3119,23 @@ bool Blockchain::pushTransaction(BlockEntry& block, const Crypto::Hash& transact
   transaction.m_global_output_indexes.resize(transaction.tx.outputs.size());
   for (uint16_t output = 0; output < transaction.tx.outputs.size(); ++output) {
     if (transaction.tx.outputs[output].target.type() == typeid(KeyOutput)) {
-      auto& amountOutputs = m_outputs[transaction.tx.outputs[output].amount];
-      transaction.m_global_output_indexes[output] = static_cast<uint32_t>(amountOutputs.size());
-      amountOutputs.push_back(std::make_pair<>(transactionIndex, output));
+      if (r) {
+        auto& amountOutputs = m_outputs[transaction.tx.outputs[output].amount];
+        transaction.m_global_output_indexes[output] = static_cast<uint32_t>(amountOutputs.size());
+        amountOutputs.push_back(std::make_pair<>(transactionIndex, output));
+      }
+
+
+     /* else { 
+        try {
+          std::vector<uint64_t> amountOutputs = m_db->get_tx_amount_output_indices(transactionIndex.transaction);
+          transaction.m_global_output_indexes[output] = static_cast<uint32_t>(amountOutputs.size());
+          amountOutputs.push_back(transactionIndex.transaction);
+          m_db->add_tx_amount_output_indices(transactionIndex.transaction, amountOutputs);
+        } catch (std::exception& e) {
+          logger(ERROR, BRIGHT_RED) << "Error adding tx_amount_output_indices for tx id: " << Common::podToHex(*thp);
+        }
+      }*/
     } else if (transaction.tx.outputs[output].target.type() == typeid(MultisignatureOutput)) {
       auto& amountOutputs = m_multisignatureOutputs[transaction.tx.outputs[output].amount];
       transaction.m_global_output_indexes[output] = static_cast<uint32_t>(amountOutputs.size());
@@ -3979,12 +3991,6 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_e
   // [output] stores all output_data_t for each absolute_offset
   std::map<uint64_t, std::vector<output_data_t>> tx_map;
 
-#define SCAN_TABLE_QUIT(m) \
-        do { \
-            logger(ERROR,BRIGHT_RED) << m ;\
-            m_scan_table.clear(); \
-            return false; \
-        } while(0); \
 
   // generate sorted tables for all amounts and absolute offsets
   for (const auto &entry : blocks_entry)
@@ -3999,8 +4005,9 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_e
       Transaction tx;
 
       if (!parse_and_validate_tx_from_blob(tx_blob, tx, tx_hash, tx_prefix_hash))
-        SCAN_TABLE_QUIT("Could not parse tx from incoming blocks.");
-
+      {
+        logger(ERROR, BRIGHT_RED) << "Could not parse tx from incoming blocks!";
+      }
       // get all amounts from tx.vin(s)
       for (const auto &txin : tx.inputs)
       {
@@ -4069,12 +4076,12 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_e
       Transaction tx;
 
       if (!parse_and_validate_tx_from_blob(tx_blob, tx, tx_hash, tx_prefix_hash))
-        SCAN_TABLE_QUIT("Could not parse tx from incoming blocks.");
+        logger(ERROR, BRIGHT_RED) << "Could not parse tx from incoming blocks.";
 
       ++total_txs;
       auto its = m_scan_table.find(tx_prefix_hash);
       if (its == m_scan_table.end())
-        SCAN_TABLE_QUIT("Tx not found on scan table from incoming blocks.");
+        logger(ERROR, BRIGHT_RED) << "Tx not found on scan table from incoming blocks.";
 
       for (const auto &txin : tx.inputs)
       {

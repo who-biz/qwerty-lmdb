@@ -60,13 +60,9 @@ namespace CryptoNote {
       for (const auto& in : tx.inputs) {
         if (in.type() == typeid(KeyInput)) {
           auto r = m_keyImages.insert(boost::get<KeyInput>(in).keyImage);
-          (void)r; //just to make compiler to shut up
-          assert(r.second);
         } else if (in.type() == typeid(MultisignatureInput)) {
           const auto& msig = boost::get<MultisignatureInput>(in);
           auto r = m_usedOutputs.insert(std::make_pair(msig.amount, msig.outputIndex));
-          (void)r; //just to make compiler to shut up
-          assert(r.second);
         }
       }
 
