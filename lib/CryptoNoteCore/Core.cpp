@@ -326,6 +326,7 @@ size_t core::addChain(const std::vector<const IBlock*>& chain) {
 }
 
 size_t core::addChain(const std::vector<const IBlock*>& chain, BlockchainDB& db) {
+  bool r = Tools::getDefaultDbType() != "lmdb";
   size_t blocksCounter = 0;
 
   for (const IBlock* block : chain) {
@@ -337,20 +338,23 @@ size_t core::addChain(const std::vector<const IBlock*>& chain, BlockchainDB& db)
       size_t blobSize = 0;
       getObjectHash(tx, txHash, blobSize);
       tx_verification_context tvc = boost::value_initialized<tx_verification_context>();
-
-      if (!handleIncomingTransaction(tx, txHash, blobSize, tvc, true, get_block_height(block->getBlock()), true, db)) {
-        logger(ERROR, BRIGHT_RED) << "core::addChain() failed to handle transaction " << txHash << " from block " << blocksCounter << "/" << chain.size();
-        allTransactionsAdded = false;
-        break;
-      }
-    }
+        if (!handleIncomingTransaction(tx, txHash, blobSize, tvc, true, get_block_height(block->getBlock()), true, db)) {
+          logger(ERROR, BRIGHT_RED) << "core::addChain() failed to handle transaction " << txHash << " from block " << blocksCounter << "/" << chain.size();
+          allTransactionsAdded = false;
+          break;
+        }
 
     if (!allTransactionsAdded) {
       break;
     }
+  }
 
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
-    m_blockchain.addNewBlock(block->getBlock(), bvc);
+    if (r) {
+      m_blockchain.addNewBlock(block->getBlock(), bvc);
+    } else {
+      m_blockchain.add_new_block(block->getBlock(), bvc);
+    }
     if (bvc.m_marked_as_orphaned || bvc.m_verification_failed) {
       logger(ERROR, BRIGHT_RED) << "core::addChain() failed to handle incoming block " << get_block_hash(block->getBlock()) <<
         ", " << blocksCounter << "/" << chain.size();
@@ -589,10 +593,10 @@ size_t core::get_blockchain_total_transactions() {
   return m_blockchain.getTotalTransactions();
 }
 
-//bool core::get_outs(uint64_t amount, std::list<Crypto::PublicKey>& pkeys)
-//{
-//  return m_blockchain.get_outs(amount, pkeys);
-//}
+/*bool core::get_outs(uint64_t amount, std::list<Crypto::PublicKey>& pkeys)
+{
+  return m_blockchain.get_outs(amount, pkeys);
+}*/
 
 bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block) {
   return add_new_tx(tx, tx_hash, blob_size, tvc, keeped_by_block, m_blockchain.get_db());
@@ -600,8 +604,6 @@ bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t
 
 bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db) {
   //Locking on m_mempool and m_blockchain closes possibility to add tx to memory pool which is already in blockchain
-  std::lock_guard<decltype(m_mempool)> lk(m_mempool);
-  LockedBlockchainStorage lbs(m_blockchain);
 
   if (m_blockchain.haveTransaction(tx_hash)) {
     logger(TRACE) << "tx " << tx_hash << " is already in blockchain";
@@ -850,6 +852,7 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
   }
   bool r = Tools::getDefaultDbType() != "lmdb";
   if (!r) {
+    LockedBlockchainStorage lbs(m_blockchain); 
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
     std::list<block_complete_entry> blocks;
     try
@@ -872,9 +875,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
     }
-    m_blockchain.prepare_handle_incoming_blocks(blocks);
+//    m_blockchain.prepare_handle_incoming_blocks(blocks);
     m_blockchain.add_new_block(b, bvc);
-    m_blockchain.cleanup_handle_incoming_blocks(true);
+ //   m_blockchain.cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
   } else {
@@ -921,10 +924,11 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
 
   bool core::cleanup_handle_incoming_blocks(bool force_sync)
   {
+    LockedBlockchainStorage lbs(m_blockchain);
 
     bool success = false;
     try {
-      success = m_blockchain.cleanup_handle_incoming_blocks(force_sync);
+      success = lbs->cleanup_handle_incoming_blocks(force_sync);
     }
     catch (...) {}
     return success;
@@ -989,6 +993,7 @@ bool core::handle_get_objects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTIFY_R
 }
 
 Crypto::Hash core::getBlockIdByHeight(uint32_t height) {
+  LockedBlockchainStorage lbs(m_blockchain);
   if (height < m_blockchain.getCurrentBlockchainHeight()) {
     return m_blockchain.getBlockIdByHeight(height);
   } else {
@@ -1065,8 +1070,9 @@ bool core::queryBlocks(
   std::vector<BlockFullInfo>& entries) {
 
   bool r = Tools::getDefaultDbType() != "lmdb";
+  LockedBlockchainStorage lbs(m_blockchain);
 
-  uint32_t currentHeight = m_blockchain.getCurrentBlockchainHeight();
+  uint32_t currentHeight = lbs->getCurrentBlockchainHeight();
   uint32_t startOffset = 0;
   uint32_t startFullOffset = 0;
 
@@ -1093,7 +1099,7 @@ bool core::queryBlocks(
   }
 
   std::list<Block> blocks;
-  m_blockchain.getBlocks(startFullOffset, blocksLeft, blocks);
+  lbs->getBlocks(startFullOffset, blocksLeft, blocks);
 
   for (auto& b : blocks) {
     BlockFullInfo item;
@@ -1104,7 +1110,7 @@ bool core::queryBlocks(
       // query transactions
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-      m_blockchain.getTransactions(b.transactionHashes, txs, missedTxs);
+        lbs->getTransactions(b.transactionHashes, txs, missedTxs);
       // fill data
       block_complete_entry& completeEntry = item;
       completeEntry.block = asString(toBinaryArray(b));
@@ -1120,7 +1126,8 @@ bool core::queryBlocks(
 }
 
 bool core::findStartAndFullOffsets(const std::vector<Crypto::Hash>& knownBlockIds, uint64_t timestamp, uint32_t& startOffset, uint32_t& startFullOffset) {
-
+bool r = Tools::getDefaultDbType() != "lmdb";
+  LockedBlockchainStorage lbs(m_blockchain);
   if (knownBlockIds.empty()) {
     logger(ERROR, BRIGHT_RED) << "knownBlockIds is empty";
     return false;
@@ -1131,8 +1138,16 @@ bool core::findStartAndFullOffsets(const std::vector<Crypto::Hash>& knownBlockId
     return false;
   }
 
-  startOffset = m_blockchain.findBlockchainSupplement(knownBlockIds);
-  if (!m_blockchain.getLowerBound(timestamp, startOffset, startFullOffset)) {
+  if (r) {
+    startOffset = lbs->findBlockchainSupplement(knownBlockIds);
+  } else {
+    size_t size;
+    bool find = lbs->find_blockchain_supplement(knownBlockIds, size);
+    if (!find) { logger(ERROR, BRIGHT_RED) << "Failed to find blockchain supplement!"; }
+    else { startOffset = size; }
+  }
+
+  if (!lbs->getLowerBound(timestamp, startOffset, startFullOffset)) {
     startFullOffset = startOffset;
   }
 
@@ -1263,11 +1278,7 @@ bool core::queryBlocksDetailed(
       // query transactions
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-      if (r) {
         lbs->getTransactions(b.transactionHashes, txs, missedTxs);
-      } else {
-        lbs->get_transactions(b.transactionHashes, txs, missedTxs);
-      }
 
       // fill data
       block_complete_entry& completeEntry = item;
@@ -1852,6 +1863,7 @@ void core::rollbackBlockchain(uint32_t height) {
 
 bool core::handleBlockFound(Block& b)
 {
+  LockedBlockchainStorage lbs(m_blockchain); 
    block_verification_context bvc = boost::value_initialized<block_verification_context>();
     m_miner->pause();
     std::list<block_complete_entry> blocks;
@@ -1875,10 +1887,9 @@ bool core::handleBlockFound(Block& b)
     {
      logger(ERROR, BRIGHT_RED) << "Something went wrong at handleBlockFound!";
     }
-    
-    m_blockchain.prepare_handle_incoming_blocks(blocks);
-    m_blockchain.add_new_block(b, bvc);
-    m_blockchain.cleanup_handle_incoming_blocks(true);
+    lbs->prepare_handle_incoming_blocks(blocks);
+    lbs->add_new_block(b, bvc);
+    lbs->cleanup_handle_incoming_blocks(true);
     update_miner_block_template();
     m_miner->resume();
     if (bvc.m_verification_failed)

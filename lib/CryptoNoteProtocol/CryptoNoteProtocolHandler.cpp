@@ -24,6 +24,7 @@
 #include <boost/scope_exit.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <System/Dispatcher.h>
+#include "Common/Util.h"
 
 #include "CryptoNoteCore/CryptoNoteBasicImpl.h"
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
@@ -399,7 +400,7 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
     BOOST_SCOPE_EXIT_ALL(this) { m_core.update_block_template_and_resume_mining(); };
 
     int result = processObjects(context, arg.blocks);
-    if (result != 0) {
+    if (result == 0) {
       return result;
     }
   }
@@ -441,7 +442,7 @@ int CryptoNoteProtocolHandler::processObjects(CryptoNoteConnectionContext& conte
 
     // process block
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
-    m_core.handle_incoming_block_blob(asBinaryArray(block_entry.block), bvc, false, false);
+    m_core.handle_incoming_block_blob(asBinaryArray(block_entry.block), bvc, true, false);
 
     if (bvc.m_verification_failed) {
       logger(Logging::DEBUGGING) << context << "Block verification failed, dropping connection";
@@ -640,9 +641,9 @@ void CryptoNoteProtocolHandler::requestMissingPoolTransactions(const CryptoNoteC
   if (context.version < P2PProtocolVersion::V1) {
     return;
   }
+  std::vector<Transaction> poolTxs;
 
-  auto poolTxs = m_core.getPoolTransactions();
-
+  poolTxs = m_core.getPoolTransactions();
   NOTIFY_REQUEST_TX_POOL::request notification;
   for (auto& tx : poolTxs) {
     notification.txs.emplace_back(getObjectHash(tx));

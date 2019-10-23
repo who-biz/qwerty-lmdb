@@ -359,8 +359,22 @@ namespace CryptoNote {
       txs.push_back(tx_vt.tx);
     }
   }
-
   //---------------------------------------------------------------------------------
+  void tx_memory_pool::get_transactions(std::list<Transaction>& txs, bool include_unrelayed_txes, BlockchainDB& db) const
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_transactions_lock);
+    db.for_all_txpool_txes([&txs](const Crypto::Hash &txid, const txpool_tx_meta_t &meta, const CryptoNote::blobdata *bd){
+      Transaction tx;
+      if (!parse_and_validate_tx_from_blob(*bd, tx))
+      {
+        // continue
+        return true;
+      }
+      txs.push_back(tx);
+      return true;
+    }, true, include_unrelayed_txes);
+  }
+  //-------------------------------------------------------------------------------------------
   void tx_memory_pool::getMemoryPool(std::list<tx_memory_pool::TransactionDetails> txs) const {
 	  std::lock_guard<std::recursive_mutex> lock(m_transactions_lock);
 	  for (const auto& txd : m_fee_index) {

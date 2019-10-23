@@ -482,7 +482,7 @@ bool Blockchain::scan_outputkeys_for_indexes(const KeyInput& tx_in_to_key, visit
       logger(INFO, WHITE) << "Additional outputs needed: " << (absolute_offsets.size() - outputs.size());
       std::vector < uint32_t > add_offsets;
       std::vector<output_data_t> add_outputs;
-      for (size_t i = outputs.size(); i < absolute_offsets.size(); i++)
+      for (size_t i = outputs.size(); i < absolute_offsets.size(); ++i)
         add_offsets.push_back(absolute_offsets[i]);
         m_db->get_output_key(tx_in_to_key.amount, add_offsets, add_outputs, true);
       outputs.insert(outputs.end(), add_outputs.begin(), add_outputs.end());
@@ -869,7 +869,7 @@ void Blockchain::rebuildCache() {
         TransactionIndex transactionIndex = { b, i };
         m_transactionMap.insert(std::make_pair(transactionHash, transactionIndex));
 
-        for (size_t j = 1; j < tx.outputs.size(); j++) {
+        for (size_t j = 1; j < tx.outputs.size(); ++j) {
           const auto& out = tx.outputs[j];
           if (out.target.type() == typeid(KeyOutput)) {
             m_outputs[out.amount].push_back(std::make_pair<>(transactionIndex, j));
@@ -1936,7 +1936,7 @@ bool Blockchain::handleGetObjects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTI
       }
     }
   }
-/*
+
   //get another transactions, if need
   std::list<Transaction> txs;
   if (r) {
@@ -1947,7 +1947,7 @@ bool Blockchain::handleGetObjects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTI
   //pack aside transactions
   for (const auto& tx : txs) {
     rsp.txs.push_back(asString(toBinaryArray(tx)));
-  }*/
+  }
   DB_TX_STOP
   return true;
 }
@@ -2231,8 +2231,8 @@ std::vector<Crypto::Hash> Blockchain::findBlockchainSupplement(const std::vector
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   totalBlockCount = getCurrentBlockchainHeight();
   startBlockIndex = findBlockchainSupplement(remoteBlockIds);
-
-  return m_blockIndex.getBlockIds(startBlockIndex, static_cast<uint32_t>(maxCount));
+  
+   return  m_blockIndex.getBlockIds(startBlockIndex, static_cast<uint32_t>(maxCount));
 }
 
 bool Blockchain::haveBlock(const Crypto::Hash& id) {
@@ -2260,13 +2260,15 @@ size_t Blockchain::getTotalTransactions() {
 }
 
 bool Blockchain::getTransactionOutputGlobalIndexes(const Crypto::Hash& tx_id, std::vector<uint32_t>& indexs) {
+  bool r = Tools::getDefaultDbType() != "lmdb";
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  auto it = m_transactionMap.find(tx_id);
-  if (it == m_transactionMap.end()) {
-    logger(WARNING, YELLOW) << "warning: get_tx_outputs_gindexs failed to find transaction with id = " << tx_id;
-    return false;
-  }
-
+  uint64_t amount = 0;
+  uint64_t height = 0;
+    auto it = m_transactionMap.find(tx_id);
+    if (it == m_transactionMap.end()) {
+      logger(WARNING, YELLOW) << "warning: get_tx_outputs_gindexs failed to find transaction with id = " << tx_id;
+      return false;
+    }
   const TransactionEntry& tx = transactionByIndex(it->second);
   if (!(tx.m_global_output_indexes.size())) { logger(ERROR, BRIGHT_RED) << "internal error: global indexes for transaction " << tx_id << " is empty"; return false; }
   indexs.resize(tx.m_global_output_indexes.size());
@@ -2408,9 +2410,7 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
 
   std::vector<const Crypto::PublicKey *> output_keys;
-  bool r = Tools::getDefaultDbType() != "lmdb";
 
-   if (r) {
     struct outputs_visitor {
       std::vector<const Crypto::PublicKey *>& m_results_collector;
       Blockchain& m_bch;
@@ -2446,41 +2446,10 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
       return false;
     }
 
-  } else {
-      struct outputs_visitor {
-        std::vector<const Crypto::PublicKey *>& m_results_collector;
-        Blockchain& m_bch;
-        LoggerRef logger;
-        outputs_visitor(std::vector<const Crypto::PublicKey *>& results_collector, Blockchain& bch, ILogger& logger) :m_results_collector(results_collector), m_bch(bch), logger(logger, "outputs_visitor") {
-      }
-
-      bool handle_output(uint64_t unlock_time, const Crypto::PublicKey &pubkey)
-      {
-        //check tx unlock time
-        if (!m_bch.is_tx_spendtime_unlocked(unlock_time))
-        {
-          logger(ERROR, BRIGHT_RED) << "One of outputs for one of inputs has wrong tx.unlock_time = " << std::to_string(unlock_time);
-          return false;
-        }
-
-        m_results_collector.push_back(&pubkey);
-        return true;
-      }
-    };
-    outputs_visitor vi(output_keys, *this, logger.getLogger());
-    if (!scan_outputkeys_for_indexes(txin, vi, tx_prefix_hash, pmax_related_block_height))
-    {
-      logger(INFO, BRIGHT_WHITE) <<
-        "Failed to get output keys for tx with amount = " << m_currency.formatAmount(txin.amount) <<
-        " and count indexes " << txin.outputIndexes.size();
-      return false;
-    }
-  }
-
   // additional key_image check, fix discovered by Monero Lab and suggested by "fluffypony" (bitcointalk.org)
   static const Crypto::KeyImage I = { { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
-//  static const Crypto::KeyImage L = { { 0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10 } };
-/*
+  static const Crypto::KeyImage L = { { 0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10 } };
+
  if (!(scalarmultKey(txin.keyImage, L) == I)) {
 	 logger(ERROR) << "Transaction uses key image not in the valid domain";
 	 return false;
@@ -2500,7 +2469,7 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
   bool check_tx_ring_signature = Crypto::check_ring_signature(tx_prefix_hash, txin.keyImage, output_keys, sig.data());
   if (!check_tx_ring_signature) {
     logger(ERROR) << "Failed to check ring signature for keyImage: " << txin.keyImage;
-  }*/
+  }
   return true; // check_tx_ring_signature
 }
 
@@ -2662,9 +2631,7 @@ bool Blockchain::addNewBlock(const Block& bl_, block_verification_context& bvc) 
 
   bool add_result;
 
-  { //to avoid deadlock lets lock tx_pool for whole add/reorganize process
-    std::lock_guard<decltype(m_tx_pool)> poolLock(m_tx_pool);
-    std::lock_guard<decltype(m_blockchain_lock)> bcLock(m_blockchain_lock);
+  {
 
     if (haveBlock(id)) {
       logger(TRACE) << "block with id = " << id << " already exists";
@@ -2973,8 +2940,9 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
   }
 
   //check that block refers to chain tail
+  bool add = pushBlock(bl, bvc);
   DB_TX_STOP
-  return pushBlock(bl, bvc);
+  return add;
 }
 
 
@@ -3042,13 +3010,13 @@ void Blockchain::popBlock() {
     m_db->pop_block(bl, txs);
   }
 
-  DB_TX_STOP
-
   m_upgradeDetectorV2.blockPopped();
   m_upgradeDetectorV3.blockPopped();
   m_upgradeDetectorV4.blockPopped();
   m_upgradeDetectorV5.blockPopped();
   m_upgradeDetectorV6.blockPopped();
+  DB_TX_STOP
+
 }
 
 bool Blockchain::pushTransaction(BlockEntry& block, const Crypto::Hash& transactionHash, TransactionIndex transactionIndex) {
@@ -3479,7 +3447,6 @@ bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qbl
       return false;
     }
   }
-  DB_TX_STOP
 
   // this should be impossible, as we checked that we share the genesis block,
   // but just in case...
@@ -3499,6 +3466,7 @@ bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qbl
 bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qblock_ids, std::vector<Crypto::Hash>& hashes, size_t& start_height, size_t& current_height)
 {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+  DB_TX_START
 
   // if we can't find the split point, return false
   if(!find_blockchain_supplement(qblock_ids, start_height))
@@ -3506,7 +3474,6 @@ bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qbl
     return false;
   }
 
-  DB_TX_START
   current_height = getCurrentBlockchainHeight();
   size_t count = 0;
   for(size_t i = start_height; i < current_height && count < BLOCKS_IDS_SYNCHRONIZING_DEFAULT_COUNT; i++, count++)
@@ -3804,6 +3771,8 @@ void Blockchain::saveTransactions(const std::vector<Transaction>& transactions) 
   tx_verification_context context;
   DB_TX_START
   for (size_t i = 0; i < transactions.size(); ++i) {
+  txpool_tx_meta_t meta;
+  m_db->add_txpool_tx(transactions[i], meta);
     if (!m_tx_pool.add_tx(transactions[transactions.size() - 1 - i], context, true, *m_db)) {
       logger(WARNING, BRIGHT_YELLOW) << "Blockchain::saveTransactions, failed to add transaction to pool";
       DB_TX_STOP
@@ -4142,6 +4111,18 @@ void Blockchain::add_txpool_tx(Transaction &tx, const txpool_tx_meta_t &meta)
   DB_TX_STOP
 }
 
+void Blockchain::get_txpool_tx_blobs(std::list<Crypto::Hash> hash, std::list<blobdata>& txs)
+{
+  DB_TX_START
+  size_t count = m_db->get_txpool_tx_count();
+  for (const auto& each : hash) {
+    blobdata bd;
+    m_db->get_txpool_tx_blob(each, bd);
+    txs.push_back(bd);
+  }
+  DB_TX_STOP
+}
+
 void Blockchain::update_txpool_tx(const Crypto::Hash &txid, const txpool_tx_meta_t &meta)
 {
   DB_TX_START
@@ -4179,6 +4160,11 @@ CryptoNote::blobdata Blockchain::get_txpool_tx_blob(const Crypto::Hash& txid) co
 bool Blockchain::for_all_txpool_txes(std::function<bool(const Crypto::Hash&, const txpool_tx_meta_t&, const CryptoNote::blobdata*)> f, bool include_blob) const
 {
   return m_db->for_all_txpool_txes(f, include_blob);
+}
+
+bool Blockchain::for_all_outputs(std::function<bool(uint64_t amount, const Crypto::Hash &tx_hash, uint64_t height, size_t tx_idx)> f) const
+{
+  return m_db->for_all_outputs(f);
 }
 
 bool Blockchain::isInCheckpointZone(const uint32_t height) {
@@ -4260,7 +4246,7 @@ std::vector<uint64_t> timestamps;
     if (m_db->tx_exists(tx_id)) {
       logger(ERROR, BRIGHT_RED) << "Block with id: " << id << " attempting to add tx that is already in blockchain wih id: " << tx_id;
       bvc.m_verification_failed = true;
-      //return_tx_to_pool(txs);
+//      m_txpool.return_tx_to_pool(txs);
       DB_TX_STOP
       return false;
     }
@@ -4273,22 +4259,20 @@ std::vector<uint64_t> timestamps;
       return false;
     }
 
-/*      tx_verification_context tvc;
-      if(!check_tx_input(tx, tvc))
+      tx_verification_context tvc;
+//      if(!check_tx_input(tx, tvc))
       for (const auto& i : tx.inputs) {
-      if (!check_tx_input(i, getTransactionPrefixHash(tx), tx.signatures[inputIndex], pmax_used_block_height)) {
-        logger(ERROR, BRIGHT_RED) << "Block with id: " << id  << " has at least one transaction (id: " << tx_id << " with invalid inputs!";
-        add_block_as_invalid(bl, id);
-        logger(ERROR, BRIGHT_RED) << "Block with id " << id << " added as invalid because of wrong inputs in transactions";
-        bvc.m_verification_failed = true;
-        return_tx_to_pool(txs);
-        DB_TX_STOP
-        return false;
+        if (!checkTransactionInputs(tx)) {
+          logger(ERROR, BRIGHT_RED) << "Block with id: " << id  << " has at least one transaction (id: " << tx_id << " with invalid inputs!";
+          add_block_as_invalid(bl, id);
+          logger(ERROR, BRIGHT_RED) << "Block with id " << id << " added as invalid because of wrong inputs in transactions";
+          bvc.m_verification_failed = true;
+        //  m_tx_pool.return_tx_to_pool(txs);
+          DB_TX_STOP
+          return false;
+        }
       }
     }
-*/
-  m_blocks_txs_check.clear();
-}
 
   uint64_t base_reward = 0;
   int64_t emissionChange = 0;
@@ -4356,7 +4340,7 @@ std::vector<uint64_t> timestamps;
   bvc.m_added_to_main_chain = true;
   ++m_sync_counter;
 
-  m_tx_pool.on_blockchain_inc(ht_inc-1, id);
+  m_tx_pool.on_blockchain_inc(ht_inc, id);
   return true;
 }
 

@@ -144,7 +144,7 @@ namespace CryptoNote {
     }
 
     void serialize(ISerializer& s);
-
+    void get_transactions(std::list<Transaction>& txs, bool include_unrelayed_txes, BlockchainDB& db) const;
     struct TransactionCheckInfo {
       BlockInfo maxUsedBlock;
       BlockInfo lastFailedBlock;

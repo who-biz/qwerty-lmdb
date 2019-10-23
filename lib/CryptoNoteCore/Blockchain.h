@@ -193,8 +193,10 @@ public:
     uint64_t get_txpool_tx_count() const;
     bool get_txpool_tx_meta(const Crypto::Hash& txid, txpool_tx_meta_t &meta) const;
     bool get_txpool_tx_blob(const Crypto::Hash& txid, CryptoNote::blobdata &bd) const;
+    void get_txpool_tx_blobs(std::list<Crypto::Hash> hashes, std::list<blobdata>& txs);
     CryptoNote::blobdata get_txpool_tx_blob(const Crypto::Hash& txid) const;
     bool for_all_txpool_txes(std::function<bool(const Crypto::Hash&, const txpool_tx_meta_t&, const CryptoNote::blobdata*)>, bool include_blob = false) const;
+    bool for_all_outputs(std::function<bool(uint64_t amount, const Crypto::Hash &tx_hash, uint64_t height, size_t tx_idx)> f) const;
 
 
     template<class t_ids_container, class t_blocks_container, class t_missed_container>
@@ -442,7 +444,7 @@ private:
     void removeLastBlock();
     bool checkUpgradeHeight(const UpgradeDetector& upgradeDetector);
     bool m_db_default_sync;
-
+    void get_txpool_txs(std::list<Transaction>& txs);
 
     bool handle_block_to_main_chain(const Block& bl, const Crypto::Hash& id, block_verification_context& bvc);
     HardFork::State get_hard_fork_state() const;
