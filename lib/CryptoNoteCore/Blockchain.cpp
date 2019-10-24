@@ -2812,7 +2812,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
   TransactionEntry entry;
   block.transactions.push_back(entry);
   block.transactions[0].tx = block.bl.baseTransaction;
-  TransactionIndex transactionIndex = { static_cast<uint32_t>(HEIGHT_COND), static_cast<uint16_t>(0) };
+  TransactionIndex transactionIndex = { static_cast<uint32_t>(HEIGHT_COND-1), static_cast<uint16_t>(0) };
   pushTransaction(block, minerTransactionHash, transactionIndex);
 
   size_t coinbase_blob_size = getObjectBinarySize(blockData.baseTransaction);
@@ -2869,7 +2869,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
       }
 
 
-  block.height = static_cast<uint32_t>(HEIGHT_COND);
+  block.height = static_cast<uint32_t>(HEIGHT_COND-1);
   block.block_cumulative_size = cumulative_block_size;
   block.cumulative_difficulty = currentDifficulty;
   block.already_generated_coins = already_generated_coins + emissionChange;
@@ -2908,6 +2908,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
     << ", " << block_processing_time << "(" << target_calculating_time << "/" << longhash_calculating_time << ")ms";
   }
   bvc.m_added_to_main_chain = true;
+  bvc.m_verification_failed = false;
 
     m_upgradeDetectorV2.blockPushed();
     m_upgradeDetectorV3.blockPushed();
@@ -4317,7 +4318,7 @@ std::vector<uint64_t> timestamps;
   uint64_t ht_inc = 0;
   if (!bvc.m_verification_failed)
   {
-    pushBlock(bl, bvc);
+//    pushBlock(bl, bvc);
     try
     {
       uint64_t new_height = m_db->add_block(bl, block_size, cumulative_difficulty, already_generated_coins, txs);

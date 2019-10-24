@@ -442,28 +442,28 @@ int CryptoNoteProtocolHandler::processObjects(CryptoNoteConnectionContext& conte
 
     // process block
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
-    m_core.handle_incoming_block_blob(asBinaryArray(block_entry.block), bvc, true, false);
-
-    if (bvc.m_verification_failed) {
-      logger(Logging::DEBUGGING) << context << "Block verification failed, dropping connection";
-      context.m_state = CryptoNoteConnectionContext::state_shutdown;
-      return 1;
-    } else if (bvc.m_marked_as_orphaned) {
-      logger(Logging::INFO) << context << "Block received at sync phase was marked as orphaned, dropping connection";
-      context.m_state = CryptoNoteConnectionContext::state_shutdown;
-      return 1;
-    } else if (bvc.m_already_exists) {
-      logger(Logging::DEBUGGING) << context << "Block already exists, switching to idle state";
-      context.m_state = CryptoNoteConnectionContext::state_idle;
-      context.m_needed_objects.clear();
-      context.m_requested_objects.clear();
-      return 1;
+    bool handled = m_core.handle_incoming_block_blob(asBinaryArray(block_entry.block), bvc, true, false);
+    if (!handled) {
+      if (bvc.m_verification_failed) {
+        logger(ERROR, BRIGHT_RED) << context << "Block verification failed, dropping connection";
+        context.m_state = CryptoNoteConnectionContext::state_shutdown;
+        return 1;
+      } else if (bvc.m_marked_as_orphaned) {
+        logger(ERROR, BRIGHT_RED) << context << "Block received at sync phase was marked as orphaned, dropping connection";
+        context.m_state = CryptoNoteConnectionContext::state_shutdown;
+        return 1;
+      } else if (bvc.m_already_exists) {
+        logger(ERROR, BRIGHT_RED) << context << "Block already exists, switching to idle state";
+        context.m_state = CryptoNoteConnectionContext::state_idle;
+        context.m_needed_objects.clear();
+        context.m_requested_objects.clear();
+        return 1;
+      }
     }
-
     m_dispatcher.yield();
   }
 
-  return 0;
+  return 1;
 
 }
 

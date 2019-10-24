@@ -398,7 +398,7 @@ bool core::handle_incoming_tx(const BinaryArray& tx_blob, tx_verification_contex
   uint32_t blockHeight;
   bool ok = getBlockContainingTx(tx_hash, blockId, blockHeight);
   if (!ok) {
-    blockHeight = this->get_current_blockchain_height();
+    blockHeight = this->get_current_blockchain_height()-1;
   }
   return handleIncomingTransaction(tx, tx_hash, tx_blob.size(), tvc, keeped_by_block, blockHeight, loose_check);
 }
@@ -854,10 +854,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
   if (control_miner) {
     pause_mining();
   }
-  bool R = Tools::getDefaultDbType() != "lmdb";
     LockedBlockchainStorage lbs(m_blockchain);
-  if (R) {
-    std::list<block_complete_entry> blocks;
+    block_complete_entry block_entry;
+    std::vector<Transaction> txs_vec;
     try
     {
       BlockFullInfo item;
@@ -867,40 +866,29 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
       block_complete_entry& completeEntry = item;
-      for (int i = 0; i < b.transactionHashes.size(); i++)
-      {
-         txs.push_back(db.get_tx(b.transactionHashes[i]));
-      }
+      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
 
       completeEntry.block = asString(toBinaryArray(b));
       for (auto& tx : txs) {
+        txs_vec.push_back(tx);
         completeEntry.txs.push_back(asString(toBinaryArray(tx)));
       }
-
     }
     catch (const std::exception &e)
     {
       logger(ERROR, BRIGHT_RED) << "Something went wrong when handling incoming blocks!";
     }
-    lbs->prepare_handle_incoming_blocks(blocks);
-    lbs->add_new_block(b, bvc);
+    lbs->pushBlock(b, txs_vec, bvc);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
-  } else {
-    lbs->add_new_block(b, bvc);
-  }
-  if (control_miner) {
-    update_block_template_and_resume_mining();
-  }
+    if (control_miner) {
+      update_block_template_and_resume_mining();
+    }
 
   if (relay_block && bvc.m_added_to_main_chain) {
     std::list<Crypto::Hash> missed_txs;
     std::list<Transaction> txs;
-    if (R) {
-      m_blockchain.getTransactions(b.transactionHashes, txs, missed_txs);
-    } else {
-      m_blockchain.get_transactions(b.transactionHashes, txs, missed_txs);
-    }
+    m_blockchain.getTransactions(b.transactionHashes, txs, missed_txs);
     if (!missed_txs.empty() && getBlockIdByHeight(get_block_height(b)) != get_block_hash(b)) {
       logger(INFO) << "Block added, but it seems that reorganize just happened after that, do not relay this block";
     } else {
@@ -914,7 +902,7 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
       arg.current_blockchain_height = m_blockchain.getCurrentBlockchainHeight();
       BinaryArray blockBa;
       bool r = toBinaryArray(b, blockBa);
-      if (!(r)) { logger(ERROR, BRIGHT_RED) << "failed to serialize block"; return false; }
+      if (!r) { logger(ERROR, BRIGHT_RED) << "failed to serialize block"; return false; }
       arg.b.block = asString(blockBa);
       for (auto& tx : txs) {
         arg.b.txs.push_back(asString(toBinaryArray(tx)));
@@ -1001,11 +989,7 @@ bool core::handle_get_objects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTIFY_R
 
 Crypto::Hash core::getBlockIdByHeight(uint32_t height) {
   LockedBlockchainStorage lbs(m_blockchain);
-  if (height < m_blockchain.getCurrentBlockchainHeight()) {
     return m_blockchain.getBlockIdByHeight(height);
-  } else {
-    return NULL_HASH;
-  }
 }
 
 bool core::getBlockByHash(const Crypto::Hash &h, Block &blk) {
@@ -1217,11 +1201,7 @@ bool core::queryBlocksLite(
     if (b.timestamp >= timestamp) {
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-      if (r) {
-        lbs->getTransactions(b.transactionHashes, txs, missedTxs);
-      } else {
-        lbs->get_transactions(b.transactionHashes, txs, missedTxs);
-      }
+      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
 
       item.block = asString(toBinaryArray(b));
 
@@ -1874,22 +1854,25 @@ void core::rollbackBlockchain(uint32_t height) {
 
 bool core::handleBlockFound(Block& b)
 {
-  LockedBlockchainStorage lbs(m_blockchain); 
+  LockedBlockchainStorage lbs(m_blockchain);
    block_verification_context bvc = boost::value_initialized<block_verification_context>();
     m_miner->pause();
     std::list<block_complete_entry> blocks;
+      std::list<Transaction> txs;
+      std::vector<Transaction> txs_vec;
+      std::list<Crypto::Hash> missedTxs;
+      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      block_complete_entry completeEntry;
+
     try
     {
       BlockFullInfo item;
 
       item.block_id = get_block_hash(b);
 
-      std::list<Transaction> txs;
-      std::list<Crypto::Hash> missedTxs;
-      block_complete_entry& completeEntry = item;
-
       completeEntry.block = asString(toBinaryArray(b));
       for (auto& tx : txs) {
+        txs_vec.push_back(tx);
         completeEntry.txs.push_back(asString(toBinaryArray(tx)));
       }
 
@@ -1898,9 +1881,7 @@ bool core::handleBlockFound(Block& b)
     {
      logger(ERROR, BRIGHT_RED) << "Something went wrong at handleBlockFound!";
     }
-    lbs->prepare_handle_incoming_blocks(blocks);
-    lbs->add_new_block(b, bvc);
-    lbs->cleanup_handle_incoming_blocks(true);
+    lbs->pushBlock(b, txs_vec, bvc);
     update_miner_block_template();
     m_miner->resume();
     if (bvc.m_verification_failed)
