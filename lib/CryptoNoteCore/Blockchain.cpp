@@ -862,14 +862,14 @@ void Blockchain::rebuildCache() {
         }
       }
     } else {
-      for (size_t i = 0; i < block.transactionHashes.size(); ++i) {
+      for (uint16_t i = 0; i < block.transactionHashes.size(); ++i) {
         tr = m_db->get_tx(block.transactionHashes[i]);
         const Transaction tx = tr;
         Crypto::Hash transactionHash = getObjectHash(tr);
         TransactionIndex transactionIndex = { b, i };
         m_transactionMap.insert(std::make_pair(transactionHash, transactionIndex));
 
-        for (size_t j = 1; j < tx.outputs.size(); ++j) {
+        for (uint16_t j = 1; j < tx.outputs.size(); ++j) {
           const auto& out = tx.outputs[j];
           if (out.target.type() == typeid(KeyOutput)) {
             m_outputs[out.amount].push_back(std::make_pair<>(transactionIndex, j));
@@ -1271,7 +1271,7 @@ bool Blockchain::rollback_blockchain_switching(std::list<Block> &original_chain,
     block_verification_context bvc =
       boost::value_initialized<block_verification_context>();
     bool r = pushBlock(bl, bvc);
-    if (!(r && bvc.m_added_to_main_chain)) {
+    if (!r && !bvc.m_added_to_main_chain) {
       logger(ERROR, BRIGHT_RED) << "PANIC!!! failed to add (again) block while "
         "chain switching during the rollback!";
       return false;
@@ -1917,18 +1917,14 @@ bool Blockchain::handleGetObjects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTI
   for (const auto& bl : blocks) {
     std::list<Crypto::Hash> missed_tx_id;
     std::list<Transaction> txs;
-    if (r) {
-      getTransactions(bl.transactionHashes, txs, rsp.missed_ids);
-    } else {
-      get_transactions(bl.transactionHashes, txs, rsp.missed_ids);
-    }
-   if (!(!missed_tx_id.size())) { logger(ERROR, BRIGHT_RED) << "Internal error: have missed missed_tx_id.size()=" << missed_tx_id.size() << ENDL << "for block id = " << get_block_hash(bl); DB_TX_STOP return false; } //WTF???
-    rsp.blocks.push_back(block_complete_entry());
-    block_complete_entry& e = rsp.blocks.back();
-    //pack block
-    e.block = asString(toBinaryArray(bl));
-    //pack transactions
-    for (Transaction& tx : txs) {
+    getTransactions(bl.transactionHashes, txs, rsp.missed_ids);
+    if (rsp.missed_ids.size()) { logger(ERROR, BRIGHT_RED) << "Internal error: have missed missed_tx_id.size()=" << missed_tx_id.size() << ENDL << "for block id = " << get_block_hash(bl); DB_TX_STOP return false; } //WTF???
+      rsp.blocks.push_back(block_complete_entry());
+      block_complete_entry& e = rsp.blocks.back();
+      //pack block
+      e.block = asString(toBinaryArray(bl));
+      //pack transactions
+      for (Transaction& tx : txs) {
       if (r) {
         e.txs.push_back(asString(toBinaryArray(tx)));
       } else {
@@ -1946,7 +1942,11 @@ bool Blockchain::handleGetObjects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NOTI
   }
   //pack aside transactions
   for (const auto& tx : txs) {
-    rsp.txs.push_back(asString(toBinaryArray(tx)));
+    if (r) {
+      rsp.txs.push_back(asString(toBinaryArray(tx)));
+    } else {
+      rsp.txs.push_back(tx_to_blob(tx));
+    }
   }
   DB_TX_STOP
   return true;
@@ -2005,7 +2005,7 @@ size_t Blockchain::find_end_of_allowed_index(const std::vector<std::pair<Transac
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   if (amount_outs.empty()) {
     return 0;
-  }
+  } else {
 
   size_t i = amount_outs.size();
   do {
@@ -2013,8 +2013,8 @@ size_t Blockchain::find_end_of_allowed_index(const std::vector<std::pair<Transac
     if (amount_outs[i].first.block + m_currency.minedMoneyUnlockWindow() <= getCurrentBlockchainHeight()) {
       return i + 1;
     }
-  } while (i != 0);
-
+  } while (i > 0);
+ }
   return 0;
 }
 
@@ -2231,7 +2231,7 @@ std::vector<Crypto::Hash> Blockchain::findBlockchainSupplement(const std::vector
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   totalBlockCount = getCurrentBlockchainHeight();
   startBlockIndex = findBlockchainSupplement(remoteBlockIds);
-  
+
    return  m_blockIndex.getBlockIds(startBlockIndex, static_cast<uint32_t>(maxCount));
 }
 
@@ -2272,7 +2272,7 @@ bool Blockchain::getTransactionOutputGlobalIndexes(const Crypto::Hash& tx_id, st
   const TransactionEntry& tx = transactionByIndex(it->second);
   if (!(tx.m_global_output_indexes.size())) { logger(ERROR, BRIGHT_RED) << "internal error: global indexes for transaction " << tx_id << " is empty"; return false; }
   indexs.resize(tx.m_global_output_indexes.size());
-  for (size_t i = 0; i < tx.m_global_output_indexes.size(); ++i) {
+  for (size_t i = 0; i < tx.m_global_output_indexes.size(); i++) {
     indexs[i] = tx.m_global_output_indexes[i];
   }
 
@@ -2362,16 +2362,18 @@ bool Blockchain::checkTransactionInputs(const Transaction& tx, const Crypto::Has
           "Key image already spent in blockchain: " << Common::podToHex(in_to_key.keyImage);
         return false;
       }
-    }
 
-      if (!check_tx_input(in_to_key, tx_prefix_hash, tx.signatures[inputIndex], pmax_used_block_height)) {
+/*      uint32_t height = m_db->height();
+      if (!check_tx_input(in_to_key, tx_prefix_hash, tx.signatures[inputIndex], &height)) {
         logger(INFO, BRIGHT_WHITE) <<
           "Failed to check ring signature for tx " << transactionHash;
         return false;
-      }
+      }*/
 
+     // already called earlier
+    }
       ++inputIndex;
-    } else if (txin.type() == typeid(MultisignatureInput)) {
+   } else if (txin.type() == typeid(MultisignatureInput)) {
       if (!validateInput(::boost::get<MultisignatureInput>(txin), transactionHash, tx_prefix_hash, tx.signatures[inputIndex])) {
         return false;
       }
@@ -2437,7 +2439,8 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
         return true;
       }
     };
-
+   bool r = Tools::getDefaultDbType() != "lmdb";
+   if (r) {
     outputs_visitor vi(output_keys, *this, logger.getLogger());
     if (!scanOutputKeysForIndexes(txin, vi, pmax_related_block_height)) {
       logger(INFO, BRIGHT_WHITE) <<
@@ -2445,6 +2448,17 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
         " and count indexes " << txin.outputIndexes.size();
       return false;
     }
+  } else {
+    for (int i = 0; i < txin.outputIndexes.size(); i++) {
+      Crypto::PublicKey pkey = get_output_key(txin.amount, txin.outputIndexes[i]);
+      if (Common::podToHex(pkey) != Common::podToHex(NULL_HASH)) {
+        output_keys.push_back(&pkey);
+      } else {
+        logger(ERROR, BRIGHT_GREEN) << "Failed to get output key for amount: " << m_currency.formatAmount(txin.amount) << " and output indexes count: " << i << ", with outputIndex: " << txin.outputIndexes[i];
+        return false;
+      }
+    }
+  }
 
   // additional key_image check, fix discovered by Monero Lab and suggested by "fluffypony" (bitcointalk.org)
   static const Crypto::KeyImage I = { { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
@@ -2462,15 +2476,15 @@ bool Blockchain::check_tx_input(const KeyInput& txin, const Crypto::Hash& tx_pre
   }
 
   if (!(sig.size() == output_keys.size())) { logger(ERROR, BRIGHT_RED) << "internal error: tx signatures count=" << sig.size() << " mismatch with outputs keys count for inputs=" << output_keys.size(); return false; }
-  if (m_is_in_checkpoint_zone) {
+/*  if (m_is_in_checkpoint_zone) {
     return true;
-  }
+  }*/
 
   bool check_tx_ring_signature = Crypto::check_ring_signature(tx_prefix_hash, txin.keyImage, output_keys, sig.data());
   if (!check_tx_ring_signature) {
     logger(ERROR) << "Failed to check ring signature for keyImage: " << txin.keyImage;
   }
-  return true; // check_tx_ring_signature
+  return check_tx_ring_signature;
 }
 
 uint64_t Blockchain::get_adjusted_time() {
@@ -2612,11 +2626,9 @@ bool Blockchain::update_next_cumulative_size_limit() {
 bool Blockchain::addNewBlock(const Block& bl_, block_verification_context& bvc) {
   //copy block here to let modify block.target
   bool r = Tools::getDefaultDbType() != "lmdb";
-  if (r) {
+  if (!r) {
     if (!add_new_block(bl_, bvc)) {
       return false;
-    } else {
-      return true;
     }
   }
 
@@ -2713,12 +2725,14 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
 
   if (!checkBlockVersion(blockData, blockHash)) {
     bvc.m_verification_failed = true;
+    logger(ERROR,BRIGHT_RED) << "Block version is incorrect! Current version: " << blockData.majorVersion;
     DB_TX_STOP
     return false;
   }
 
   if (!checkParentBlockSize(blockData, blockHash)) {
     bvc.m_verification_failed = true;
+    logger(ERROR,BRIGHT_RED) << "Block size check returned false!";
     DB_TX_STOP
     return false;
   }
@@ -2795,8 +2809,9 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
 
   BlockEntry block;
   block.bl = blockData;
-  block.transactions.resize(1);
-  block.transactions[0].tx = blockData.baseTransaction;
+  TransactionEntry entry;
+  block.transactions.push_back(entry);
+  block.transactions[0].tx = block.bl.baseTransaction;
   TransactionIndex transactionIndex = { static_cast<uint32_t>(HEIGHT_COND), static_cast<uint16_t>(0) };
   pushTransaction(block, minerTransactionHash, transactionIndex);
 
@@ -2837,6 +2852,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
     int64_t emissionChange = 0;
     uint64_t reward = 0;
       if (!checkCumulativeBlockSize(blockHash, cumulative_block_size, HEIGHT_COND)) {
+        logger(ERROR,BRIGHT_RED) << "Check on block size failed!";
         bvc.m_verification_failed = true;
         return false;
       }
@@ -3034,7 +3050,7 @@ bool Blockchain::pushTransaction(BlockEntry& block, const Crypto::Hash& transact
   Crypto::Hash thp;
   uint64_t tx_index = 0;
   TransactionEntry& transaction = block.transactions[transactionIndex.transaction];
-  if (!r) { 
+  if (!r) {
     if (m_db->tx_exists(transactionHash)) {
       logger(ERROR, BRIGHT_RED) << "Duplicate tx already exists at: " << transactionHash;
       return false;
@@ -3747,16 +3763,18 @@ bool Blockchain::getTransactionIdsByPaymentId(const Crypto::Hash& paymentId, std
 
 bool Blockchain::loadTransactions(const Block& block, std::vector<Transaction>& transactions) {
   transactions.resize(block.transactionHashes.size());
+  bool r = Tools::getDefaultDbType() != "lmdb";
   DB_TX_START
 
   size_t transactionSize;
   uint64_t fee;
-  for (size_t i = 0; i < block.transactionHashes.size(); ++i) {
+  for (size_t i = 0; i < block.transactionHashes.size(); i++) {
     if (!m_tx_pool.take_tx(block.transactionHashes[i], transactions[i], transactionSize, fee)) {
       tx_verification_context context;
-      for (size_t j = 0; j < i; ++j) {
-        if (!m_tx_pool.add_tx(transactions[i - 1 - j], context, true, *m_db)) {
-          throw std::runtime_error("Blockchain::loadTransactions, failed to add transaction to pool");
+      for (size_t j = 0; j < i; j++) {
+        if (!m_tx_pool.add_tx(transactions[i], context, true, *m_db)) {
+          logger(ERROR, BRIGHT_RED) << "Blockchain::loadTransactions, failed to add transaction to pool";
+          return false;
           DB_TX_STOP
         }
       }
@@ -4259,8 +4277,9 @@ std::vector<uint64_t> timestamps;
       return false;
     }
 
-      tx_verification_context tvc;
+      txpool_tx_meta_t meta;
 //      if(!check_tx_input(tx, tvc))
+      add_txpool_tx(tx, meta);
       for (const auto& i : tx.inputs) {
         if (!checkTransactionInputs(tx)) {
           logger(ERROR, BRIGHT_RED) << "Block with id: " << id  << " has at least one transaction (id: " << tx_id << " with invalid inputs!";

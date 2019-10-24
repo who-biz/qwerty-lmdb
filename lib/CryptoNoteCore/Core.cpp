@@ -331,7 +331,7 @@ size_t core::addChain(const std::vector<const IBlock*>& chain, BlockchainDB& db)
 
   for (const IBlock* block : chain) {
     bool allTransactionsAdded = true;
-    for (size_t txNumber = 0; txNumber < block->getTransactionCount(); ++txNumber) {
+    for (size_t txNumber = 0; txNumber < block->getTransactionCount(); txNumber++) {
       const Transaction& tx = block->getTransaction(txNumber);
 
       Crypto::Hash txHash = NULL_HASH;
@@ -604,6 +604,8 @@ bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t
 
 bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block, BlockchainDB& db) {
   //Locking on m_mempool and m_blockchain closes possibility to add tx to memory pool which is already in blockchain
+  std::lock_guard<decltype(m_mempool)> lk(m_mempool);
+  LockedBlockchainStorage lbs(m_blockchain);
 
   if (m_blockchain.haveTransaction(tx_hash)) {
     logger(TRACE) << "tx " << tx_hash << " is already in blockchain";
@@ -851,8 +853,8 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     pause_mining();
   }
   bool r = Tools::getDefaultDbType() != "lmdb";
-  if (!r) {
     LockedBlockchainStorage lbs(m_blockchain); 
+  if (!r) {
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
     std::list<block_complete_entry> blocks;
     try
@@ -864,6 +866,10 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
       block_complete_entry& completeEntry = item;
+      for (int i = 0; i < b.transactionHashes.size(); i++)
+      {
+         txs.push_back(m_db->get_tx(b.transactionHashes[i]));
+      }
 
       completeEntry.block = asString(toBinaryArray(b));
       for (auto& tx : txs) {
@@ -875,13 +881,13 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
     }
-//    m_blockchain.prepare_handle_incoming_blocks(blocks);
-    m_blockchain.add_new_block(b, bvc);
- //   m_blockchain.cleanup_handle_incoming_blocks(true);
+    lbs->prepare_handle_incoming_blocks(blocks);
+    lbs->add_new_block(b, bvc);
+    lbs->cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
   } else {
-    m_blockchain.addNewBlock(b, bvc);
+    lbs->add_new_block(b, bvc);
   }
   if (control_miner) {
     update_block_template_and_resume_mining();
