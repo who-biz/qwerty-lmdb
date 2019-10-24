@@ -845,7 +845,7 @@ bool core::handle_incoming_block_blob(const BinaryArray& block_blob, block_verif
     return false;
   }
 
-  return handle_incoming_block(b, bvc, *m_db, control_miner, relay_block);
+  return handle_incoming_block(b, bvc, m_blockchain.get_db(), control_miner, relay_block);
 }
 
 bool core::handle_incoming_block(const Block& b, block_verification_context& bvc, BlockchainDB& db, bool control_miner, bool relay_block) {
@@ -854,7 +854,7 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
   }
   bool r = Tools::getDefaultDbType() != "lmdb";
     LockedBlockchainStorage lbs(m_blockchain);
-  if (!r) {
+  if (r) {
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
     std::list<block_complete_entry> blocks;
     try
@@ -879,7 +879,7 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     }
     catch (const std::exception &e)
     {
-      logger(ERROR, BRIGHT_RED) << "Something when wrong when handling incoming blocks!";
+      logger(ERROR, BRIGHT_RED) << "Something went wrong when handling incoming blocks!";
     }
     lbs->prepare_handle_incoming_blocks(blocks);
     lbs->add_new_block(b, bvc);
