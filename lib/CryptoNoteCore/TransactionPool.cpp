@@ -131,13 +131,14 @@ namespace CryptoNote {
     uint64_t outputs_amount = get_outs_money_amount(tx);
 
     if (!get_inputs_money_amount(tx, inputs_amount)) {
+      logger(ERROR, BRIGHT_RED) << "Failed to get inputs amount of transaction with hash: " << getObjectHash(tx);
       tvc.m_verification_failed = true;
       return false;
     }
 
 
     if (outputs_amount > inputs_amount) {
-      logger(INFO) << "transaction use more money then it has: use " << m_currency.formatAmount(outputs_amount) <<
+      logger(ERROR, BRIGHT_RED) << "transaction use more money then it has: use " << m_currency.formatAmount(outputs_amount) <<
         ", have " << m_currency.formatAmount(inputs_amount);
       tvc.m_verification_failed = true;
       return false;
@@ -176,7 +177,7 @@ namespace CryptoNote {
     if (!keptByBlock) {
       std::lock_guard<std::recursive_mutex> lock(m_transactions_lock);
       if (haveSpentInputs(tx)) {
-        logger(INFO) << "Transaction with id= " << id << " used already spent inputs";
+        logger(ERROR, BRIGHT_RED) << "Transaction with id= " << id << " used already spent inputs";
         tvc.m_verification_failed = true;
         return false;
       }
@@ -220,6 +221,7 @@ namespace CryptoNote {
         }
 //        tvc.m_verifivation_impossible = true;
         tvc.m_added_to_pool = true;
+        tvc.m_verification_failed = false;
       }
       maxUsedBlock.clear();
 //      tvc.m_verifivation_impossible = true;
@@ -229,7 +231,7 @@ namespace CryptoNote {
     if (!keptByBlock) {	
       bool sizeValid = m_validator.checkTransactionSize(blobSize);
       if (!sizeValid) {
-        logger(INFO) << "tx too big, rejected";
+        logger(ERROR, BRIGHT_RED) << "tx too big, rejected";
         tvc.m_verification_failed = true;
         return false;
       }
@@ -238,8 +240,8 @@ namespace CryptoNote {
     std::lock_guard<std::recursive_mutex> lock(m_transactions_lock);
 
     if (!keptByBlock && m_recentlyDeletedTransactions.find(id) != m_recentlyDeletedTransactions.end()) {
-      logger(INFO) << "Trying to add recently deleted transaction. Ignore: " << id;
-      tvc.m_verification_failed = false;
+      logger(ERROR, BRIGHT_RED) << "Trying to add recently deleted transaction. Ignore: " << id;
+      tvc.m_verification_failed = true;
       tvc.m_should_be_relayed = false;
       tvc.m_added_to_pool = false;
       return true;
@@ -305,7 +307,7 @@ namespace CryptoNote {
 
     tvc.m_added_to_pool = true;
     tvc.m_should_be_relayed = inputsValid && (fee > 0 || isFusionTransaction || ttl.ttl != 0);
-    tvc.m_verification_failed = true;
+    tvc.m_verification_failed = false;
 
 
     if (!addTransactionInputs(id, tx, keptByBlock))

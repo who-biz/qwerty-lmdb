@@ -397,7 +397,9 @@ bool core::handle_incoming_tx(const BinaryArray& tx_blob, tx_verification_contex
   Crypto::Hash blockId;
   uint32_t blockHeight;
   bool ok = getBlockContainingTx(tx_hash, blockId, blockHeight);
-  if (!ok) blockHeight = this->get_current_blockchain_height();
+  if (!ok) {
+    blockHeight = this->get_current_blockchain_height();
+  }
   return handleIncomingTransaction(tx, tx_hash, tx_blob.size(), tvc, keeped_by_block, blockHeight, loose_check);
 }
 
@@ -608,13 +610,13 @@ bool core::add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t
   LockedBlockchainStorage lbs(m_blockchain);
 
   if (m_blockchain.haveTransaction(tx_hash)) {
-    logger(TRACE) << "tx " << tx_hash << " is already in blockchain";
-    return true;
+    logger(ERROR, BRIGHT_RED) << "tx " << tx_hash << " is already in blockchain";
+    return false;
   }
 
   if (m_mempool.have_tx(tx_hash)) {
-    logger(TRACE) << "tx " << tx_hash << " is already in transaction pool";
-    return true;
+    logger(ERROR, BRIGHT_RED) << "tx " << tx_hash << " is already in transaction pool";
+    return false;
   }
 
   return m_mempool.add_tx(tx, tx_hash, blob_size, tvc, keeped_by_block, db);
@@ -844,7 +846,7 @@ bool core::handle_incoming_block_blob(const BinaryArray& block_blob, block_verif
     bvc.m_verification_failed = true;
     return false;
   }
-
+  bvc.m_verification_failed = false;
   return handle_incoming_block(b, bvc, m_blockchain.get_db(), control_miner, relay_block);
 }
 
@@ -852,10 +854,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
   if (control_miner) {
     pause_mining();
   }
-  bool r = Tools::getDefaultDbType() != "lmdb";
+  bool R = Tools::getDefaultDbType() != "lmdb";
     LockedBlockchainStorage lbs(m_blockchain);
-  if (r) {
-    block_verification_context bvc = boost::value_initialized<block_verification_context>();
+  if (R) {
     std::list<block_complete_entry> blocks;
     try
     {
@@ -883,7 +884,6 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     }
     lbs->prepare_handle_incoming_blocks(blocks);
     lbs->add_new_block(b, bvc);
-    lbs->cleanup_handle_incoming_blocks(true);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
   } else {
@@ -896,8 +896,7 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
   if (relay_block && bvc.m_added_to_main_chain) {
     std::list<Crypto::Hash> missed_txs;
     std::list<Transaction> txs;
-    bool r = Tools::getDefaultDbType() != "lmdb";
-    if (r) {
+    if (R) {
       m_blockchain.getTransactions(b.transactionHashes, txs, missed_txs);
     } else {
       m_blockchain.get_transactions(b.transactionHashes, txs, missed_txs);
@@ -936,7 +935,9 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     try {
       success = lbs->cleanup_handle_incoming_blocks(force_sync);
     }
-    catch (...) {}
+    catch (...) {
+      logger(ERROR, BRIGHT_RED) << "Something went wrong at cleanup_cleanup_handle_incoming_blocks!";
+      return false;  }
     return success;
   }
 
@@ -1772,6 +1773,7 @@ bool core::handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& 
 
     if (!check_tx_fee(tx, blobSize, tvc, height, loose_check)) {
       tvc.m_verification_failed = true;
+      logger(INFO) << "Transaction verification failed: error within fee of transaction " << txHash << ", rejected";
       return false;
     }
 
@@ -1785,8 +1787,7 @@ bool core::handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& 
       logger(ERROR) << "Transaction verification failed: unmixable output for transaction " << txHash << ", rejected";
       tvc.m_verification_failed = true;
       return false;
-	}
-
+    }
   }
 
   if (!check_tx_semantic(tx, keptByBlock)) {
@@ -1799,19 +1800,23 @@ bool core::handleIncomingTransaction(const Transaction& tx, const Crypto::Hash& 
   if (tvc.m_verification_failed) {
     if (!tvc.m_tx_fee_too_small) {
       logger(ERROR) << "Transaction verification failed: " << txHash;
+      return false;
     } else {
       logger(INFO) << "Transaction verification failed: " << txHash;
+      return false;
     }
   } else if (tvc.m_verifivation_impossible) {
     logger(ERROR) << "Transaction verification impossible: " << txHash;
+    return false;
   }
 
   if (tvc.m_added_to_pool) {
     logger(DEBUGGING) << "tx added: " << txHash;
+    tvc.m_verification_failed = false;
     poolUpdated();
   }
-
-  return r;
+  tvc.m_verification_failed = false;
+  return true;
 }
 
 std::unique_ptr<IBlock> core::getBlock(const Crypto::Hash& blockId) {
