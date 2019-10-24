@@ -26,7 +26,6 @@
 
 #include <CryptoNote.h>
 #include "CryptoNoteCore/Difficulty.h"
-
 #include "CryptoNoteCore/MessageQueue.h"
 #include "CryptoNoteCore/BlockchainMessages.h"
 

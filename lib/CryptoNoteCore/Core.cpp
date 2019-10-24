@@ -831,7 +831,7 @@ void core::getPoolChanges(const std::vector<Crypto::Hash>& knownTxsIds, std::vec
   assert(misses.empty());
 }
 
-bool core::handle_incoming_block_blob(const BinaryArray& block_blob, block_verification_context& bvc, bool control_miner, bool relay_block) {
+bool core::handle_incoming_block_blob(const BinaryArray& block_blob, block_verification_context& bvc,  bool control_miner, bool relay_block) {
   if (block_blob.size() > m_currency.maxBlockBlobSize()) {
     logger(INFO) << "WRONG BLOCK BLOB, too big size " << block_blob.size() << ", rejected";
     bvc.m_verification_failed = true;
@@ -845,15 +845,15 @@ bool core::handle_incoming_block_blob(const BinaryArray& block_blob, block_verif
     return false;
   }
 
-  return handle_incoming_block(b, bvc, control_miner, relay_block);
+  return handle_incoming_block(b, bvc, *m_db, control_miner, relay_block);
 }
 
-bool core::handle_incoming_block(const Block& b, block_verification_context& bvc, bool control_miner, bool relay_block) {
+bool core::handle_incoming_block(const Block& b, block_verification_context& bvc, BlockchainDB& db, bool control_miner, bool relay_block) {
   if (control_miner) {
     pause_mining();
   }
   bool r = Tools::getDefaultDbType() != "lmdb";
-    LockedBlockchainStorage lbs(m_blockchain); 
+    LockedBlockchainStorage lbs(m_blockchain);
   if (!r) {
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
     std::list<block_complete_entry> blocks;
@@ -868,7 +868,7 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
       block_complete_entry& completeEntry = item;
       for (int i = 0; i < b.transactionHashes.size(); i++)
       {
-         txs.push_back(m_db->get_tx(b.transactionHashes[i]));
+         txs.push_back(db.get_tx(b.transactionHashes[i]));
       }
 
       completeEntry.block = asString(toBinaryArray(b));

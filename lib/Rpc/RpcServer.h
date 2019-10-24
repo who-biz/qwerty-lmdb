@@ -29,7 +29,6 @@
 #include "ITransaction.h"
 #include "CoreRpcServerCommandsDefinitions.h"
 
-
 #include "Common/Math.h"
 
 namespace CryptoNote {
@@ -140,5 +139,4 @@ private:
   Crypto::SecretKey m_view_key = NULL_SECRET_KEY;
   AccountPublicAddress m_fee_acc;
 };
-
 }
