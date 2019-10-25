@@ -148,14 +148,18 @@ bool BlockchainExplorerDataBuilder::fillBlockDetails(const Block &block, BlockDe
     }
   }
 
+    uint32_t previousBlockHeight;
+    core.getBlockHeight(block.previousBlockHash, previousBlockHeight);
+    uint64_t blockTarget = block.timestamp - core.getBlockTimestamp(previousBlockHeight);
+
   uint64_t maxReward = 0;
   uint64_t currentReward = 0;
   int64_t emissionChange = 0;
-  if (!core.getBlockReward(block.majorVersion, blockDetails.sizeMedian, 0, prevBlockGeneratedCoins, 0, maxReward, emissionChange)) {
+  if (!core.getBlockReward(block.majorVersion, blockDetails.sizeMedian, 0, prevBlockGeneratedCoins, 0, maxReward, emissionChange, blockDetails.height, blockTarget)) {
     return false;
   }
 
-  if (!core.getBlockReward(block.majorVersion, blockDetails.sizeMedian, blockDetails.transactionsCumulativeSize, prevBlockGeneratedCoins, 0, currentReward, emissionChange)) {
+  if (!core.getBlockReward(block.majorVersion, blockDetails.sizeMedian, blockDetails.transactionsCumulativeSize, prevBlockGeneratedCoins, 0, currentReward, emissionChange, blockDetails.height, blockTarget)) {
     return false;
   }
 

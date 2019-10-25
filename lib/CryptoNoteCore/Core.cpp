@@ -1294,8 +1294,8 @@ bool core::getAlreadyGeneratedCoins(const Crypto::Hash& hash, uint64_t& generate
 }
 
 bool core::getBlockReward(uint8_t blockMajorVersion, size_t medianSize, size_t currentBlockSize, uint64_t alreadyGeneratedCoins, uint64_t fee,
-                          uint64_t& reward, int64_t& emissionChange) {
-  return m_currency.getBlockReward(blockMajorVersion, medianSize, currentBlockSize, alreadyGeneratedCoins, fee, reward, emissionChange);
+                          uint64_t& reward, int64_t& emissionChange, uint32_t height, uint64_t blockTarget) {
+  return m_currency.getBlockReward(blockMajorVersion, medianSize, currentBlockSize, alreadyGeneratedCoins, fee, reward, emissionChange, height, blockTarget);
 }
 
 bool core::scanOutputkeysForIndices(const KeyInput& txInToKey, std::list<std::pair<Crypto::Hash, size_t>>& outputReferences) {
@@ -1434,6 +1434,11 @@ uint64_t core::getMinimalFeeForHeight(uint32_t height) {
 	return m_blockchain.getMinimalFee(height);
 }
 
+uint64_t core::getBlockTimestamp(uint32_t height)
+{
+    return m_blockchain.getBlockTimestamp(height);
+}
+
 std::error_code core::executeLocked(const std::function<std::error_code()>& func) {
   std::lock_guard<decltype(m_mempool)> lk(m_mempool);
   LockedBlockchainStorage lbs(m_blockchain);
@@ -1554,11 +1559,15 @@ bool core::fillBlockDetails(const Block &block, BlockDetails2& blockDetails) {
   uint64_t maxReward = 0;
   uint64_t currentReward = 0;
   int64_t emissionChange = 0;
-  if (!getBlockReward(block.majorVersion, blockDetails.sizeMedian, 0, prevBlockGeneratedCoins, 0, maxReward, emissionChange)) {
+  uint32_t previousBlockHeight;
+  getBlockHeight(block.previousBlockHash, previousBlockHeight);
+  uint64_t blockTarget = block.timestamp - getBlockTimestamp(previousBlockHeight);
+
+  if (!getBlockReward(block.majorVersion, blockDetails.sizeMedian, 0, prevBlockGeneratedCoins, 0, maxReward, emissionChange, blockDetails.height, blockTarget)) {
     return false;
   }
 
-  if (!getBlockReward(block.majorVersion, blockDetails.sizeMedian, blockDetails.transactionsCumulativeSize, prevBlockGeneratedCoins, 0, currentReward, emissionChange)) {
+  if (!getBlockReward(block.majorVersion, blockDetails.sizeMedian, blockDetails.transactionsCumulativeSize, prevBlockGeneratedCoins, 0, currentReward, emissionChange, blockDetails.height, blockTarget)) {
     return false;
   }
 

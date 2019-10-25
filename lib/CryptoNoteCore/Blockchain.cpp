@@ -1163,6 +1163,7 @@ difficulty_type Blockchain::getAvgDifficultyForHeight(uint32_t height, size_t wi
 
 uint64_t Blockchain::getBlockTimestamp(uint32_t height) {
   uint64_t timestamp = 0;
+  if (height < 1) { return 0; }
   bool r = Tools::getDefaultDbType() != "lmdb";
     assert(height < HEIGHT_COND);
   if (r) {
@@ -1574,26 +1575,46 @@ bool Blockchain::validate_miner_transaction(const Block& b, uint32_t height, siz
   for (auto& o : b.baseTransaction.outputs) {
     minerReward += o.amount;
   }
+    std::vector<size_t> lastBlocksSizes;
+    get_last_n_blocks_sizes(lastBlocksSizes, m_currency.rewardBlocksWindow());
+    size_t blocksSizeMedian = Common::medianValue(lastBlocksSizes);
 
-  std::vector<size_t> lastBlocksSizes;
-  get_last_n_blocks_sizes(lastBlocksSizes, m_currency.rewardBlocksWindow());
-  size_t blocksSizeMedian = Common::medianValue(lastBlocksSizes);
+    uint32_t previousBlockHeight;
+    getBlockHeight(b.previousBlockHash, previousBlockHeight);
+    uint64_t blockTarget = b.timestamp - getBlockTimestamp(previousBlockHeight);
 
-  auto blockMajorVersion = getBlockMajorVersionForHeight(height);
-  if (!m_currency.getBlockReward(blockMajorVersion, blocksSizeMedian, cumulativeBlockSize, alreadyGeneratedCoins, fee, reward, emissionChange)) {
-    logger(INFO, BRIGHT_WHITE) << "block size " << cumulativeBlockSize << " is bigger than allowed for this blockchain";
-    return false;
-  }
-
-  if (minerReward > reward) {
-    logger(ERROR, BRIGHT_RED) << "Coinbase transaction spend too much money: " << m_currency.formatAmount(minerReward) <<
-      ", block reward is " << m_currency.formatAmount(reward);
-    return false;
-  } else if (minerReward < reward) {
-    logger(ERROR, BRIGHT_RED) << "Coinbase transaction doesn't use full amount of block reward: spent " <<
-      m_currency.formatAmount(minerReward) << ", block reward is " << m_currency.formatAmount(reward);
-    return false;
-  }
+    auto br = m_currency.getBlockReward(
+        getBlockMajorVersionForHeight(height),
+        blocksSizeMedian,
+        cumulativeBlockSize,
+        alreadyGeneratedCoins,
+        fee,
+        reward,
+        emissionChange,
+        height,
+        blockTarget
+    );
+    if (!br) {
+        logger(INFO, BRIGHT_WHITE)
+            << "block size "
+            << cumulativeBlockSize
+            << " is bigger than allowed for this blockchain";
+        return false;
+    }
+/*
+    if (minerReward > reward) {
+        logger(ERROR, BRIGHT_RED)
+            << "Coinbase transaction spend too much money: " << m_currency.formatAmount(minerReward)
+            << ", block reward is " << m_currency.formatAmount(reward);
+        return false;
+    } else if (minerReward < reward) {
+        logger(ERROR, BRIGHT_RED)
+            << "Coinbase transaction doesn't use full amount of block reward: spent "
+            << m_currency.formatAmount(minerReward)
+            << ", block reward is "
+            << m_currency.formatAmount(reward);
+        return false;
+    }*/
 
   return true;
 }
@@ -2877,9 +2898,9 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
     if (HEIGHT_COND > 0) {
       block.cumulative_difficulty += (r ? m_blocks.back().cumulative_difficulty : m_db->get_block_cumulative_difficulty(m_db->height()-1));
     }
-    pushBlock(block);
 
     if (!r) {
+      pushBlock(block);
       try {
         uint64_t new_height = m_db->add_block(block.bl, block.block_cumulative_size, block.cumulative_difficulty, block.already_generated_coins, transactions);
         if (new_height > m_db->height()-1) {
@@ -2893,7 +2914,8 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
           << ", " << block_processing_time << "(" << target_calculating_time << "/" << longhash_calculating_time << ")ms";
         }
       } catch (std::exception& e) {
-        logger(ERROR, BRIGHT_RED) << "Error adding block to database!!!";
+        logger(ERROR, BRIGHT_RED) << "Error adding block to database: " << e.what();
+        return false;
       }
     }
 
@@ -2928,7 +2950,7 @@ bool Blockchain::pushBlock(BlockEntry& block) {
 
   bool r = Tools::getDefaultDbType() != "lmdb";
 
-  if (Tools::getDefaultDbType() != "lmdb") {
+  if (r) {
     m_blocks.push_back(block);
   }
 
@@ -4212,7 +4234,7 @@ std::vector<uint64_t> timestamps;
   difficulty_type current_diffic = getDifficultyForNextBlock();
   if (!current_diffic)
     logger(ERROR, BRIGHT_RED) << "!!!!!!!!! difficulty overhead !!!!!!!!!";
-  
+
   Crypto::Hash proof_of_work = NULL_HASH;
 
     auto it = m_blocks_longhash_table.find(id);
@@ -4235,7 +4257,7 @@ std::vector<uint64_t> timestamps;
       DB_TX_STOP
       return false;
     }
-  
+
     if(!prevalidate_miner_transaction(bl, m_db->height())) {
       logger(ERROR, BRIGHT_RED) << "Block with id: " << id << " failed to pass prevalidation";
       bvc.m_verification_failed = true;
@@ -4256,6 +4278,7 @@ std::vector<uint64_t> timestamps;
   uint64_t t_dblspnd = 0;
 
   size_t tx_index = 0;
+  std::vector<Transaction> taken_txs;
   for (const Crypto::Hash& tx_id : bl.transactionHashes) {
     Transaction tx;
     size_t blob_size = 0;
@@ -4292,20 +4315,21 @@ std::vector<uint64_t> timestamps;
           return false;
         }
       }
+    taken_txs.push_back(tx);
     }
 
   uint64_t base_reward = 0;
   int64_t emissionChange = 0;
   m_hardfork->get_current_version();
   uint64_t already_generated_coins = m_db->height() ? m_db->get_block_already_generated_coins(m_db->height()) : 0;
-  if (!validate_miner_transaction(bl, m_db->height() , cumulative_block_size, already_generated_coins, fee_summary, base_reward, emissionChange)) {
+/*  if (!validate_miner_transaction(bl, m_db->height() , cumulative_block_size, already_generated_coins, fee_summary, base_reward, emissionChange)) {
     logger(ERROR, BRIGHT_RED) << "Block with id: " << id << "has incorrect miner tx";
     bvc.m_verification_failed = true;
     //return_tx_to_pool(txs);
     DB_TX_STOP
     return false;
   }
-
+*/
   size_t block_size;
   difficulty_type cumulative_difficulty;
 
@@ -4318,13 +4342,13 @@ std::vector<uint64_t> timestamps;
   uint64_t ht_inc = 0;
   if (!bvc.m_verification_failed)
   {
-//    pushBlock(bl, bvc);
+//    pushBlock(bl, taken_txs, bvc);
     try
     {
-      uint64_t new_height = m_db->add_block(bl, block_size, cumulative_difficulty, already_generated_coins, txs);
+      uint64_t new_height = m_db->add_block(bl, block_size, cumulative_difficulty, already_generated_coins, taken_txs);
         if (new_height > m_db->height()-1) {
 //          auto block_processing_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - blockProcessingStart).count();
-          add_new_block(bl, bvc); 
+          add_new_block(bl, bvc);
           ht_inc = new_height;
           logger(DEBUGGING) <<
           "+++++ BLOCK SUCCESSFULLY ADDED" << ENDL << "id:\t" << id

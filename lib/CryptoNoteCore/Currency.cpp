@@ -155,126 +155,193 @@ namespace CryptoNote {
 		}
 	}
 
-	bool Currency::getBlockReward(uint8_t blockMajorVersion, size_t medianSize, size_t currentBlockSize, uint64_t alreadyGeneratedCoins,
-		uint64_t fee, uint64_t& reward, int64_t& emissionChange) const {
-		// assert(alreadyGeneratedCoins <= m_moneySupply);
-		assert(m_emissionSpeedFactor > 0 && m_emissionSpeedFactor <= 8 * sizeof(uint64_t));
+bool Currency::getBlockReward(
+    uint8_t blockMajorVersion,
+    size_t medianSize,
+    size_t currentBlockSize,
+    uint64_t alreadyGeneratedCoins,
+    uint64_t fee,
+    uint64_t &reward,
+    int64_t &emissionChange,
+    uint32_t height,
+    uint64_t blockTarget) const
+{
+    assert(alreadyGeneratedCoins <= m_moneySupply);
+    assert(m_emissionSpeedFactor > 0 && m_emissionSpeedFactor <= 8 * sizeof(uint64_t));
 
-		// Tail emission
+    // Tail emission
 
-		uint64_t baseReward = (m_moneySupply - alreadyGeneratedCoins) >> m_emissionSpeedFactor;
-		if (alreadyGeneratedCoins + CryptoNote::parameters::TAIL_EMISSION_REWARD >= m_moneySupply || baseReward < CryptoNote::parameters::TAIL_EMISSION_REWARD)
-		{
-			baseReward = CryptoNote::parameters::TAIL_EMISSION_REWARD;
-		}
+    uint64_t baseReward = (m_moneySupply - alreadyGeneratedCoins) >> m_emissionSpeedFactor;
+    if (alreadyGeneratedCoins + CryptoNote::parameters::TAIL_EMISSION_REWARD >= m_moneySupply
+        || baseReward < CryptoNote::parameters::TAIL_EMISSION_REWARD) {
+        baseReward = CryptoNote::parameters::TAIL_EMISSION_REWARD;
+    }
 
-		size_t blockGrantedFullRewardZone = blockGrantedFullRewardZoneByBlockVersion(blockMajorVersion);
-		medianSize = std::max(medianSize, blockGrantedFullRewardZone);
-		if (currentBlockSize > UINT64_C(2) * medianSize) {
-			logger(TRACE) << "Block cumulative size is too big: " << currentBlockSize << ", expected less than " << 2 * medianSize;
-			return false;
-		}
+    size_t blockGrantedFullRewardZone = blockGrantedFullRewardZoneByBlockVersion(blockMajorVersion);
+    medianSize = std::max(medianSize, blockGrantedFullRewardZone);
+    if (currentBlockSize > medianSize * UINT64_C(2)) {
+        logger(TRACE)
+            << "Block cumulative size is too big: " << currentBlockSize
+            << ", expected less than " << medianSize * UINT64_C(2);
+        return false;
+    }
 
-		uint64_t penalizedBaseReward = getPenalizedAmount(baseReward, medianSize, currentBlockSize);
-		uint64_t penalizedFee = blockMajorVersion >= BLOCK_MAJOR_VERSION_2 ? getPenalizedAmount(fee, medianSize, currentBlockSize) : fee;
-		if (cryptonoteCoinVersion() == 1) {
-			penalizedFee = getPenalizedAmount(fee, medianSize, currentBlockSize);
-		}
+    uint64_t penalizedBaseReward = getPenalizedAmount(baseReward, medianSize, currentBlockSize);
+    uint64_t penalizedFee = fee;
+    if (blockMajorVersion >= BLOCK_MAJOR_VERSION_2 || cryptonoteCoinVersion() == 1) {
+        penalizedFee = getPenalizedAmount(fee, medianSize, currentBlockSize);
+    }
 
-		emissionChange = penalizedBaseReward - (fee - penalizedFee);
-		reward = penalizedBaseReward + penalizedFee;
+    double consistency = 1.0;
+    if (height >= CryptoNote::parameters::UPGRADE_HEIGHT_REWARD_SCHEME && difficultyTarget() != 0) {
+        // blockTarget is (Timestamp of New Block - Timestamp of Previous Block)
+        consistency = blockTarget / difficultyTarget();
 
-		return true;
-	}
+        // consistency range is 0..2
+        consistency = std::max<double>(consistency, 0.0);
+        consistency = std::min<double>(consistency, 2.0);
+    }
 
-	size_t Currency::maxBlockCumulativeSize(uint64_t height) const {
-		assert(height <= std::numeric_limits<uint64_t>::max() / m_maxBlockSizeGrowthSpeedNumerator);
-		size_t maxSize = static_cast<size_t>(m_maxBlockSizeInitial +
-			(height * m_maxBlockSizeGrowthSpeedNumerator) / m_maxBlockSizeGrowthSpeedDenominator);
-		assert(maxSize >= m_maxBlockSizeInitial);
-		return maxSize;
-	}
+    double penalizedReward = static_cast<double>(penalizedBaseReward + penalizedFee);
 
-	bool Currency::constructMinerTx(uint8_t blockMajorVersion, uint32_t height, size_t medianSize, uint64_t alreadyGeneratedCoins, size_t currentBlockSize,
-		uint64_t fee, const AccountPublicAddress& minerAddress, Transaction& tx, const BinaryArray& extraNonce/* = BinaryArray()*/, size_t maxOuts/* = 1*/) const {
+    emissionChange = penalizedBaseReward - (fee - penalizedFee);
+    reward = static_cast<uint64_t>(penalizedReward * consistency);
 
-		tx.inputs.clear();
-		tx.outputs.clear();
-		tx.extra.clear();
+    return true;
+}
 
-		KeyPair txkey = generateKeyPair();
-		addTransactionPublicKeyToExtra(tx.extra, txkey.publicKey);
-		if (!extraNonce.empty()) {
-			if (!addExtraNonceToTransactionExtra(tx.extra, extraNonce)) {
-				return false;
-			}
-		}
+size_t Currency::maxBlockCumulativeSize(uint64_t height) const
+{
+    assert(height <= std::numeric_limits<uint64_t>::max() / m_maxBlockSizeGrowthSpeedNumerator);
 
-		BaseInput in;
-		in.blockIndex = height;
+    size_t maxSize =
+        static_cast<size_t>(m_maxBlockSizeInitial
+        + (height * m_maxBlockSizeGrowthSpeedNumerator) / m_maxBlockSizeGrowthSpeedDenominator);
 
-		uint64_t blockReward;
-		int64_t emissionChange;
-		if (!getBlockReward(blockMajorVersion, medianSize, currentBlockSize, alreadyGeneratedCoins, fee, blockReward, emissionChange)) {
-			logger(INFO) << "Block is too big";
-			return false;
-		}
+    assert(maxSize >= m_maxBlockSizeInitial);
 
-		std::vector<uint64_t> outAmounts;
-		decompose_amount_into_digits(blockReward, UINT64_C(0),
-			[&outAmounts](uint64_t a_chunk) { outAmounts.push_back(a_chunk); },
-			[&outAmounts](uint64_t a_dust) { outAmounts.push_back(a_dust); });
+    return maxSize;
+}
 
-		if (!(1 <= maxOuts)) { logger(ERROR, BRIGHT_RED) << "max_out must be non-zero"; return false; }
-		while (maxOuts < outAmounts.size()) {
-			outAmounts[outAmounts.size() - 2] += outAmounts.back();
-			outAmounts.resize(outAmounts.size() - 1);
-		}
+bool Currency::constructMinerTx(
+    uint8_t blockMajorVersion,
+    uint32_t height,
+    size_t medianSize,
+    uint64_t alreadyGeneratedCoins,
+    size_t currentBlockSize,
+    uint64_t fee,
+    const AccountPublicAddress &minerAddress,
+    Transaction &tx,
+    const BinaryArray &extraNonce /* = BinaryArray()*/,
+    size_t maxOuts /* = 1*/) const
+{
+    tx.inputs.clear();
+    tx.outputs.clear();
+    tx.extra.clear();
 
-		uint64_t summaryAmounts = 0;
-		for (size_t no = 0; no < outAmounts.size(); no++) {
-			Crypto::KeyDerivation derivation = boost::value_initialized<Crypto::KeyDerivation>();
-			Crypto::PublicKey outEphemeralPubKey = boost::value_initialized<Crypto::PublicKey>();
+    KeyPair txkey = generateKeyPair();
+    addTransactionPublicKeyToExtra(tx.extra, txkey.publicKey);
+    if (!extraNonce.empty()) {
+        if (!addExtraNonceToTransactionExtra(tx.extra, extraNonce)) {
+            return false;
+        }
+    }
 
-			bool r = Crypto::generate_key_derivation(minerAddress.viewPublicKey, txkey.secretKey, derivation);
+    BaseInput in;
+    in.blockIndex = height;
 
-			if (!(r)) {
-				logger(ERROR, BRIGHT_RED)
-					<< "while creating outs: failed to generate_key_derivation("
-					<< minerAddress.viewPublicKey << ", " << txkey.secretKey << ")";
-				return false;
-			}
+    uint64_t blockReward;
+    int64_t emissionChange;
+    if (!getBlockReward(
+            blockMajorVersion,
+            medianSize,
+            currentBlockSize,
+            alreadyGeneratedCoins,
+            fee,
+            blockReward,
+            emissionChange,
+            height,
+            difficultyTarget())
+        ) {
+        logger(INFO) << "Block is too big";
+        return false;
+    }
 
-			r = Crypto::derive_public_key(derivation, no, minerAddress.spendPublicKey, outEphemeralPubKey);
+    std::vector<uint64_t> outAmounts;
+    decompose_amount_into_digits(
+        blockReward,
+        UINT64_C(0),
+        [&outAmounts](uint64_t a_chunk) { outAmounts.push_back(a_chunk); },
+        [&outAmounts](uint64_t a_dust) { outAmounts.push_back(a_dust); }
+    );
 
-			if (!(r)) {
-				logger(ERROR, BRIGHT_RED)
-					<< "while creating outs: failed to derive_public_key("
-					<< derivation << ", " << no << ", "
-					<< minerAddress.spendPublicKey << ")";
-				return false;
-			}
+    if (maxOuts < 1) {
+        logger(ERROR, BRIGHT_RED) << "max_out must be non-zero";
+        return false;
+    }
+    while (maxOuts < outAmounts.size()) {
+        outAmounts[outAmounts.size() - 2] += outAmounts.back();
+        outAmounts.resize(outAmounts.size() - 1);
+    }
 
-			KeyOutput tk;
-			tk.key = outEphemeralPubKey;
+    uint64_t summaryAmounts = 0;
+    for (size_t no = 0; no < outAmounts.size(); no++) {
+        Crypto::KeyDerivation derivation = boost::value_initialized<Crypto::KeyDerivation>();
+        Crypto::PublicKey outEphemeralPubKey = boost::value_initialized<Crypto::PublicKey>();
 
-			TransactionOutput out;
-			summaryAmounts += out.amount = outAmounts[no];
-			out.target = tk;
-			tx.outputs.push_back(out);
-		}
+        bool r = Crypto::generate_key_derivation(
+            minerAddress.viewPublicKey,
+            txkey.secretKey,
+            derivation
+        );
 
-		if (!(summaryAmounts == blockReward)) {
-			logger(ERROR, BRIGHT_RED) << "Failed to construct miner tx, summaryAmounts = " << summaryAmounts << " not equal blockReward = " << blockReward;
-			return false;
-		}
+        if (!(r)) {
+            logger(ERROR, BRIGHT_RED)
+                << "while creating outs: failed to generate_key_derivation("
+                << minerAddress.viewPublicKey
+                << ", "
+                << txkey.secretKey
+                << ")";
+            return false;
+        }
 
-		tx.version = CURRENT_TRANSACTION_VERSION;
-		//lock
-		tx.unlockTime = height + m_minedMoneyUnlockWindow;
-		tx.inputs.push_back(in);
-		return true;
-	}
+        r = Crypto::derive_public_key(derivation,no,minerAddress.spendPublicKey,outEphemeralPubKey);
+
+        if (!(r)) {
+            logger(ERROR, BRIGHT_RED)
+                << "while creating outs: failed to derive_public_key("
+                << derivation << ", "
+                << no << ", "
+                << minerAddress.spendPublicKey
+                << ")";
+            return false;
+        }
+
+        KeyOutput tk;
+        tk.key = outEphemeralPubKey;
+
+        TransactionOutput out;
+        summaryAmounts += out.amount = outAmounts[no];
+        out.target = tk;
+        tx.outputs.push_back(out);
+    }
+
+    if (summaryAmounts != blockReward) {
+        logger(ERROR, BRIGHT_RED)
+            << "Failed to construct miner tx, summaryAmounts = "
+            << summaryAmounts
+            << " not equal blockReward = "
+            << blockReward;
+        return false;
+    }
+
+    tx.version = CURRENT_TRANSACTION_VERSION;
+    //lock
+    tx.unlockTime = height + m_minedMoneyUnlockWindow;
+    tx.inputs.push_back(in);
+
+    return true;
+}
 
 	bool Currency::isFusionTransaction(const std::vector<uint64_t>& inputsAmounts, const std::vector<uint64_t>& outputsAmounts, size_t size, uint32_t height) const {
 		if (height <= CryptoNote::parameters::UPGRADE_HEIGHT_V3 ? size > CryptoNote::parameters::CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_CURRENT * 30 / 100 : size > fusionTxMaxSize()) {
