@@ -2682,15 +2682,6 @@ uint64_t BlockchainLMDB::add_block(const CryptoNote::Block& blk, const size_t& b
   check_open();
   uint64_t m_height = height();
 
-  if (m_height % 1000 == 0)
-  {
-    // for batch mode, DB resize check is done at start of batch transaction
-    if (! m_batch_active && need_resize())
-    {
-      //LOG_PRINT_L0("LMDB memory map needs to be resized, doing that now.");
-    }
-  }
-
   try
   {
     BlockchainDB::add_block(blk, block_size, cumulative_difficulty, coins_generated, txs);
@@ -3521,7 +3512,7 @@ void BlockchainLMDB::migrate_0_1()
     txn.commit();
   } while(0);
 
-  uint32_t version = 0;
+  uint32_t version = 1;
   v.mv_data = (void *)&version;
   v.mv_size = sizeof(version);
   MDB_val_copy<const char *> vk("version");

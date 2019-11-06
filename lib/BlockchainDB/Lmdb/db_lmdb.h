@@ -35,7 +35,7 @@
 #include "BlockchainDB/Structures.h"
 #include <boost/thread/tss.hpp>
 
-#define ENABLE_AUTO_RESIZE
+#define ENABLE_AUTO_RESIZE 1
 
 namespace CryptoNote
 {

@@ -125,6 +125,7 @@ public:
     Crypto::Hash getBlockIdByHeight(uint32_t height);
     bool getBlockByHash(const Crypto::Hash &h, Block &blk);
     bool getBlockHeight(const Crypto::Hash& blockId, uint32_t& blockHeight);
+    bool store_blockchain();
 
     template<class archive_t> void serialize(archive_t & ar, const unsigned int version);
 
@@ -458,7 +459,6 @@ private:
 
     bool storeBlockchainIndices();
     bool loadBlockchainIndices();
-    bool store_blockchain();
     bool loadTransactions(const Block& block, std::vector<Transaction>& transactions);
     void saveTransactions(const std::vector<Transaction>& transactions);
     bool check_for_double_spend(const Transaction& tx, key_images_container& keys_this_block) const;

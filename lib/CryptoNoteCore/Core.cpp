@@ -131,6 +131,10 @@ uint8_t core::getCurrentBlockMajorVersion() {
   return m_blockchain.getBlockMajorVersionForHeight(m_blockchain.getCurrentBlockchainHeight());
 }
 
+bool core::store_blockchain() {
+ return m_blockchain.store_blockchain();
+}
+
 uint8_t core::getBlockMajorVersionForHeight(uint32_t height) {
   assert(m_blockchain.getCurrentBlockchainHeight() > 0);
   return m_blockchain.getBlockMajorVersionForHeight(height);
@@ -914,21 +918,6 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
 
   return true;
 }
-
-  bool core::cleanup_handle_incoming_blocks(bool force_sync)
-  {
-    LockedBlockchainStorage lbs(m_blockchain);
-
-    bool success = false;
-    try {
-      success = lbs->cleanup_handle_incoming_blocks(force_sync);
-    }
-    catch (...) {
-      logger(ERROR, BRIGHT_RED) << "Something went wrong at cleanup_cleanup_handle_incoming_blocks!";
-      return false;  }
-    return success;
-  }
-
 
 Crypto::Hash core::get_tail_id() {
   return m_blockchain.getTailId();

@@ -165,6 +165,7 @@ public:
      virtual bool getBlockHeight(const Crypto::Hash& blockId, uint32_t& blockHeight) override;
      //void get_all_known_block_ids(std::list<Crypto::Hash> &main, std::list<Crypto::Hash> &alt, std::list<Crypto::Hash> &invalid);
 
+     bool store_blockchain();
      bool get_alternative_blocks(std::list<Block>& blocks);
      size_t get_alternative_blocks_count();
 
@@ -184,7 +185,6 @@ public:
      virtual bool get_random_outs_for_amounts(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS_request& req, COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS_response& res) override;
      void pause_mining() override;
      void update_block_template_and_resume_mining() override;
-     Blockchain& get_blockchain_storage(){return m_blockchain;}
      //debug functions
      void print_blockchain(uint32_t start_index, uint32_t end_index);
      void print_blockchain_index();
@@ -208,6 +208,7 @@ public:
      bool is_key_image_spent(const Crypto::KeyImage& key_im);
 
      bool fillTxExtra(const std::vector<uint8_t>& rawExtra, TransactionExtraDetails2& extraDetails);
+     Blockchain& get_blockchain_storage(){return m_blockchain;}
 
    private:
      size_t addChain(const std::vector<const IBlock*>& chain, BlockchainDB& db);
@@ -232,7 +233,6 @@ public:
      bool check_tx_ring_signature(const KeyInput& tx, const Crypto::Hash& tx_prefix_hash, const std::vector<Crypto::Signature>& sig);
      bool is_tx_spendtime_unlocked(uint64_t unlock_time);
      bool handleBlockFound(Block& b);
-     bool cleanup_handle_incoming_blocks(bool force_sync);
      bool update_miner_block_template();
      bool handle_command_line(const boost::program_options::variables_map& vm);
      bool on_update_blocktemplate_interval();

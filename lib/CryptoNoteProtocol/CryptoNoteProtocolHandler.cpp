@@ -30,6 +30,7 @@
 #include "CryptoNoteCore/CryptoNoteFormatUtils.h"
 #include "CryptoNoteCore/CryptoNoteTools.h"
 #include "CryptoNoteCore/Currency.h"
+#include "CryptoNoteCore/Blockchain.h"
 #include "CryptoNoteCore/VerificationContext.h"
 #include "P2p/LevinProtocol.h"
 
@@ -362,7 +363,7 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
       if (m_core.have_block(get_block_hash(b))) {
         context.m_state = CryptoNoteConnectionContext::state_idle;
         context.m_needed_objects.clear();
-        context.m_requested_objects.clear();
+//        context.m_requested_objects.clear();
         logger(Logging::DEBUGGING) << context << "Connection set to idle state.";
         return 1;
       }
@@ -386,13 +387,13 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
     context.m_requested_objects.erase(req_it);
   }
 
-  if (context.m_requested_objects.size()) {
+/*  if (context.m_requested_objects.size()) {
     logger(Logging::ERROR, Logging::BRIGHT_RED) << context <<
       "returned not all requested objects (context.m_requested_objects.size()="
       << context.m_requested_objects.size() << "), dropping connection";
     context.m_state = CryptoNoteConnectionContext::state_shutdown;
     return 1;
-  }
+  }*/
 
   {
     m_core.pause_mining();
@@ -408,6 +409,7 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
   uint32_t height;
   Crypto::Hash top;
   m_core.get_blockchain_top(height, top);
+  m_core.get_blockchain_storage().store_blockchain();
   logger(DEBUGGING, BRIGHT_GREEN) << "Local blockchain updated, new height = " << height;
 
   if (!m_stop && context.m_state == CryptoNoteConnectionContext::state_synchronizing) {

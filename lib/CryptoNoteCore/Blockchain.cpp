@@ -2985,38 +2985,6 @@ bool Blockchain::add_new_block(const Block& bl_, block_verification_context& bvc
 }
 
 
-bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
-{
-
-  if (m_sync_counter > 0)
-  {
-    if (force_sync)
-    {
-      m_sync_counter = 0;
-    }
-    else if (m_db_blocks_per_sync && m_sync_counter >= m_db_blocks_per_sync)
-    {
-      if(m_db_sync_mode == db_async)
-      {
-        m_sync_counter = 0;
-        m_async_service.dispatch(boost::bind(&Blockchain::store_blockchain, this));
-      }
-      else // db_nosync
-      {
-        // DO NOTHING, not required to call sync.
-      }
-    }
-  }
-
-  m_blocks_longhash_table.clear();
-  m_scan_table.clear();
-  m_blocks_txs_check.clear();
-  m_check_txin_table.clear();
-
-  m_tx_pool.unlock();
-  return true;
-}
-
 void Blockchain::popBlock() {
 
   DB_TX_START
@@ -4210,6 +4178,49 @@ bool Blockchain::for_all_outputs(std::function<bool(uint64_t amount, const Crypt
 
 bool Blockchain::isInCheckpointZone(const uint32_t height) {
   return m_checkpoints.is_in_checkpoint_zone(height);
+}
+
+
+bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
+{
+  std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
+
+    bool success = false;
+    try {
+      m_db->batch_stop();
+      success = cleanup_handle_incoming_blocks(force_sync);
+    }
+    catch (std::exception& e) {
+      logger(ERROR, BRIGHT_RED) << "Something went wrong at cleanup_cleanup_handle_incoming_blocks: " << e.what();
+    }
+
+    if (success && m_sync_counter > 0)
+    {
+      if (force_sync)
+      {
+        if (m_db_sync_mode != db_nosync)
+          store_blockchain();
+        m_sync_counter = 0;
+      }
+      else if (m_db_blocks_per_sync && m_sync_counter >= m_db_blocks_per_sync)
+      {
+        if(m_db_sync_mode == db_async)
+        {
+          m_sync_counter = 0;
+          m_async_service.dispatch(boost::bind(&Blockchain::store_blockchain, this));
+        }
+        else if(m_db_sync_mode == db_sync)
+        {
+          store_blockchain();
+        }
+        else // db_nosync
+        {
+          // DO NOTHING, not required to call sync.
+        }
+      }
+
+    return success;
+  }
 }
 
 bool Blockchain::handle_block_to_main_chain(const Block& bl, const Crypto::Hash& id, block_verification_context& bvc)
