@@ -635,6 +635,8 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     const std::string filename = m_config_folder;
 
     try {
+      filename_mdb = filename;
+      flags_mdb = db_flags;
       m_db->open(filename, db_flags);
       if(!m_db->m_open)
         return false;
@@ -917,7 +919,7 @@ bool Blockchain::storeCache() {
 bool Blockchain::deinit() {
 
   bool r = Tools::getDefaultDbType() != "lmdb";
-
+  DB_TX_START
 
      if (r) {
       if (m_blockchainIndexesEnabled) {
@@ -937,6 +939,7 @@ bool Blockchain::deinit() {
 
       try {
          m_db->close();
+         DB_TX_STOP
          logger(INFO, WHITE) << "Local blockchain read/write activity stopped successfully";
        } catch (std::exception& e) {
          logger(ERROR, BRIGHT_RED) << "There was an issue closing/storing the blockchain, shutting down now to prevent issues!";
@@ -3666,6 +3669,10 @@ bool Blockchain::store_blockchain()
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   try {
     m_db->sync();
+    if ((m_db->height() > 12800) && ((m_db->height() % 12800) == 0)) {
+      m_db->close();
+      m_db->open(filename_mdb, flags_mdb);
+    }
   } catch (const std::exception& e) {
    logger(ERROR, BRIGHT_RED) << "Exception thrown at store_blockchain(): " << e.what() << " -- shutting down to prevent issues!";
    return false;
@@ -3838,7 +3845,7 @@ void Blockchain::output_scan_worker(const uint64_t amount, const std::vector<uin
 }
 
 
-bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_entry> &blocks_entry)
+bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks_entry)
 {
   bool stop_batch;
   uint64_t bytes = 0;
@@ -4184,10 +4191,10 @@ bool Blockchain::isInCheckpointZone(const uint32_t height) {
 bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
 {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-
+  DB_TX_START
     bool success = false;
     try {
-      m_db->batch_stop();
+      //m_db->batch_stop();
       success = cleanup_handle_incoming_blocks(force_sync);
     }
     catch (std::exception& e) {
@@ -4218,7 +4225,7 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
           // DO NOTHING, not required to call sync.
         }
       }
-
+    DB_TX_STOP
     return success;
   }
 }
