@@ -919,7 +919,6 @@ bool Blockchain::storeCache() {
 bool Blockchain::deinit() {
 
   bool r = Tools::getDefaultDbType() != "lmdb";
-  DB_TX_START
 
      if (r) {
       if (m_blockchainIndexesEnabled) {
@@ -938,7 +937,6 @@ bool Blockchain::deinit() {
 
 
       try {
-         DB_TX_STOP
          m_db->close();
          logger(INFO, WHITE) << "Local blockchain read/write activity stopped successfully";
        } catch (std::exception& e) {
@@ -959,6 +957,7 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   if (Tools::getDefaultDbType() == "lmdb") {
     m_db->reset();
+    m_hardfork->init();
     m_blockIndex.clear();
   } else {
     m_blocks.clear();

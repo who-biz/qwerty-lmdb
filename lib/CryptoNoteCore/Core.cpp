@@ -164,6 +164,11 @@ bool core::get_alternative_blocks(std::list<Block>& blocks) {
   return m_blockchain.getAlternativeBlocks(blocks);
 }
 
+void core::safesyncmode(const bool onoff)
+{
+  m_blockchain.safesyncmode(onoff);
+}
+
 size_t core::get_alternative_blocks_count() {
   return m_blockchain.getAlternativeBlocksCount();
 }

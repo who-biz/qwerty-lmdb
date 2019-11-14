@@ -77,6 +77,8 @@ public:
      static void init_options(boost::program_options::options_description& desc);
      bool init(const CoreConfig& config, const MinerConfig& minerConfig, bool load_existing);
      bool set_genesis_block(const Block& b);
+     bool set_genesis_block(const Block& b, BlockchainDB& db);
+     void safesyncmode(const bool onoff);
      bool deinit();
 
      // ICore
