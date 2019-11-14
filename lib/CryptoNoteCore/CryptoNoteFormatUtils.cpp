@@ -690,14 +690,14 @@ bool is_valid_decomposed_amount(uint64_t amount) {
 */  //---------------------------------------------------------------
   CryptoNote::blobdata block_to_blob(const CryptoNote::Block& b)
   {
-    blobdata bd;    
+    blobdata bd;
     BinaryArray ba = storeToBinary(b);
     bd = Common::asString(ba);
     return bd;
   }
   //---------------------------------------------------------------
   CryptoNote::blobdata tx_to_blob(const CryptoNote::Transaction& tx)
-  {    
+  {
     blobdata bd;
     BinaryArray ba = storeToBinary(tx);
     bd = Common::asString(ba);

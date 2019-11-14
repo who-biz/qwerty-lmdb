@@ -261,8 +261,7 @@ public:
      friend class tx_validate_inputs;
      std::atomic<bool> m_starter_message_showed;
      Tools::ObserverManager<ICoreObserver> m_observerManager;
-   time_t start_time;
-
+     time_t start_time;
    };
 
 }

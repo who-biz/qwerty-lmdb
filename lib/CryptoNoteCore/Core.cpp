@@ -856,7 +856,7 @@ bool core::handle_incoming_block_blob(const BinaryArray& block_blob, block_verif
     return false;
   }
   bvc.m_verification_failed = false;
-  return handle_incoming_block(b, bvc, m_blockchain.get_db(), control_miner, relay_block);
+  return handle_incoming_block(b, bvc, m_blockchain.get_db(), control_miner, false);
 }
 
 bool core::handle_incoming_block(const Block& b, block_verification_context& bvc, BlockchainDB& db, bool control_miner, bool relay_block) {

@@ -355,7 +355,7 @@ std::string getDefaultDbType()
 
 std::string getDefaultDbSyncMode()
 {
- std::string ret = "fast:async:1000";
+ std::string ret = "fastest:async:1000";
  return ret;
 }
 

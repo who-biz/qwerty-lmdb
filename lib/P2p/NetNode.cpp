@@ -216,14 +216,14 @@ namespace CryptoNote
     int ret = 0;
     handled = true;
 
-  /*  if (cmd.isResponse && cmd.command == COMMAND_TIMED_SYNC::ID) {
+    if (cmd.isResponse && cmd.command == COMMAND_TIMED_SYNC::ID) {
       if (!handleTimedSyncResponse(cmd.buf, ctx)) {
         // invalid response, close connection
         ctx.m_state = CryptoNoteConnectionContext::state_shutdown;
       }
       return 0;
     }
-*/
+
     switch (cmd.command) {
       INVOKE_HANDLER(COMMAND_HANDSHAKE, &NodeServer::handle_handshake)
       INVOKE_HANDLER(COMMAND_TIMED_SYNC, &NodeServer::handle_timed_sync)

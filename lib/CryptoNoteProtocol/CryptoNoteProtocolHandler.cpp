@@ -172,9 +172,7 @@ bool CryptoNoteProtocolHandler::process_payload_sync_data(const CORE_SYNC_DATA& 
       "Sync data returned unknown top block: " << get_current_blockchain_height() << " -> " << hshd.current_height
       << " [" << std::abs(diff) << " blocks (" << std::abs(diff) / (24 * 60 * 60 / m_currency.difficultyTarget()) << " days) "
       << (diff >= 0 ? std::string("behind") : std::string("ahead")) << "] " << std::endl << "SYNCHRONIZATION started";
-      if (hshd.current_height >= m_core.get_current_blockchain_height() + 5) {
-        m_core.safesyncmode(false);
-    }
+    //m_core.safesyncmode(false);
     logger(Logging::DEBUGGING) << "Remote top block height: " << hshd.current_height << ", id: " << hshd.top_id;
     //let the socket to send response to handshake, but request callback, to let send request data after response
     logger(Logging::TRACE) << context << "requesting synchronization";
@@ -266,7 +264,9 @@ int CryptoNoteProtocolHandler::handle_notify_new_block(int command, NOTIFY_NEW_B
   }
 
   block_verification_context bvc = boost::value_initialized<block_verification_context>();
-  m_core.handle_incoming_block_blob(asBinaryArray(arg.b.block), bvc, true, false);
+  Block b;
+  bool parse = parse_and_validate_block_from_blob(arg.b.block, b);
+  m_core.handle_incoming_block(b, bvc, m_core.get_blockchain_storage().get_db(), true, false);
   if (bvc.m_verification_failed) {
     logger(Logging::DEBUGGING) << context << "Block verification failed, dropping connection";
     m_p2p->drop_connection(context, true);
@@ -349,9 +349,7 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
 
   context.m_remote_blockchain_height = arg.current_blockchain_height;
 
-  size_t count = 0;
   for (const block_complete_entry& block_entry : arg.blocks) {
-    ++count;
     Block b;
     if (!fromBinaryArray(b, asBinaryArray(block_entry.block))) {
       logger(Logging::ERROR) << context << "sent wrong block: failed to parse and validate block: \r\n"
@@ -361,15 +359,14 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
     }
 
     //to avoid concurrency in core between connections, suspend connections which delivered block later then first one
-    if (count == 2) {
+//    if (count == 2) {
       if (m_core.have_block(get_block_hash(b))) {
         context.m_state = CryptoNoteConnectionContext::state_idle;
         context.m_needed_objects.clear();
         context.m_requested_objects.clear();
         logger(Logging::DEBUGGING) << context << "Connection set to idle state.";
-        return 1;
       }
-    }
+//    }
 
     auto blockHash = get_block_hash(b);
     auto req_it = context.m_requested_objects.find(blockHash);
@@ -389,13 +386,13 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
     context.m_requested_objects.erase(req_it);
   }
 
-/*  if (context.m_requested_objects.size()) {
+  if (context.m_requested_objects.size()) {
     logger(Logging::ERROR, Logging::BRIGHT_RED) << context <<
       "returned not all requested objects (context.m_requested_objects.size()="
       << context.m_requested_objects.size() << "), dropping connection";
     context.m_state = CryptoNoteConnectionContext::state_shutdown;
-    return 1;
-  }*/
+//    return 1;
+  }
 
   {
     m_core.pause_mining();
@@ -411,7 +408,7 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
   uint32_t height;
   Crypto::Hash top;
   m_core.get_blockchain_top(height, top);
-  m_core.get_blockchain_storage().store_blockchain();
+ // m_core.get_blockchain_storage().store_blockchain();
   logger(DEBUGGING, BRIGHT_GREEN) << "Local blockchain updated, new height = " << height;
 
   if (!m_stop && context.m_state == CryptoNoteConnectionContext::state_synchronizing) {
@@ -506,7 +503,7 @@ bool CryptoNoteProtocolHandler::request_missing_objects(CryptoNoteConnectionCont
     size_t count = 0;
     auto it = context.m_needed_objects.begin();
 
-    while (it != context.m_needed_objects.end() && count < BLOCKS_SYNCHRONIZING_DEFAULT_COUNT) {
+    while (/*it != context.m_needed_objects.end() &&*/ count < 1000) {
       if (!(check_having_blocks && m_core.have_block(*it))) {
         req.blocks.push_back(*it);
         ++count;
@@ -543,7 +540,7 @@ bool CryptoNoteProtocolHandler::request_missing_objects(CryptoNoteConnectionCont
     logger(Logging::INFO, Logging::BRIGHT_GREEN) << context << "SYNCHRONIZED OK";
     on_connection_synchronized();
   }
-  m_core.safesyncmode(true);
+//  m_core.safesyncmode(true);
   return true;
 }
 
@@ -604,7 +601,7 @@ int CryptoNoteProtocolHandler::handle_response_chain_entry(int command, NOTIFY_R
       context.m_needed_objects.push_back(bl_id);
   }
 
-  request_missing_objects(context, false);
+  request_missing_objects(context, true);
   return 1;
 }
 
