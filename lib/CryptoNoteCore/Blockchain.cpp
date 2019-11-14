@@ -938,8 +938,8 @@ bool Blockchain::deinit() {
 
 
       try {
-         m_db->close();
          DB_TX_STOP
+         m_db->close();
          logger(INFO, WHITE) << "Local blockchain read/write activity stopped successfully";
        } catch (std::exception& e) {
          logger(ERROR, BRIGHT_RED) << "There was an issue closing/storing the blockchain, shutting down now to prevent issues!";
@@ -1034,14 +1034,14 @@ std::vector<Crypto::Hash> Blockchain::doBuildSparseChain(const Crypto::Hash& sta
   bool r = Tools::getDefaultDbType() != "lmdb";
   std::vector<Crypto::Hash> sparseChain;
 
-    bool R = r ? (m_blockIndex.size() == 0) : (m_db->height() < 1);
+    bool R = (m_blockIndex.size() == 0);
     if (r) {
       if (m_blockIndex.hasBlock(startBlockId)) {
         sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId);
       }
     } else {
       if (m_db->block_exists(startBlockId)) {
-        sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId, *m_db);
+        sparseChain = m_blockIndex.buildSparseChain(R ? hash : startBlockId);
       }
     }
 
@@ -2857,11 +2857,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
       bvc.m_verification_failed = true;
 
       block.transactions.pop_back();
-      if (r) {
-        popTransactions(block, minerTransactionHash);
-      } else {
-        popTransactions(block.bl, minerTransactionHash);
-      }
+      popTransactions(block, minerTransactionHash);
       DB_TX_STOP
       return false;
     }
@@ -2884,11 +2880,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
       if (!validate_miner_transaction(blockData, static_cast<uint32_t>(HEIGHT_COND), cumulative_block_size, already_generated_coins, fee_summary, reward, emissionChange)) {
         logger(INFO, BRIGHT_WHITE) << "Block " << blockHash << " has invalid miner transaction";
         bvc.m_verification_failed = true;
-        if (r) {
-          popTransactions(block, minerTransactionHash);
-        } else {
-          popTransactions(block.bl, minerTransactionHash);
-        }
+        popTransactions(block, minerTransactionHash);
         return false;
       }
 
@@ -3235,7 +3227,10 @@ void Blockchain::popTransactions(const Block& block, const Crypto::Hash& minerTr
   DB_TX_START
   for (size_t i = 0; i < count; ++i) {
     try {
-      popTransaction(m_db->get_tx(block.transactionHashes[count - i]), block.transactionHashes[count - 1 - i]);
+/*      std::list<Crypto::Hash> missed_ids;
+      std::list<Transaction> txs;
+      getTransactions(block.transactionHashes, txs, missed_ids);*/
+      popTransaction(m_db->get_tx(block.transactionHashes[count - i]), block.transactionHashes[count - i]);
     } catch (std::exception& e) {
       logger(ERROR, BRIGHT_RED) << "Error at popTransactions!" << e.what();
     }
@@ -3348,7 +3343,10 @@ void Blockchain::removeLastBlock() {
   if (r) {
     popTransactions(m_blocks.back(), getObjectHash(m_blocks.back().bl.baseTransaction));
   } else {
-    popTransactions(m_db->get_top_block(), getObjectHash(m_db->get_top_block().baseTransaction));
+    std::vector<Transaction> txs;
+    Block bl = m_db->get_top_block();
+    txs.push_back(bl.baseTransaction);
+    m_db->pop_block(bl, txs);
   }
   Crypto::Hash blockHash = getBlockIdByHeight(r ? m_blocks.back().height : (m_db->height() - 1));
   m_timestampIndex.remove((r ? m_blocks.back().bl.timestamp : m_db->get_block_timestamp(m_db->height()-1)), blockHash);
@@ -3356,7 +3354,7 @@ void Blockchain::removeLastBlock() {
   popBlock();
   m_blockIndex.pop();
 
-  assert(m_blockIndex.size() == HEIGHT_COND);
+//  assert(m_blockIndex.size() == HEIGHT_COND);
 }
 
 bool Blockchain::checkUpgradeHeight(const UpgradeDetector& upgradeDetector) {
@@ -3669,7 +3667,7 @@ bool Blockchain::store_blockchain()
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   try {
     m_db->sync();
-    if ((m_db->height() > 12800) && ((m_db->height() % 12800) == 0)) {
+    if (m_db->height() > 0) {
       m_db->close();
       m_db->open(filename_mdb, flags_mdb);
     }
