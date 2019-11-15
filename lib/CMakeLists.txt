@@ -77,12 +77,14 @@ set(QwertycoinFramework_BlockchainDB_SOURCES
 
 set(QwertycoinFramework_BlockchainDB_LIBS
     Threads::Threads
+    sparsehash::sparsehash
     QwertycoinFramework_CryptoNoteCore
     ${LMDB_LIBRARY}
 )
 
 add_library(QwertycoinFramework_BlockchainDB STATIC ${QwertycoinFramework_BlockchainDB_SOURCES})
 add_library(QwertycoinFramework::BlockchainDB ALIAS QwertycoinFramework_BlockchainDB)
+add_dependencies(QwertycoinFramework_BlockchainDB sparsehash::sparsehash)
 target_include_directories(QwertycoinFramework_BlockchainDB PRIVATE ${QwertycoinFramework_INCLUDE_DIRS})
 target_link_libraries(QwertycoinFramework_BlockchainDB PRIVATE ${LMDB_LIBRARY})
 
@@ -348,6 +350,7 @@ set(QwertycoinFramework_CryptoNoteProtocol_SOURCES
 
 add_library(QwertycoinFramework_CryptoNoteProtocol STATIC ${QwertycoinFramework_CryptoNoteProtocol_SOURCES})
 add_library(QwertycoinFramework::CryptoNoteProtocol ALIAS QwertycoinFramework_CryptoNoteProtocol)
+add_dependencies(QwertycoinFramework_CryptoNoteProtocol sparsehash::sparsehash)
 target_include_directories(QwertycoinFramework_CryptoNoteProtocol PRIVATE ${QwertycoinFramework_INCLUDE_DIRS})
 
 # QwertycoinFramework::Http

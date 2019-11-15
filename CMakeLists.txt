@@ -4,6 +4,7 @@
 # See the file LICENSE from this package for details.
 
 cmake_minimum_required(VERSION 3.10)
+message(STATUS "CMake version ${CMAKE_VERSION}")
 
 if(POLICY CMP0074)
     # Allow find_package() to use <PackageName>_ROOT variables.
@@ -28,7 +29,7 @@ set(PROJECT_VERSION "${PROJECT_GIT_TAG}")
 set(PROJECT_COPYRIGHT "Copyright 2019 The Qwertycoin Group")
 set(PROJECT_VENDOR_NAME "The Qwertycoin Group")
 set(PROJECT_VENDOR_URL "https://qwertycoin.org")
-project(${PROJECT_NAME} VERSION ${PROJECT_VERSION} LANGUAGES C CXX)
+project(${PROJECT_NAME} LANGUAGES C CXX)
 
 if(APPLE OR FREEBSD)
     # Compile src/Platform/OSX/System/asm.s file.
