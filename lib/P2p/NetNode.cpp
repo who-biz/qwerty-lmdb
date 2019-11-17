@@ -1493,7 +1493,7 @@ namespace CryptoNote
         logger(TRACE) << ctx << "Exception in connectionHandler: " << e.what();
       }
 
-      ctx.interrupt();
+//      ctx.interrupt();
       writeContext.interrupt();
       writeContext.get();
 
@@ -1542,6 +1542,7 @@ namespace CryptoNote
     } catch (System::InterruptedException&) {
       // connection stopped
       logger(DEBUGGING) << ctx << "writeHandler() is interrupted";
+  //    ctx.interrupt(); // stop connection on write error
     } catch (std::exception& e) {
       logger(TRACE) << ctx << "error during write: " << e.what();
       ctx.interrupt(); // stop connection on write error

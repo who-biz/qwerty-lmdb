@@ -3669,8 +3669,8 @@ bool Blockchain::store_blockchain()
 {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   try {
-    m_db->sync();
     m_db->batch_stop();
+    m_db->sync();
     if (m_db->height() > 0) {
       m_db->close();
       m_db->open(filename_mdb, flags_mdb);

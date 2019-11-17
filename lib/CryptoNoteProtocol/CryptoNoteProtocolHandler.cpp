@@ -411,7 +411,7 @@ int CryptoNoteProtocolHandler::handle_response_get_objects(int command, NOTIFY_R
  // m_core.get_blockchain_storage().store_blockchain();
   logger(DEBUGGING, BRIGHT_GREEN) << "Local blockchain updated, new height = " << height;
 
-  if (!m_stop && context.m_state == CryptoNoteConnectionContext::state_synchronizing) {
+  if (context.m_state == CryptoNoteConnectionContext::state_synchronizing) {
     request_missing_objects(context, true);
   }
 
@@ -501,9 +501,9 @@ bool CryptoNoteProtocolHandler::request_missing_objects(CryptoNoteConnectionCont
     //we know objects that we need, request this objects
     NOTIFY_REQUEST_GET_OBJECTS::request req;
     size_t count = 0;
-    auto it = context.m_needed_objects.begin();
+    std::list<Crypto::Hash>::iterator it = context.m_needed_objects.begin();
 
-    while (/*it != context.m_needed_objects.end() &&*/ count < 1000) {
+    while (it != context.m_needed_objects.end() && count < BLOCKS_SYNCHRONIZING_DEFAULT_COUNT) {
       if (!(check_having_blocks && m_core.have_block(*it))) {
         req.blocks.push_back(*it);
         ++count;
