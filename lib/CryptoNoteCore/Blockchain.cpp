@@ -629,6 +629,9 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
     m_async_work_idle = std::unique_ptr < boost::asio::io_service::work > (new boost::asio::io_service::work(m_async_service));
     m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
+    m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
+    m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
+    m_async_pool.create_thread(boost::bind(&boost::asio::io_service::run, &m_async_service));
     // TODO: Monero implementation says we only need one thread here. Probably true, but also
     // probably a major performance increase with more than one.
 
@@ -2906,6 +2909,7 @@ bool Blockchain::pushBlock(const Block& blockData, const std::vector<Transaction
           << ENDL << "block reward: " << m_currency.formatAmount(reward) << ", fee = " << m_currency.formatAmount(fee_summary)
           << ", coinbase_blob_size: " << coinbase_blob_size << ", cumulative size: " << cumulative_block_size
           << ", " << block_processing_time << "(" << target_calculating_time << "/" << longhash_calculating_time << ")ms";
+         ++m_sync_counter;
         }
       } catch (std::exception& e) {
         logger(ERROR, BRIGHT_RED) << "Error adding block to database: " << e.what();
@@ -3666,6 +3670,7 @@ bool Blockchain::store_blockchain()
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   try {
     m_db->sync();
+    m_db->batch_stop();
     if (m_db->height() > 0) {
       m_db->close();
       m_db->open(filename_mdb, flags_mdb);
@@ -4203,7 +4208,7 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
       if (force_sync)
       {
         if (m_db_sync_mode != db_nosync)
-          store_blockchain();
+        store_blockchain();
         m_sync_counter = 0;
       }
       else if (m_db_blocks_per_sync && m_sync_counter >= m_db_blocks_per_sync)
