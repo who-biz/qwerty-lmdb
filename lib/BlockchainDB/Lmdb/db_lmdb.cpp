@@ -1178,6 +1178,7 @@ void BlockchainLMDB::sync()
 {
   //Logger(INFO /*, BRIGHT_GREEN*/) <<"BlockchainLMDB::" << __func__;
   check_open();
+  do_resize();
 
   // Does nothing unless LMDB environment was opened with MDB_NOSYNC or in part
   // MDB_NOMETASYNC. Force flush to be synchronous.
@@ -1189,12 +1190,14 @@ void BlockchainLMDB::sync()
 
 void BlockchainLMDB::safesyncmode(const bool onoff)
 {
+  do_resize();
   mdb_env_set_flags(m_env, MDB_NOSYNC|MDB_MAPASYNC, !onoff);
 }
 
 void BlockchainLMDB::reset()
 {
   check_open();
+  do_resize();
 
   mdb_txn_safe txn;
   if (auto result = lmdb_txn_begin(m_env, NULL, 0, txn))

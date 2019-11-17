@@ -3966,7 +3966,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
   {
     return true;
   }
-
+/*
   m_scan_table.clear();
   m_check_txin_table.clear();
 
@@ -4102,7 +4102,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
       }
     }
   }
-
+*/
   return true;
 }
 
@@ -4196,8 +4196,8 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
   DB_TX_START
     bool success = false;
     try {
-      //m_db->batch_stop();
-      success = cleanup_handle_incoming_blocks(force_sync);
+     // m_db->batch_stop();
+      //success = cleanup_handle_incoming_blocks(force_sync);
     }
     catch (std::exception& e) {
       logger(ERROR, BRIGHT_RED) << "Something went wrong at cleanup_cleanup_handle_incoming_blocks: " << e.what();
@@ -4228,7 +4228,7 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
         }
       }
     DB_TX_STOP
-    return success;
+    return true;
   }
 }
 
