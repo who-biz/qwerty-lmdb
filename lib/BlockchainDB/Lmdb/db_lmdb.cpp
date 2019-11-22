@@ -508,6 +508,33 @@ bool BlockchainLMDB::need_resize(uint64_t threshold_size) const
 
 void BlockchainLMDB::check_and_resize_for_batch(uint64_t batch_num_blocks, uint64_t batch_bytes)
 {
+  const uint64_t min_increase_size = 512 * (1 << 20);
+  uint64_t threshold_size = 0;
+  uint64_t increase_size = 0;
+  if (batch_num_blocks > 0)
+  {
+    threshold_size = get_estimated_batch_size(batch_num_blocks, batch_bytes);
+    std::cout << "calculated batch size: " << std::to_string(threshold_size);
+
+    // The increased DB size could be a multiple of threshold_size, a fixed
+    // size increase (> threshold_size), or other variations.
+    //
+    // Currently we use the greater of threshold size and a minimum size. The
+    // minimum size increase is used to avoid frequent resizes when the batch
+    // size is set to a very small numbers of blocks.
+    increase_size = (threshold_size > min_increase_size) ? threshold_size : min_increase_size;
+    std::cout << "increase size: " << std::to_string(increase_size);
+  }
+
+  // if threshold_size is 0 (i.e. number of blocks for batch not passed in), it
+  // will fall back to the percent-based threshold check instead of the
+  // size-based check
+  if (need_resize(threshold_size))
+  {
+    std::cout << "[batch] DB resize needed";
+    do_resize(increase_size);
+  }
+
   return;
 }
 
