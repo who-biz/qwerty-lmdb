@@ -217,7 +217,7 @@ public:
             } else {
               if (!(height < m_db->height())) { logger(Logging::ERROR, Logging::BRIGHT_RED) << "Internal error: bl_id=" << Common::podToHex(bl_id)
               << " have index record with offset=" << height << ", larger then m_db->height()=" << m_db->height(); return false; }
-              blocks.push_back(m_blocks[height].bl);
+              blocks.push_back(m_db->get_block_from_height(height));
             }
           }
         } catch (const std::exception& e) {

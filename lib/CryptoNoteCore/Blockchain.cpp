@@ -3669,12 +3669,7 @@ bool Blockchain::store_blockchain()
 {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   try {
-    m_db->batch_stop();
-    m_db->sync();
-    if (m_db->height() > 0) {
-      m_db->close();
-      m_db->open(filename_mdb, flags_mdb);
-    }
+     m_db->fixup();
   } catch (const std::exception& e) {
    logger(ERROR, BRIGHT_RED) << "Exception thrown at store_blockchain(): " << e.what() << " -- shutting down to prevent issues!";
    return false;

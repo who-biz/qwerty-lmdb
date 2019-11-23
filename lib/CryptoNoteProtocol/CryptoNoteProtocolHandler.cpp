@@ -275,7 +275,7 @@ int CryptoNoteProtocolHandler::handle_notify_new_block(int command, NOTIFY_NEW_B
   if (bvc.m_added_to_main_chain) {
     ++arg.hop;
     //TODO: Add here announce protocol usage
-    relay_post_notify<NOTIFY_NEW_BLOCK>(*m_p2p, arg, &context.m_connection_id);
+    //relay_post_notify<NOTIFY_NEW_BLOCK>(*m_p2p, arg, &context.m_connection_id);
     // relay_block(arg, context);
 
     if (bvc.m_switched_to_alt_chain) {
@@ -314,10 +314,10 @@ int CryptoNoteProtocolHandler::handle_notify_new_transactions(int command, NOTIF
     }
   }
 
-  if (arg.txs.size()) {
+/*  if (arg.txs.size()) {
     //TODO: add announce usage here
     relay_post_notify<NOTIFY_NEW_TRANSACTIONS>(*m_p2p, arg, &context.m_connection_id);
-  }
+  }*/
 
   return true;
 }
