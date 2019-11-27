@@ -3437,7 +3437,7 @@ bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qbl
   if(Common::podToHex(qblock_ids.back()) != Common::podToHex(gen_hash))
   {
     logger(ERROR,BRIGHT_RED) << "Error! Genesis block mismatch in peer block_ids!";
-    DB_TX_STOP
+    m_db->block_txn_abort();
     return false;
   }
 
@@ -3455,7 +3455,7 @@ bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qbl
     catch (const std::exception& e)
     {
       logger(ERROR,BRIGHT_RED) << "Non-critical error trying to find block by hash in BlockchainDB, hash: " << *bl_it;
-      DB_TX_STOP
+      m_db->block_txn_abort();
       return false;
     }
   }
@@ -3478,14 +3478,13 @@ bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qbl
 bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qblock_ids, std::vector<Crypto::Hash>& hashes, size_t& start_height, size_t& current_height)
 {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-  DB_TX_START
 
   // if we can't find the split point, return false
   if(!find_blockchain_supplement(qblock_ids, start_height))
   {
     return false;
   }
-
+  DB_TX_START
   current_height = getCurrentBlockchainHeight();
   size_t count = 0;
   for(size_t i = start_height; i < current_height && count < BLOCKS_IDS_SYNCHRONIZING_DEFAULT_COUNT; i++, count++)
