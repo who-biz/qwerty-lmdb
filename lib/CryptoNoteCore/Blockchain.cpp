@@ -704,6 +704,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
     }
 
     m_db->fixup();
+    m_hardfork->init();
     if (m_db->height() > 0)
     {
       before_popping = m_db->height()-1;
@@ -711,6 +712,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
   }
 
+  if (Tools::getDefaultDbType() != "lmdb") {
     uint32_t lastValidCheckpointHeight;
     if (!checkCheckpoints(lastValidCheckpointHeight)) {
     logger(WARNING, BRIGHT_YELLOW) << "Invalid checkpoint found. Rollback blockchain to height=" << lastValidCheckpointHeight;
@@ -761,7 +763,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       reinitUpgradeDetectors = true;
     }
 
-    if ((getCurrentBlockchainHeight() > 1) && (num_popped_blocks > getCurrentBlockchainHeight()) && db_type == "lmdb")
+    if ((getCurrentBlockchainHeight() > 1) && db_type == "lmdb")
     {
       num_popped_blocks = before_popping - getCurrentBlockchainHeight(); // TODO: this section needs cleaned up
       if (num_popped_blocks > 0)
@@ -776,7 +778,6 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       return false;
     }
 
-  if (db_type != "lmdb") {
     update_next_cumulative_size_limit();
 
     uint64_t timestamp_diff = time(NULL) - m_blocks.back().bl.timestamp;

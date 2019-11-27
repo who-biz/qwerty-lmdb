@@ -875,7 +875,7 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
       block_complete_entry& completeEntry = item;
-      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      m_blockchain.getTransactions(b.transactionHashes, txs, missedTxs);
 
       completeEntry.block = asString(toBinaryArray(b));
       for (auto& tx : txs) {
@@ -887,7 +887,7 @@ bool core::handle_incoming_block(const Block& b, block_verification_context& bvc
     {
       logger(ERROR, BRIGHT_RED) << "Something went wrong when handling incoming blocks!";
     }
-    lbs->pushBlock(b, txs_vec, bvc);
+    m_blockchain.pushBlock(b, txs_vec, bvc);
     if (bvc.m_verification_failed)
       logger(ERROR,BRIGHT_RED) << "Error: incoming block failed verification!";
     if (control_miner) {
@@ -1057,7 +1057,7 @@ bool core::queryBlocks(
   bool r = Tools::getDefaultDbType() != "lmdb";
   LockedBlockchainStorage lbs(m_blockchain);
 
-  uint32_t currentHeight = lbs->getCurrentBlockchainHeight();
+  uint32_t currentHeight = m_blockchain.getCurrentBlockchainHeight();
   uint32_t startOffset = 0;
   uint32_t startFullOffset = 0;
 
@@ -1084,7 +1084,7 @@ bool core::queryBlocks(
   }
 
   std::list<Block> blocks;
-  lbs->getBlocks(startFullOffset, blocksLeft, blocks);
+  m_blockchain.getBlocks(startFullOffset, blocksLeft, blocks);
 
   for (auto& b : blocks) {
     BlockFullInfo item;
@@ -1095,7 +1095,7 @@ bool core::queryBlocks(
       // query transactions
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-        lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+        m_blockchain.getTransactions(b.transactionHashes, txs, missedTxs);
       // fill data
       block_complete_entry& completeEntry = item;
       completeEntry.block = asString(toBinaryArray(b));
@@ -1124,15 +1124,15 @@ bool r = Tools::getDefaultDbType() != "lmdb";
   }
 
   if (r) {
-    startOffset = lbs->findBlockchainSupplement(knownBlockIds);
+    startOffset = m_blockchain.findBlockchainSupplement(knownBlockIds);
   } else {
     size_t size;
-    bool find = lbs->find_blockchain_supplement(knownBlockIds, size);
+    bool find = m_blockchain.find_blockchain_supplement(knownBlockIds, size);
     if (!find) { logger(ERROR, BRIGHT_RED) << "Failed to find blockchain supplement!"; }
     else { startOffset = size; }
   }
 
-  if (!lbs->getLowerBound(timestamp, startOffset, startFullOffset)) {
+  if (!m_blockchain.getLowerBound(timestamp, startOffset, startFullOffset)) {
     startFullOffset = startOffset;
   }
 
@@ -1146,7 +1146,7 @@ std::vector<Crypto::Hash> core::findIdsForShortBlocks(uint32_t startOffset, uint
 
   std::vector<Crypto::Hash> result;
   if (startOffset < startFullOffset) {
-    result = lbs->getBlockIds(startOffset, std::min(static_cast<uint32_t>(BLOCKS_IDS_SYNCHRONIZING_DEFAULT_COUNT), startFullOffset - startOffset));
+    result = m_blockchain.getBlockIds(startOffset, std::min(static_cast<uint32_t>(BLOCKS_IDS_SYNCHRONIZING_DEFAULT_COUNT), startFullOffset - startOffset));
   }
 
   return result;
@@ -1162,7 +1162,7 @@ bool core::queryBlocksLite(
   LockedBlockchainStorage lbs(m_blockchain);
   bool r = Tools::getDefaultDbType() != "lmdb";
 
-  resCurrentHeight = lbs->getCurrentBlockchainHeight();
+  resCurrentHeight = m_blockchain.getCurrentBlockchainHeight();
   resStartHeight = 0;
   resFullOffset = 0;
 
@@ -1185,7 +1185,7 @@ bool core::queryBlocksLite(
   }
 
   std::list<Block> blocks;
-  lbs->getBlocks(resFullOffset, blocksLeft, blocks);
+  m_blockchain.getBlocks(resFullOffset, blocksLeft, blocks);
 
   for (auto& b : blocks) {
     BlockShortInfo item;
@@ -1195,7 +1195,7 @@ bool core::queryBlocksLite(
     if (b.timestamp >= timestamp) {
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      m_blockchain.getTransactions(b.transactionHashes, txs, missedTxs);
 
       item.block = asString(toBinaryArray(b));
 
@@ -1225,7 +1225,7 @@ bool core::queryBlocksDetailed(
   LockedBlockchainStorage lbs(m_blockchain);
   bool r = Tools::getDefaultDbType() != "lmdb";
 
-  uint32_t currentHeight = lbs->getCurrentBlockchainHeight();
+  uint32_t currentHeight = m_blockchain.getCurrentBlockchainHeight();
   uint32_t startOffset = 0;
   uint32_t startFullOffset = 0;
 
@@ -1248,7 +1248,7 @@ bool core::queryBlocksDetailed(
   }
 
   std::list<Block> blocks;
-  lbs->getBlocks(startFullOffset, blocksLeft, blocks);
+  m_blockchain.getBlocks(startFullOffset, blocksLeft, blocks);
 
   for (auto& b : blocks) {
     BlockFullInfo item;
@@ -1259,7 +1259,7 @@ bool core::queryBlocksDetailed(
       // query transactions
       std::list<Transaction> txs;
       std::list<Crypto::Hash> missedTxs;
-        lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+        m_blockchain.getTransactions(b.transactionHashes, txs, missedTxs);
 
       // fill data
       block_complete_entry& completeEntry = item;
@@ -1807,15 +1807,15 @@ std::unique_ptr<IBlock> core::getBlock(const Crypto::Hash& blockId) {
   LockedBlockchainStorage lbs(m_blockchain);
 
   std::unique_ptr<BlockWithTransactions> blockPtr(new BlockWithTransactions());
-  if (!lbs->getBlockByHash(blockId, blockPtr->block)) {
+  if (!m_blockchain.getBlockByHash(blockId, blockPtr->block)) {
     logger(DEBUGGING) << "Can't find block: " << blockId;
     return std::unique_ptr<BlockWithTransactions>(nullptr);
   }
 
   blockPtr->transactions.reserve(blockPtr->block.transactionHashes.size());
   std::vector<Crypto::Hash> missedTxs;
-  lbs->getTransactions(blockPtr->block.transactionHashes, blockPtr->transactions, missedTxs, true);
-  assert(missedTxs.empty() || !lbs->isBlockInMainChain(blockId)); //if can't find transaction for blockchain block -> error
+  m_blockchain.getTransactions(blockPtr->block.transactionHashes, blockPtr->transactions, missedTxs, true);
+  assert(missedTxs.empty() || !m_blockchain.isBlockInMainChain(blockId)); //if can't find transaction for blockchain block -> error
 
   if (!missedTxs.empty()) {
     logger(DEBUGGING) << "Can't find transactions for block: " << blockId;
@@ -1864,7 +1864,7 @@ bool core::handleBlockFound(Block& b)
       std::list<Transaction> txs;
       std::vector<Transaction> txs_vec;
       std::list<Crypto::Hash> missedTxs;
-      lbs->getTransactions(b.transactionHashes, txs, missedTxs);
+      m_blockchain.getTransactions(b.transactionHashes, txs, missedTxs);
       block_complete_entry completeEntry;
 
     try
@@ -1884,7 +1884,7 @@ bool core::handleBlockFound(Block& b)
     {
      logger(ERROR, BRIGHT_RED) << "Something went wrong at handleBlockFound!";
     }
-    lbs->pushBlock(b, txs_vec, bvc);
+    m_blockchain.pushBlock(b, txs_vec, bvc);
     update_miner_block_template();
     m_miner->resume();
     if (bvc.m_verification_failed)
