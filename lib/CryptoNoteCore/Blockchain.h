@@ -448,7 +448,6 @@ private:
     void get_txpool_txs(std::list<Transaction>& txs);
     std::string filename_mdb;
     int flags_mdb;
-    bool handle_block_to_main_chain(const Block& bl, const Crypto::Hash& id, block_verification_context& bvc);
     HardFork::State get_hard_fork_state() const;
     void output_scan_worker(const uint64_t amount,const std::vector<uint32_t> &offsets,
         std::vector<output_data_t> &outputs, std::unordered_map<Crypto::Hash,
