@@ -129,8 +129,8 @@ int main(int argc, char* argv[])
     command_line::add_arg(desc_cmd_only, arg_os_version);
     // tools::get_default_data_dir() can't be called during static initialization
     command_line::add_arg(desc_cmd_only, command_line::arg_data_dir, Tools::getDefaultDataDirectory());
-    command_line::add_arg(desc_cmd_only, command_line::arg_db_type, Tools::getDefaultDbType());
-    command_line::add_arg(desc_cmd_only, command_line::arg_db_sync_mode, Tools::getDefaultDbSyncMode());
+    command_line::add_arg(desc_cmd_only, command_line::arg_db_type);
+    command_line::add_arg(desc_cmd_only, command_line::arg_db_sync_mode);
     command_line::add_arg(desc_cmd_only, arg_config_file);
 
     command_line::add_arg(desc_cmd_sett, arg_log_file);
@@ -343,12 +343,12 @@ int main(int argc, char* argv[])
     // initialize core here
     bool load_existing = false;
     boost::filesystem::path folder(coreConfig.configFolder);
-    r = Tools::getDefaultDbType() == "lmdb";
+    r = coreConfig.dbType == "lmdb";
     if (!r) {
       if (boost::filesystem::exists(folder / "blockindexes.bin"))
         load_existing = true;
     }
-    else if (!r)
+    else if (r)
     {
       boost::filesystem::path db_folder = folder / "lmdb";
       if (boost::filesystem::exists(db_folder / "data.mdb"))

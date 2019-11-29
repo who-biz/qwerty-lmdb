@@ -390,6 +390,7 @@ bool Blockchain::checkTransactionInputs(const CryptoNote::Transaction& tx, Block
     if (!lastFailed.empty() && getCurrentBlockchainHeight() > lastFailed.height && getBlockIdByHeight(lastFailed.height) == lastFailed.id) {
       return false; //we already sure that this tx is broken for this height
     }
+
     if (!checkTransactionInputs(tx, maxUsedBlock.height, maxUsedBlock.id, &tail)) {
       lastFailed = tail;
       return false;
@@ -586,45 +587,42 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
       return false;
     }
 
-    if (load_existing && !m_blocks.empty())
-    {
-      logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
-      BlockCacheSerializer loader(*this, get_block_hash(m_blocks.back().bl), logger.getLogger());
-      loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
+  if (load_existing && !m_blocks.empty()) {
+    logger(INFO, BRIGHT_WHITE) << "Loading blockchain...";
+    BlockCacheSerializer loader(*this, get_block_hash(m_blocks.back().bl), logger.getLogger());
+    loader.load(appendPath(config_folder, m_currency.blocksCacheFileName()));
 
-      if (!loader.loaded()) {
-        logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
-        rebuildCache();
-      }
+    if (!loader.loaded()) {
+      logger(WARNING, BRIGHT_YELLOW) << "No actual blockchain cache found, rebuilding internal structures...";
+      rebuildCache();
+    }
 
-      if (m_blockchainIndexesEnabled) {
-        loadBlockchainIndices();
-      }
+    if (m_blockchainIndexesEnabled) {
+      loadBlockchainIndices();
+    }
 
     } else {
       m_blocks.clear();
     }
-
-      if (m_blocks.empty())
-      {
-        logger(INFO, BRIGHT_WHITE)
-          << "Blockchain not loaded, generating genesis block.";
-        block_verification_context bvc = boost::value_initialized<block_verification_context>();
-        pushBlock(m_currency.genesisBlock(), bvc);
-        if (bvc.m_verification_failed) {
-          logger(ERROR, BRIGHT_RED) << "Failed to add genesis block to blockchain";
-          return false;
-        }
-      } else {
-        Crypto::Hash firstBlockHash = get_block_hash(m_blocks[0].bl);
-        if (!(firstBlockHash == m_currency.genesisBlockHash())) {
-          logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
-            "Probably you set --testnet flag with data "
-            "dir with non-test blockchain or another "
-            "network.";
-          return false;
-        }
+    if (m_blocks.empty()) {
+      logger(INFO, BRIGHT_WHITE)
+        << "Blockchain not loaded, generating genesis block.";
+      block_verification_context bvc = boost::value_initialized<block_verification_context>();
+      pushBlock(m_currency.genesisBlock(), bvc);
+      if (bvc.m_verification_failed) {
+        logger(ERROR, BRIGHT_RED) << "Failed to add genesis block to blockchain";
+        return false;
       }
+    } else {
+      Crypto::Hash firstBlockHash = get_block_hash(m_blocks[0].bl);
+      if (firstBlockHash != m_currency.genesisBlockHash()) {
+        logger(ERROR, BRIGHT_RED) << "Failed to init: genesis block mismatch. "
+          "Probably you set --testnet flag with data "
+          "dir with non-test blockchain or another "
+          "network.";
+        return false;
+      }
+    }
   } else {
 
     m_async_work_idle = std::unique_ptr < boost::asio::io_service::work > (new boost::asio::io_service::work(m_async_service));
@@ -712,7 +710,8 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
   }
 
-  if (Tools::getDefaultDbType() != "lmdb") {
+  bool storage_type = (Tools::getDefaultDbType() != "lmdb");
+
     uint32_t lastValidCheckpointHeight;
     if (!checkCheckpoints(lastValidCheckpointHeight)) {
     logger(WARNING, BRIGHT_YELLOW) << "Invalid checkpoint found. Rollback blockchain to height=" << lastValidCheckpointHeight;
@@ -726,43 +725,44 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
     bool reinitUpgradeDetectors = false;
     if (!checkUpgradeHeight(m_upgradeDetectorV2)) {
-      uint32_t upgradeHeight =  m_upgradeDetectorV2.upgradeHeight();
+      uint32_t upgradeHeight = m_upgradeDetectorV2.upgradeHeight();
       assert(upgradeHeight != UpgradeDetectorBase::UNDEF_HEIGHT);
-      Block Block = m_db->get_block_from_height(upgradeHeight + 1);
+      Block Block = storage_type ? m_blocks[upgradeHeight + 1].bl : m_db->get_block_from_height(upgradeHeight + 1);
       logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>((Tools::getDefaultDbType() != "lmdb") ? m_blocks[upgradeHeight + 1].bl.majorVersion : Block.majorVersion) <<
         " expected=" << static_cast<int>(m_upgradeDetectorV2.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
       rollbackBlockchainTo(upgradeHeight);
       reinitUpgradeDetectors = true;
     } else if (!checkUpgradeHeight(m_upgradeDetectorV3)) {
       uint32_t upgradeHeight = m_upgradeDetectorV3.upgradeHeight();
-      Block Block = m_db->get_block_from_height(upgradeHeight + 1);
+      Block Block = storage_type ? m_blocks[upgradeHeight + 1].bl : m_db->get_block_from_height(upgradeHeight + 1);
       logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>((Tools::getDefaultDbType() != "lmdb") ? m_blocks[upgradeHeight + 1].bl.majorVersion : Block.majorVersion) <<
         " expected=" << static_cast<int>(m_upgradeDetectorV3.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
       rollbackBlockchainTo(upgradeHeight);
       reinitUpgradeDetectors = true;
     } else if (!checkUpgradeHeight(m_upgradeDetectorV4)) {
       uint32_t upgradeHeight = m_upgradeDetectorV4.upgradeHeight();
-      Block Block = m_db->get_block_from_height(upgradeHeight + 1);
+      Block Block = storage_type ? m_blocks[upgradeHeight + 1].bl : m_db->get_block_from_height(upgradeHeight + 1);
       logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>((Tools::getDefaultDbType() != "lmdb") ? m_blocks[upgradeHeight + 1].bl.majorVersion : Block.majorVersion) <<
         " expected=" << static_cast<int>(m_upgradeDetectorV4.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
       rollbackBlockchainTo(upgradeHeight);
       reinitUpgradeDetectors = true;
-  	} else if (!checkUpgradeHeight(m_upgradeDetectorV5)) {
+    } else if (!checkUpgradeHeight(m_upgradeDetectorV5)) {
       uint32_t upgradeHeight = m_upgradeDetectorV5.upgradeHeight();
-      Block Block = m_db->get_block_from_height(upgradeHeight + 1);
+      Block Block = storage_type ? m_blocks[upgradeHeight + 1].bl : m_db->get_block_from_height(upgradeHeight + 1);
       logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>((Tools::getDefaultDbType() != "lmdb") ? m_blocks[upgradeHeight + 1].bl.majorVersion : Block.majorVersion) <<
         " expected=" << static_cast<int>(m_upgradeDetectorV5.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
       rollbackBlockchainTo(upgradeHeight);
       reinitUpgradeDetectors = true;
-    } else if (!checkUpgradeHeight(m_upgradeDetectorV6)) {
+     } else if (!checkUpgradeHeight(m_upgradeDetectorV6)) {
       uint32_t upgradeHeight = m_upgradeDetectorV6.upgradeHeight();
-      Block Block = m_db->get_block_from_height(upgradeHeight + 1);
+      Block Block = storage_type ? m_blocks[upgradeHeight + 1].bl : m_db->get_block_from_height(upgradeHeight + 1);
       logger(WARNING, BRIGHT_YELLOW) << "Invalid block version at " << upgradeHeight + 1 << ": real=" << static_cast<int>((Tools::getDefaultDbType() != "lmdb") ? m_blocks[upgradeHeight + 1].bl.majorVersion : Block.majorVersion) <<
         " expected=" << static_cast<int>(m_upgradeDetectorV6.targetVersion()) << ". Rollback blockchain to height=" << upgradeHeight;
       rollbackBlockchainTo(upgradeHeight);
       reinitUpgradeDetectors = true;
     }
 
+  if (!storage_type) {
     if ((getCurrentBlockchainHeight() > 1) && db_type == "lmdb")
     {
       num_popped_blocks = before_popping - getCurrentBlockchainHeight(); // TODO: this section needs cleaned up
@@ -772,6 +772,7 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
         m_tx_pool.on_blockchain_dec(m_db->height()-1, getTailId());
       }
     }
+   }
     if (reinitUpgradeDetectors && (!m_upgradeDetectorV2.init() || !m_upgradeDetectorV3.init() || !m_upgradeDetectorV4.init() || !m_upgradeDetectorV5.init() || !m_upgradeDetectorV6.init()))
     {
       logger(ERROR, BRIGHT_RED) << "Failed to initialize upgrade detector";
@@ -780,38 +781,18 @@ bool Blockchain::init(const std::string& config_folder, const std::string& db_ty
 
     update_next_cumulative_size_limit();
 
-    uint64_t timestamp_diff = time(NULL) - m_blocks.back().bl.timestamp;
-    if (!m_blocks.back().bl.timestamp) {
+    uint64_t timestamp_diff = 0;
+    if (storage_type ? !m_blocks.empty() : m_db->height()) {
+      timestamp_diff = time(NULL) - (storage_type ? m_blocks.back().bl.timestamp : m_db->get_top_block().timestamp);
+    } else {
       timestamp_diff = time(NULL) - 1341378000;
     }
 
     logger(INFO, BRIGHT_GREEN)
-      << "Blockchain initialized. last block: " << m_blocks.size() - 1 << ", "
+      << "Blockchain initialized. last block: " << (storage_type ? (m_blocks.size() - 1) : (m_db->height() - 1)) << ", "
       << Common::timeIntervalToString(timestamp_diff)
       << " time ago, current difficulty: " << getDifficultyForNextBlock();
 
-  } else {
-
-     DB_TX_START
-     uint64_t top_block_timestamp = 0;
-     uint64_t timestamp_diff = 0;
-     if (m_db->height() > 1) {
-       top_block_timestamp = m_db->get_top_block_timestamp();
-       timestamp_diff = time(NULL) - top_block_timestamp;
-     }
-
-     if (!m_db->height() < 1) {
-       timestamp_diff = time(NULL) - 1341378000;
-     }
-
-     logger(INFO, BRIGHT_GREEN)
-       << "Blockchain initialized. last block: " << std::to_string(m_db->height()-1) << ", "
-       << Common::timeIntervalToString(timestamp_diff)
-       << " time ago, current difficulty: " << getDifficultyForNextBlock();
-
-     DB_TX_STOP
-     update_next_cumulative_size_limit();
-   }
   return true;
 }
 
@@ -895,6 +876,7 @@ void Blockchain::rebuildCache() {
       }
     }
   }
+
   std::chrono::duration<double> duration = std::chrono::steady_clock::now() - timePoint;
   logger(INFO, BRIGHT_WHITE) << "Rebuilding internal structures took: " << duration.count();
 }
@@ -917,6 +899,7 @@ bool Blockchain::storeCache() {
       return false;
     }
   }
+
   return true;
 }
 
@@ -925,10 +908,10 @@ bool Blockchain::deinit() {
   bool r = Tools::getDefaultDbType() != "lmdb";
 
      if (r) {
+      storeCache();
       if (m_blockchainIndexesEnabled) {
         storeBlockchainIndices();
       }
-      storeCache();
 
      } else {
 
@@ -979,15 +962,21 @@ bool Blockchain::resetAndSetGenesisBlock(const Block& b) {
   m_orthanBlocksIndex.clear();
 
   block_verification_context bvc = boost::value_initialized<block_verification_context>();
-  pushBlock(b, bvc);
+  if (Tools::getDefaultDbType() == "lmdb") {
+    addNewBlock(b, bvc);
+  } else {
+    pushBlock(b, bvc);
+  }
   return bvc.m_added_to_main_chain && !bvc.m_verification_failed;
 }
 
 Crypto::Hash Blockchain::getTailId(uint32_t& height) {
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
-    if (getCurrentBlockchainHeight()) {
-      height = getCurrentBlockchainHeight();
-    }
+  if (Tools::getDefaultDbType() != "lmdb") {
+    height - getCurrentBlockchainHeight() - 1;
+  } else {
+    height = getCurrentBlockchainHeight();
+  }
   return getTailId();
 }
 
@@ -1169,9 +1158,9 @@ difficulty_type Blockchain::getAvgDifficultyForHeight(uint32_t height, size_t wi
 
 uint64_t Blockchain::getBlockTimestamp(uint32_t height) {
   uint64_t timestamp = 0;
-  if (height < 1) { return 0; }
   bool r = Tools::getDefaultDbType() != "lmdb";
-    assert(height < HEIGHT_COND);
+  if (r && (height <= 1)) { return 0; }
+    //assert(height < HEIGHT_COND);
   if (r) {
     timestamp = m_blocks[height].bl.timestamp;
   } else {
@@ -1587,8 +1576,12 @@ bool Blockchain::validate_miner_transaction(const Block& b, uint32_t height, siz
 
     uint32_t previousBlockHeight;
     getBlockHeight(b.previousBlockHash, previousBlockHeight);
-    uint64_t blockTarget = b.timestamp - getBlockTimestamp(previousBlockHeight);
-
+    uint64_t blockTarget = 0;
+    if (getCurrentBlockchainHeight() > 1) {
+      blockTarget = b.timestamp - getBlockTimestamp(previousBlockHeight);
+    } else {
+      blockTarget = b.timestamp;
+    }
     auto br = m_currency.getBlockReward(
         getBlockMajorVersionForHeight(height),
         blocksSizeMedian,
@@ -2158,13 +2151,13 @@ uint32_t Blockchain::findBlockchainSupplement(const std::vector<Crypto::Hash>& q
 
 
   if (r) {
-    assert(qblock_ids.back() == m_blockIndex.getBlockId(0));
+//    assert(qblock_ids.back() == m_blockIndex.getBlockId(0));
     // assert above guarantees that method returns true
     uint32_t blockIndex;
     m_blockIndex.findSupplement(qblock_ids, blockIndex);
     return blockIndex;
   } else {
-    assert(qblock_ids.back() == m_db->get_block_hash_from_height(m_db->get_block_height(qblock_ids.back())));
+  //  assert(qblock_ids.back() == m_db->get_block_hash_from_height(m_db->get_block_height(qblock_ids.back())));
     uint32_t blockIndex;
     m_blockIndex.findSupplement(qblock_ids, blockIndex, *m_db);
     return blockIndex;
@@ -3504,7 +3497,8 @@ bool Blockchain::find_blockchain_supplement(const std::vector<Crypto::Hash>& qbl
   std::lock_guard<decltype(m_blockchain_lock)> lk(m_blockchain_lock);
   size_t start_height = resp.start_height;
   size_t total_height = resp.total_height;
-  bool result = find_blockchain_supplement(qblock_ids, resp.m_block_ids, start_height, total_height);
+  bool r = Tools::getDefaultDbType() != "lmdb";
+  bool result = r ? findBlockchainSupplement(qblock_ids) : find_blockchain_supplement(qblock_ids, resp.m_block_ids, start_height, total_height);
   return result;
 }
 //------------------------------------------------------------------
